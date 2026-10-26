@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도넛 차트가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 매수자 알갱이 → 연령대별 세기 → 원 → 구멍 → 가운데 숫자 → 이중 도넛 vs 막대 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:520px}
+@media (max-width:560px){canvas{height:600px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:360px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+td.up{color:var(--c2);font-weight:500}td.dn{color:var(--c4);font-weight:500}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.mini{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.mini figure{margin:0;display:grid;gap:4px;font-size:12.5px;color:var(--muted);text-align:center}
+.mini figcaption b{display:block;color:var(--ink);font-weight:500;font-size:13.5px}
+.mini svg{width:100%;height:auto;background:var(--soft);border-radius:6px}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 15 · 구성</div>
+    <h1>도넛 차트가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="아파트 매수자를 연령대별로 세어 도넛 차트로 만들고 두 해를 비교하는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 조각에 마우스를 올리거나(휴대폰은 누르기) 하면 가운데에 그 연령대의 값이 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="보기 방식"><span>보기</span><button id="v1" type="button" aria-pressed="true">2025년 도넛</button><button id="v2" type="button" aria-pressed="false">두 해 이중 도넛</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="23" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>그래프에 쓰인 숫자</h2>
+      <p class="note" id="tblNote"></p>
+      <div class="tbl"><table><thead><tr><th>연령대</th><th>2024년</th><th>2025년</th><th>비중 변화</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>구멍 크기에 따라</h2>
+      <p class="note" id="miniNote"></p>
+      <div class="mini" id="mini"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">도넛 차트를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 매수자 수는 설명용으로 만든 예시 값이며 실제 통계가 아닙니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const AGES=['20대 이하','30대','40대','50대','60대 이상'];
+const C25=[20,64,54,36,26],C24=[26,56,52,38,28],T25=C25.reduce((a,b)=>a+b,0),T24=C24.reduce((a,b)=>a+b,0);
+const P25=C25.map(c=>c/T25*100),P24=C24.map(c=>c/T24*100);
+const cum=P=>P.map((_,i)=>P.slice(0,i).reduce((a,b)=>a+b,0)/100);
+const K25=cum(P25),K24=cum(P24);
+const TOTAL=23,T2=1.8,T3=4.6,T4=7.4,T5=9.8,T6=12.2,T7=15.2,T8=20.4;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1);
+const R=rng(2025);
+const tok=[];C25.forEach((c,g)=>{for(let k=0;k<c;k++)tok.push({g,k,ra:R(),rb:R()})});
+const sh=tok.map((_,i)=>i);for(let i=sh.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[sh[i],sh[j]]=[sh[j],sh[i]]}
+tok.forEach((tk,i)=>tk.pile=sh.indexOf(i));
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',vUser=0,vCur=0,ptr=null;
+try{const v=localStorage.getItem('donutLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560,Rad=Math.min(narrow?W*.34:H*.36,175);L={W,H,narrow,pad:narrow?16:40,Rad,cx:narrow?W/2:W*.34,cy:narrow?H*.36:H*.52,cell:narrow?9:11}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function ring(cx,cy,r0,r1,a1,a2){ctx.beginPath();ctx.arc(cx,cy,r1,a1,a2);if(r0>0.5)ctx.arc(cx,cy,r0,a2,a1,true);else ctx.lineTo(cx,cy);ctx.closePath()}
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c4:col('--c4'),c2:col('--c2'),c3:col('--c3')};
+  const GC=[col('--c5'),col('--c1'),col('--c2'),col('--c3'),col('--c4')];
+  const{W,H,narrow,pad,Rad,cx,cy,cell}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  const pG=t<T2?0:ease(clamp((t-T2)/1.4));
+  const pP=t<T3?0:ease(clamp((t-T3)/1.4));     // 알갱이 → 원 위치
+  const pF=clamp((t-T3-1.2)/.8);               // 조각 채우기
+  const hole=t<T4?0:(t<T8?ease(clamp((t-T4)/1.4)):1); // 구멍
+  let dual;if(t>=T7&&t<T8)dual=ease(clamp((t-T7)/1.2));else if(t>=T8)dual=vCur;else dual=0; // 이중 도넛
+  const p7b=(t>=T7&&t<T8)?clamp((t-T7-2.2)/.8)*(1-clamp((t-T8+.4)/.4)):0; // 막대 대안
+  const r0=Rad*.58*hole;
+  // 바깥 링(2025)·안쪽 링(2024) 반지름
+  const outR0=lerp(r0,Rad*.66,dual),outR1=Rad,inR0=Rad*.34,inR1=Rad*.6;
+  txt(t<T2?`원자료: 2025년 아파트 매수자 ${T25}명 (색 = 연령대)`:t<T3?'연령대별로 모아서 세기':'',pad,26,C.muted,`500 12px ${SANS}`,'left',a0);
+  // 알갱이
+  const cols=narrow?20:25,gx0=(narrow?W/2:cx)-cols*cell/2,gy0=narrow?50:70,gw=narrow?(W-2*pad)/5:Math.min(130,(W*.66-2*pad)/5),gpc=narrow?5:6;
+  const tokA=1-pF;
+  if(tokA>0)tok.forEach(tk=>{const g=tk.g,p0={x:gx0+(tk.pile%cols)*cell,y:gy0+Math.floor(tk.pile/cols)*cell};
+    const gx=pad+gw*g+(gw-gpc*cell)/2,p1={x:gx+(tk.k%gpc)*cell,y:(narrow?120:150)+Math.floor(tk.k/gpc)*cell};
+    const ang=-Math.PI/2+(K25[g]+(tk.k+.5)/C25[g]*P25[g]/100)*2*Math.PI,rr=Rad*(.35+.6*Math.sqrt(tk.rb)),p2={x:cx+Math.cos(ang)*rr,y:cy+Math.sin(ang)*rr};
+    const s1=ease(clamp((t-T2-tk.pile*.005)/1));let x=lerp(p0.x,p1.x,s1),y=lerp(p0.y,p1.y,s1);
+    const s2=ease(clamp((t-T3-tk.pile*.004)/1));x=lerp(x,p2.x,s2);y=lerp(y,p2.y,s2);
+    ctx.globalAlpha=a0*tokA;ctx.fillStyle=GC[g];ctx.beginPath();ctx.arc(x+cell/2-1,y+cell/2-1,(cell-2)/2,0,7);ctx.fill();ctx.globalAlpha=1});
+  // 2단계 라벨
+  const gl=pG*(1-pP);
+  if(gl>0)AGES.forEach((n,g)=>{const gx=pad+gw*(g+.5);txt(n,gx,(narrow?110:138),GC[g],`700 ${narrow?10:12}px ${SANS}`,'center',gl);
+    const rows=Math.ceil(C25[g]/gpc),yb=(narrow?120:150)+rows*cell+18;txt(`${C25[g]}명`,gx,yb,C.ink,`700 ${narrow?12:14}px ${MONO}`,'center',gl);txt(`${f1(P25[g])}%`,gx,yb+18,C.c4,`700 ${narrow?11:12}px ${MONO}`,'center',gl)});
+  // 가리킨 조각
+  let hov=-1;
+  if(t>=T8&&ptr){const dx=ptr.x-cx,dy=ptr.y-cy,d=Math.hypot(dx,dy);if(d>=outR0&&d<=outR1){let a=Math.atan2(dy,dx)+Math.PI/2;if(a<0)a+=2*Math.PI;const f=a/(2*Math.PI);for(let g=0;g<5;g++)if(f>=K25[g]&&f<K25[g]+P25[g]/100)hov=g}}
+  // 6단계: 자동 순환 강조
+  let auto=-1;if(t>=T6&&t<T7){auto=Math.floor((t-T6)/.6)%5}
+  const hl=hov>=0?hov:auto;
+  // 바깥 링(2025)
+  if(pF>0){AGES.forEach((n,g)=>{const a1=-Math.PI/2+K25[g]*2*Math.PI,a2=a1+P25[g]/100*2*Math.PI,pop=g===hl?8:0;
+      ring(cx,cy,outR0,outR1+pop,a1,a2);ctx.globalAlpha=pF*(hl>=0&&g!==hl?.55:.92);ctx.fillStyle=GC[g];ctx.fill();ctx.globalAlpha=pF;ctx.strokeStyle=C.paper;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      // 바깥 이름표
+      const la=clamp((t-T3-1.8)/.6)*(1-dual*.0),mid=(a1+a2)/2,ox=cx+Math.cos(mid)*(Rad+16),oy=cy+Math.sin(mid)*(Rad+16),right=Math.cos(mid)>=0;
+      if(la>0){ln(cx+Math.cos(mid)*(Rad+2),cy+Math.sin(mid)*(Rad+2),ox,oy,C.muted,1,null,la);txt(`${n} ${f1(P25[g])}%`,ox+(right?6:-6),oy+4,C.ink,`700 ${narrow?10.5:12.5}px ${SANS}`,right?'left':'right',la)}})}
+  // 안쪽 링(2024)
+  if(dual>0){AGES.forEach((n,g)=>{const a1=-Math.PI/2+K24[g]*2*Math.PI,a2=a1+P24[g]/100*2*Math.PI;ring(cx,cy,inR0,lerp(inR0,inR1,dual),a1,a2);ctx.globalAlpha=dual*.7;ctx.fillStyle=GC[g];ctx.fill();ctx.globalAlpha=dual;ctx.strokeStyle=C.paper;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1});
+    txt('안쪽 2024',cx,cy-inR0+14,C.muted,`10px ${SANS}`,'center',dual);
+    txt('바깥 2025',cx+Math.cos(-Math.PI*.75)*Rad*.83,cy+Math.sin(-Math.PI*.75)*Rad*.83,'#fff',`700 10px ${SANS}`,'center',dual)}
+  // 가운데 글자
+  const ca=hole;
+  if(ca>0&&dual<.5){if(hl>=0){txt(AGES[hl],cx,cy-14,GC[hl],`700 ${narrow?13:16}px ${SANS}`,'center',ca);txt(`${f1(P25[hl])}%`,cx,cy+18,C.ink,`700 ${narrow?24:32}px ${MONO}`,'center',ca);txt(`${C25[hl]}명`,cx,cy+40,C.muted,`12px ${MONO}`,'center',ca)}
+    else{txt('2025년 매수자',cx,cy-14,C.muted,`12px ${SANS}`,'center',ca*clamp((t-T4-1)/.6));txt(`${T25}명`,cx,cy+20,C.ink,`700 ${narrow?24:32}px ${MONO}`,'center',ca*clamp((t-T4-1)/.6))}}
+  if(dual>=.5&&inR0>0)txt('↔',cx,cy+6,C.muted,`16px ${SANS}`,'center',dual);
+  // 5단계: 호 길이 강조
+  const p5=(t>=T5&&t<T6)?clamp((t-T5)/.6)*(1-clamp((t-T6+.3)/.3)):0;
+  if(p5>0){const g=1,a1=-Math.PI/2+K25[g]*2*Math.PI,a2=a1+P25[g]/100*2*Math.PI;ctx.globalAlpha=p5;ctx.strokeStyle=C.ink;ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx,cy,Rad+5,a1,a2);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+    txt(`굵은 선(둘레) 길이 = 전체 둘레의 ${f1(P25[g])}%`,narrow?cx:cx+Rad*.55,narrow?cy+Rad+34:cy+Rad+30,C.ink,`700 13px ${SANS}`,narrow?'center':'left',p5)}
+  // 7단계: 막대 대안
+  if(p7b>0){const bx=narrow?pad:W*.66,by=narrow?cy+Rad+40:90,bw=narrow?W-2*pad:W*.31,bh2=26;
+    txt('같은 자료를 100% 막대로',bx,by-10,C.ink,`700 13px ${SANS}`,'left',p7b);
+    [[2024,P24],[2025,P25]].forEach(([y,P],k)=>{let x=bx+40;const yy=by+k*(bh2+18);txt(String(y),bx+34,yy+bh2/2+4,C.ink,`700 12px ${MONO}`,'right',p7b);
+      P.forEach((v,g)=>{const w=(bw-44)*v/100;ctx.globalAlpha=p7b*.9;ctx.fillStyle=GC[g];ctx.fillRect(x,yy,w-1,bh2);ctx.globalAlpha=1;if(w>26)txt(Math.round(v),x+w/2,yy+bh2/2+4,'#fff',`700 11px ${MONO}`,'center',p7b);x+=w})});
+    const d=P25[1]-P24[1];txt(`30대: ${f1(P24[1])}% → ${f1(P25[1])}% (${d>=0?'+':''}${f1(d)}%p)`,bx,by+2*(bh2+18)+10,C.c2,`700 12px ${SANS}`,'left',p7b);
+    txt('막대는 시작점이 같아 변화가 바로 보임',bx,by+2*(bh2+18)+30,C.muted,`12px ${SANS}`,'left',p7b)}
+  // 7단계 경고
+  const p7a=(t>=T7&&t<T8)?clamp((t-T7-1)/.6)*(1-clamp((t-T8+.4)/.4)):0;
+  if(p7a>0)txt('바깥 링은 같은 비율이어도 더 넓게 보임',cx,cy+Rad+(narrow?28:36),C.c4,`700 12px ${SANS}`,'center',p7a);
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:`매수자 ${T25}명`,e:`2025년에 아파트를 산 사람 ${T25}명입니다. 동그라미 하나가 한 사람이고, 색은 연령대입니다.`,u:`서열형 범주 변수(연령대, 5수준)로 기록된 n = ${T25}명의 관측치입니다. 목표는 연령대별 구성비를 표현하는 것입니다.`},
+ {t:T2,n:'연령대별로 세기',s:'몇 명, 몇 %',e:'같은 연령대끼리 모아 세고, 전체 중 몇 %인지 계산합니다. 30대가 가장 많습니다. 연령대는 순서가 있으니 크기 순이 아니라 나이 순서대로 놓습니다.',u:'범주별 도수와 상대도수를 구합니다. 연령대는 서열 척도이므로 크기 내림차순 대신 자연 순서(나이순)를 유지하는 것이 원칙입니다.'},
+ {t:T3,n:'원으로 모으기',s:'먼저 원그래프',e:'사람들이 자기 연령대 조각 자리로 이동해 원그래프가 됩니다. 원그래프 만드는 원리는 앞 페이지와 같습니다.',u:'상대도수를 각도로 사상한 원그래프를 구성합니다(θᵢ = 360° × pᵢ).'},
+ {t:T4,n:'가운데 구멍 뚫기',s:'원 → 도넛',e:'원의 가운데를 비워 도넛 모양으로 만듭니다. 비운 자리에는 "매수자 200명"처럼 전체를 대표하는 숫자를 넣습니다.',u:'내경을 도입해 원환(annulus) 형태로 변환합니다. 중심부는 총계나 핵심 지표를 표시하는 공간으로 활용됩니다. 내경은 보통 외경의 50~60%로 둡니다.'},
+ {t:T5,n:'둘레 길이로 읽기',s:'조각의 길이 = 비율',e:'도넛에서는 가운데 꼭짓점이 사라져서, 조각의 둘레 길이로 크기를 읽게 됩니다. 30대 조각의 둘레는 전체 둘레의 32%입니다.',u:'중심각의 꼭짓점이 제거되어 판독 단서가 각도에서 호의 길이와 면적으로 이동합니다. 원그래프와 판독 정확도는 큰 차이가 없다는 연구가 있으며, 정밀 비교 도구는 아닙니다.'},
+ {t:T6,n:'가운데 공간 활용',s:'조각마다 값을 가운데에',e:'조각을 하나씩 강조하면서 그 연령대의 비율과 인원을 가운데에 크게 보여줍니다. 완성 후에는 조각을 가리키면 이렇게 나옵니다.',u:'중심부를 동적 라벨 영역으로 사용하면 외부 라벨의 혼잡을 줄일 수 있어 대시보드·인터랙티브 보고서에 적합합니다.'},
+ {t:T7,n:'이중 도넛의 함정',s:'두 해 비교는 어렵다',e:'2024년을 안쪽 링, 2025년을 바깥 링으로 겹치면 어느 연령대가 늘었는지 알아보기 어렵습니다. 바깥 링은 같은 비율이어도 더 넓게 보입니다. 같은 자료를 막대로 그리면 바로 비교됩니다.',u:'동심원 링은 반지름이 달라 같은 비율도 면적·호 길이가 다르게 부호화되며, 각 링의 조각 시작 각도도 어긋나 비교가 어렵습니다. 시점 간 구성 비교는 100% 누적 막대가 적합합니다.'},
+ {t:T8,n:'완성',s:'매수자 연령대 구성',e:'',u:''}];
+function finalMsg(){return lv==='e'?`완성입니다. 2025년 매수자의 ${f1(P25[1]+P25[2])}%가 30·40대입니다. 조각을 가리키면 가운데에 그 연령대의 값이 나옵니다. 위의 "보기" 버튼으로 이중 도넛도 다시 볼 수 있습니다.`
+  :`완성된 도넛 차트입니다. 30·40대 비중은 ${f1(P25[1]+P25[2])}%. 도넛은 단일 시점의 구성과 총계를 함께 제시하는 데 적합하며, 시점 간 비교에는 100% 누적 막대를 권장합니다.`}
+const LEDE={e:'도넛 차트는 원그래프의 가운데를 비워 그 자리에 핵심 숫자를 넣은 그래프입니다. 아파트 매수자를 연령대별로 세어 원을 만들고, 구멍을 뚫고, 가운데를 활용하는 과정과 두 해를 겹쳐 비교할 때의 함정을 보여줍니다.',u:'도넛 차트(donut/ring chart)는 원그래프에 내경을 둔 원환형 구성비 그래프입니다. 상대도수의 각도 사상, 내경 도입에 따른 판독 단서 변화(각도 → 호 길이), 중심 공간 활용, 동심 링 비교의 한계를 단계별로 보여줍니다.'};
+const MINI={e:[['구멍 없음','원그래프'],['적당한 구멍','외경의 약 55%'],['너무 큰 구멍','조각이 얇아 읽기 어려움']],u:[['내경 0%','원그래프와 동일'],['내경 ≈ 55%','중심 라벨과 판독의 균형'],['내경 ≥ 85%','띠가 얇아 면적 단서 소실']]};
+const PC={
+ pro:[
+  {t:'가운데에 핵심 숫자를 넣을 수 있다',e:'구멍 자리에 "매수자 200명" 같은 전체 숫자를 넣어, 그래프 하나로 "얼마나 많은지"와 "어떻게 나뉘는지"를 함께 보여줍니다.',u:'중심부에 총계·핵심 KPI를 배치해 구성비와 규모 정보를 하나의 그래픽에 통합합니다.',x:'<b>"총 거래 1,234건"</b>을 가운데에 둔 거래 유형 도넛.'},
+  {t:'여러 개를 나란히 놓기 깔끔하다',e:'작은 도넛 여러 개를 나란히 놓으면 대시보드나 보고서 카드에 보기 좋게 들어갑니다.',u:'시각적 무게가 원그래프보다 가벼워 소형 다중(small multiples) KPI 카드 배열에 적합합니다.',x:'자치구별 <b>"아파트 비중" 도넛 카드</b> 여러 개.'},
+  {t:'가리키면 가운데에 값이 나와 깔끔하다',e:'조각 바깥에 글씨를 잔뜩 쓰지 않아도, 가리킬 때 가운데에 값이 나와 화면이 깔끔합니다.',u:'중심부를 동적 라벨 영역으로 써서 외부 라벨 혼잡을 줄이고 상호작용형 시각화에 잘 맞습니다.',x:'이 페이지처럼 <b>조각을 가리키면 가운데에 값</b>.'},
+  {t:'"전체 중 얼마" 메시지는 원그래프와 같다',e:'원그래프처럼 전체를 100%로 놓고 큰 조각, 작은 조각의 비중을 한눈에 보여줍니다.',u:'부분-전체 관계 전달이라는 원그래프의 장점을 유지합니다.',x:'<b>30·40대가 매수자의 약 59%</b>라는 메시지.'}],
+ con:[
+  {t:'원그래프의 약점을 그대로 가진다',e:'비슷한 크기 조각은 비교하기 어렵고, 조각이 많으면 너무 가늘어집니다.',u:'각도·호 길이 판독은 공통 기준선 위 길이 판독보다 부정확합니다. 범주 수 제한(≤5), 합 100% 조건도 원그래프와 같습니다.',x:'50대 18%와 60대 13%의 차이는 <b>막대가 더 정확</b>합니다.'},
+  {t:'구멍이 크면 더 읽기 어렵다',e:'구멍을 너무 크게 뚫으면 조각이 얇은 띠가 되어 크기를 가늠하기 어렵습니다.',u:'내경이 커질수록 면적 단서가 사라지고 호 길이만 남아 판독 오차가 커집니다. 내경은 외경의 50~60% 정도가 무난합니다.',x:'하단 <b>"너무 큰 구멍"</b> 그림을 비교해 보세요.'},
+  {t:'두 개를 겹치면 비교가 어렵다',e:'안쪽·바깥쪽 링으로 두 해를 겹치면, 바깥 링이 더 넓어 보이고 조각 위치도 어긋나 변화를 알기 어렵습니다.',u:'동심 링은 반지름 차이로 같은 비율이 다른 면적으로 표현되고 시작 각도도 달라 시점 비교가 왜곡됩니다. 100% 누적 막대로 대체합니다.',x:'7단계 <b>2024 vs 2025 이중 도넛</b>.'},
+  {t:'가운데 숫자가 시선을 빼앗는다',e:'가운데 큰 숫자가 눈에 먼저 들어와서, 정작 조각들의 구성은 덜 보이게 될 수 있습니다.',u:'중심 라벨이 시각적 위계를 지배하면 구성비 메시지가 약해집니다. 중심 숫자는 그래프 주제와 직접 관련된 것으로 제한합니다.',x:'구성과 관계없는 <b>"전년비 +12%"</b>를 가운데에 넣지 않기.'},
+  {t:'순서가 있는 범주는 순서를 지켜야 한다',e:'연령대처럼 순서가 있는 것을 크기 순으로 섞어 놓으면 "나이가 많을수록 줄어드는지" 같은 흐름을 읽기 어렵습니다.',u:'서열형 범주는 자연 순서를 유지해야 하며, 원형 배치에서는 순서의 시작과 끝이 맞닿아 연속성 인지가 약해집니다. 서열 구성은 막대가 더 적합할 수 있습니다.',x:'<b>20대 → 60대</b> 순서대로 시계 방향 배치.'}],
+ tip:{e:'<b>정리:</b> 도넛 차트는 "전체 숫자 + 구성"을 함께 보여줄 때 좋습니다. 구멍은 적당히, 조각은 5개 이하로. 두 해를 비교할 때는 도넛을 겹치지 말고 100% 막대를 쓰세요.',
+      u:'<b>권장 사용법:</b> ① 단일 시점 구성 + 총계 제시용 ② 내경 50~60% ③ 범주 ≤ 5, 합 100% ④ 서열 범주는 자연 순서 ⑤ 중심 라벨은 주제 관련 지표만 ⑥ 시점·집단 비교는 100% 누적 막대로.'}};
+function miniSvg(k){const W=110,H=110,cx=55,cy=55,r1=46,r0=[0,.55,.88][k]*r1;let s='',a=-Math.PI/2;const cols=['var(--c5)','var(--c1)','var(--c2)','var(--c3)','var(--c4)'];
+  P25.forEach((v,g)=>{const a2=a+v/100*2*Math.PI,lg=v>50?1:0,x1=cx+Math.cos(a)*r1,y1=cy+Math.sin(a)*r1,x2=cx+Math.cos(a2)*r1,y2=cy+Math.sin(a2)*r1;
+    let d=`M${x1},${y1}A${r1},${r1} 0 ${lg} 1 ${x2},${y2}`;if(r0>0){const x3=cx+Math.cos(a2)*r0,y3=cy+Math.sin(a2)*r0,x4=cx+Math.cos(a)*r0,y4=cy+Math.sin(a)*r0;d+=`L${x3},${y3}A${r0},${r0} 0 ${lg} 0 ${x4},${y4}Z`}else d+=`L${cx},${cy}Z`;
+    s+=`<path d="${d}" style="fill:${cols[g]};stroke:var(--paper);stroke-width:1.5"/>`;a=a2});return `<svg viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`}
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  const GV=['--c5','--c1','--c2','--c3','--c4'];
+  $('tbody').innerHTML=AGES.map((n,g)=>{const d=P25[g]-P24[g];return `<tr><td><i class="sw" style="background:var(${GV[g]})"></i>${n}</td><td>${C24[g]}명 (${f1(P24[g])}%)</td><td>${C25[g]}명 (${f1(P25[g])}%)</td><td class="${d>=0?'up':'dn'}">${d>=0?'+':''}${f1(d)}%p</td></tr>`}).join('')+`<tr><td><b>합계</b></td><td><b>${T24}명</b></td><td><b>${T25}명</b></td><td></td></tr>`;
+  $('tblNote').textContent=lv==='e'?'비중 변화의 단위 %p(퍼센트포인트)는 "몇 % 차이"를 뜻합니다. 30대는 28%에서 32%로 4%p 늘었습니다.':'비중 변화는 퍼센트포인트(%p) 차이입니다. 상대 변화율(%)과 구분해야 합니다.';
+  $('miniNote').textContent=lv==='e'?'같은 자료라도 구멍 크기에 따라 읽기 쉬운 정도가 다릅니다.':'내경 비율에 따른 판독성 차이입니다.';
+  $('mini').innerHTML=[0,1,2].map(k=>`<figure>${miniSvg(k)}<figcaption><b>${MINI[lv][k][0]}</b>${MINI[lv][k][1]}</figcaption></figure>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  vCur=Math.abs(vCur-vUser)<.003?vUser:lerp(vCur,vUser,.08);draw();ui();requestAnimationFrame(frame)}
+function setV(v){vUser=v;$('v1').setAttribute('aria-pressed',v===0);$('v2').setAttribute('aria-pressed',v===1);if(t<T8){t=T8+.8;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{vUser=0;vCur=0;$('v1').setAttribute('aria-pressed',true);$('v2').setAttribute('aria-pressed',false);t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{vUser=0;vCur=0;t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('v1').onclick=()=>setV(0);$('v2').onclick=()=>setV(1);
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('donutLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('donutLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>산점도와 회귀선이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = (면적, 가격) 카드 → 점 → 평균선 사분면 → 선 돌리기(잔차 제곱) → 회귀선 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:540px}
+@media (max-width:560px){canvas{height:480px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span,.grp label{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.tg[aria-pressed="true"]{background:var(--c4);border-color:var(--c4);color:#fff}
+.tg2[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.pred{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.pred label{font:500 13px var(--sans)}
+.pred input{flex:1 1 200px;min-width:0;accent-color:var(--c3)}
+.pred output{font:700 15px var(--mono);color:var(--c3);font-variant-numeric:tabular-nums}
+.pred .warn{font-size:13px;color:var(--c4)}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.formula{font:13.5px var(--mono);background:var(--soft);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:nowrap;margin:8px 0;line-height:1.8}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:8px}
+@media (max-width:420px){.sum{grid-template-columns:repeat(2,1fr)}}
+.sum div{background:var(--paper);padding:8px 10px;display:grid}
+.sum span{font-size:11.5px;color:var(--muted)}
+.sum strong{font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+.rs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+.rs figure{margin:0;display:grid;gap:2px;font-size:11.5px;color:var(--muted);text-align:center}
+.rs svg{width:100%;height:auto;background:var(--soft);border-radius:6px}
+.rs b{color:var(--ink);font:500 12px var(--mono)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 11 · 관계</div>
+    <h1>산점도와 회귀선이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="전용면적과 매매가 자료로 산점도를 그리고 최소제곱 회귀선을 찾는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><button class="tg2" id="resT" type="button" aria-pressed="false">잔차 보기</button><button class="tg" id="outT" type="button" aria-pressed="false">이상치 1건 추가</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="25" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <div class="pred">
+    <label for="px">예측해 보기: 전용면적</label>
+    <input type="range" id="px" min="20" max="200" step="1" value="84">
+    <output id="pxo">84㎡ → 약 10.4억</output>
+    <span class="warn" id="pxw" hidden></span>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>계산 결과와 공식</h2>
+      <div class="sum" id="sum"></div>
+      <div class="formula" id="formula"></div>
+      <p class="note" id="fNote"></p>
+    </div>
+    <div class="panel">
+      <h2>상관계수 r의 모양</h2>
+      <p class="note" id="rsNote"></p>
+      <div class="rs" id="rs"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">산점도와 회귀선을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 전용면적과 매매가는 설명용으로 생성한 예시 값이며 실제 거래 자료가 아닙니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const N=30,TOTAL=25,T2=1.8,T3=5.6,T4=8.4,T5=11.0,T6=16.2,T7=19.0,T8=22.6;
+const XMIN=20,XMAX=160,YMIN=0,YMAX=24,OUT={x:45,y:21};
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1),f2=v=>v.toFixed(2),f3=v=>v.toFixed(3);
+const R=rng(3130),nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const AREAS=[39,45,49,59,59,59,59,66,72,74,74,76,84,84,84,84,84,84,99,99,101,102,109,114,114,121,124,128,135,135];
+const PTS=AREAS.map(a=>({x:a,y:Math.round(Math.max(2,-.6+.132*a+nrm()*1.35)*10)/10}));
+function fit(P){const n=P.length,mx=P.reduce((s,p)=>s+p.x,0)/n,my=P.reduce((s,p)=>s+p.y,0)/n;let sxy=0,sxx=0,syy=0;P.forEach(p=>{sxy+=(p.x-mx)*(p.y-my);sxx+=(p.x-mx)**2;syy+=(p.y-my)**2});
+  const b=sxy/sxx,a=my-b*mx,r=sxy/Math.sqrt(sxx*syy),sse=P.reduce((s,p)=>s+(p.y-a-b*p.x)**2,0);return{n,mx,my,b,a,r,r2:r*r,sse,sst:syy}}
+const F0=fit(PTS),F1=fit([...PTS,OUT]);
+const sseAt=(P,mx,my,b)=>P.reduce((s,p)=>s+(p.y-(my+b*(p.x-mx)))**2,0);
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',outUser=0,outCur=0,resUser=0,resCur=0,px=84;
+try{const v=localStorage.getItem('scatLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560,l=narrow?40:60,rr=narrow?14:220,top=30,base=H-46;L={W,H,narrow,l,rr,top,base,plotW:W-l-rr,plotH:base-top}}
+const X=v=>L.l+(v-XMIN)/(XMAX-XMIN)*L.plotW,Y=v=>L.base-(v-YMIN)/(YMAX-YMIN)*L.plotH;
+const cardPos=i=>{const c=L.narrow?5:6,cw=L.plotW/c,rh=Math.min(36,L.plotH/6);return{x:L.l+(i%c+.5)*cw,y:L.top+20+Math.floor(i/c)*rh}};
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper'),soft:col('--soft')};
+  const{W,H,l,rr,top,base,plotW,plotH,narrow}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  // 이상치 진행도
+  let oP;if(t>=T7&&t<T8)oP=ease(clamp((t-T7-.3)/1))*(1-ease(clamp((t-T7-2.6)/.8)));else if(t>=T8)oP=outCur;else oP=0;
+  const Fa=lerp(F0.a,F1.a,oP),Fb=lerp(F0.b,F1.b,oP),Fr=lerp(F0.r,F1.r,oP),Fmx=lerp(F0.mx,F1.mx,oP),Fmy=lerp(F0.my,F1.my,oP);
+  // 축·격자
+  const ga=clamp((t-T2+.4)/.6);
+  for(let v=40;v<=XMAX;v+=20){ln(X(v),top,X(v),base,C.line,1,null,ga);txt(v,X(v),base+16,C.muted,`10px ${MONO}`,'center',ga)}
+  for(let v=0;v<=YMAX;v+=4){ln(l,Y(v),l+plotW,Y(v),C.line,1,null,ga);txt(v,l-6,Y(v)+3,C.muted,`10px ${MONO}`,'right',ga)}
+  ln(l,base,l+plotW,base,C.ink,1.5,null,ga);ln(l,top,l,base,C.ink,1.5,null,ga);
+  txt('전용면적(㎡) · x',l+plotW,base+32,C.muted,`11px ${SANS}`,'right',ga);
+  ctx.save();ctx.translate(14,(top+base)/2);ctx.rotate(-Math.PI/2);txt('매매가(억원) · y',0,0,C.muted,`11px ${SANS}`,'center',ga);ctx.restore();
+  // 3단계: 평균선과 사분면
+  const p3=clamp((t-T3)/.8)*(1-clamp((t-T5+.2)/.6))+0;
+  const qd=clamp((t-T3-.8)/.6)*(1-clamp((t-T5+.2)/.6));
+  if(qd>0){ctx.globalAlpha=.08*qd;ctx.fillStyle=C.c2;ctx.fillRect(X(Fmx),top,l+plotW-X(Fmx),Y(Fmy)-top);ctx.fillRect(l,Y(Fmy),X(Fmx)-l,base-Y(Fmy));ctx.fillStyle=C.c4;ctx.fillRect(l,top,X(Fmx)-l,Y(Fmy)-top);ctx.fillRect(X(Fmx),Y(Fmy),l+plotW-X(Fmx),base-Y(Fmy));ctx.globalAlpha=1}
+  if(p3>0){ln(X(Fmx),top,X(Fmx),base,C.muted,1.5,[6,4],p3);ln(l,Y(Fmy),l+plotW,Y(Fmy),C.muted,1.5,[6,4],p3);
+    txt(`x 평균 ${f1(Fmx)}㎡`,X(Fmx)+4,top+12,C.muted,`700 11px ${SANS}`,'left',p3);txt(`y 평균 ${f1(Fmy)}억`,l+plotW-4,Y(Fmy)-6,C.muted,`700 11px ${SANS}`,'right',p3)}
+  // 사분면 개수
+  const P=PTS;let same=0,opp=0;P.forEach(p=>{((p.x-F0.mx)*(p.y-F0.my)>=0)?same++:opp++});
+  if(qd>0){txt(`같은 방향 ${same}개`,X(XMAX)-8,top+30,C.c2,`700 13px ${SANS}`,'right',qd);txt(`반대 방향 ${opp}개`,l+8,top+30,C.c4,`700 13px ${SANS}`,'left',qd)}
+  // 5단계: 선 돌리기 (평균점 중심)
+  const p5=clamp((t-T5)/4.6);
+  const slopes=[0,.24,.05,.17,F0.b];
+  let bTry=F0.b;if(t>=T5&&t<T6){const seg=p5*(slopes.length-1),k=Math.min(slopes.length-2,Math.floor(seg)),fr=ease(seg-k);bTry=lerp(slopes[k],slopes[k+1],fr)}
+  const lineB=t<T6?bTry:Fb,lineMx=t<T6?F0.mx:Fmx,lineMy=t<T6?F0.my:Fmy;
+  const lA=clamp((t-T5)/.4);
+  const showRes=(t>=T5&&t<T6)?1:resCur*(t>=T6?1:0);
+  // 잔차(세로선)와 제곱
+  if(lA>0&&showRes>0){const PP=oP>0?[...P,OUT]:P;PP.forEach((p,i)=>{if(i>=P.length&&oP<.5)return;const yh=lineMy+lineB*(p.x-lineMx),y1=Y(p.y),y2=Y(yh),d=Math.abs(y1-y2);
+      const sq=(t>=T5&&t<T6)?1:.6;ctx.globalAlpha=.10*showRes*sq;ctx.fillStyle=C.c4;ctx.fillRect(X(p.x),Math.min(y1,y2),Math.min(d,140),d);ctx.globalAlpha=1;
+      ln(X(p.x),y1,X(p.x),y2,C.c4,1.2,null,.8*showRes)})}
+  // 선
+  if(lA>0){const x1=XMIN,x2=XMAX;ctx.save();ctx.beginPath();ctx.rect(l,top,plotW,plotH);ctx.clip();
+    ln(X(x1),Y(lineMy+lineB*(x1-lineMx)),X(x2),Y(lineMy+lineB*(x2-lineMx)),t<T6?C.c3:C.c1,3,null,lA);ctx.restore();
+    if(t<T6)ctx.globalAlpha=lA,ctx.fillStyle=C.ink,ctx.beginPath(),ctx.arc(X(lineMx),Y(lineMy),5,0,7),ctx.fill(),ctx.globalAlpha=1}
+  // 점(카드 → 점)
+  P.forEach((p,i)=>{const c=cardPos(i),tp=T2+i*.07,pr=ease(clamp((t-tp)/.7));
+    if(pr<=0){ctx.globalAlpha=a0;ctx.fillStyle=C.soft;ctx.fillRect(c.x-38,c.y-12,76,22);ctx.globalAlpha=1;txt(`${p.x}㎡ · ${f1(p.y)}억`,c.x,c.y+3,C.ink,`${narrow?10:11.5}px ${MONO}`,'center',a0);return}
+    const x=lerp(c.x,X(p.x),pr),y=lerp(c.y,Y(p.y),pr);
+    if(pr<1){txt(`${p.x}㎡ · ${f1(p.y)}억`,x,y-8,C.c3,`500 11px ${MONO}`,'center',1-pr);
+      if(pr>.6){ln(X(p.x),y,X(p.x),base,C.c3,1,[2,3],(1-pr)*2);ln(l,y,X(p.x),y,C.c3,1,[2,3],(1-pr)*2)}}
+    let cl=C.c1;if(qd>0)cl=(p.x-F0.mx)*(p.y-F0.my)>=0?C.c2:C.c4;
+    ctx.globalAlpha=pr<1?1:.85;ctx.fillStyle=pr<1?C.c3:cl;ctx.beginPath();ctx.arc(x,y,narrow?3.6:4.6,0,7);ctx.fill();ctx.globalAlpha=1});
+  // 이상치 점
+  if(oP>0){const x=X(OUT.x),y=Y(OUT.y);ctx.globalAlpha=oP;ctx.fillStyle=C.c4;ctx.beginPath();ctx.arc(x,y,6,0,7);ctx.fill();ctx.strokeStyle=C.c4;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,12,0,7);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+    txt(`이상치 ${OUT.x}㎡ · ${OUT.y}억`,x+16,y+4,C.c4,`700 12px ${SANS}`,'left',oP);
+    if(t<T8||oP>.5){ctx.save();ctx.beginPath();ctx.rect(l,top,plotW,plotH);ctx.clip();ln(X(XMIN),Y(F0.a+F0.b*XMIN),X(XMAX),Y(F0.a+F0.b*XMAX),C.c1,1.5,[6,4],oP*.7);ctx.restore()}}
+  // 오른쪽 정보 상자
+  if(!narrow){const bx=l+plotW+18,bw=rr-30;let by=top+6;
+    const box=(h,a)=>{ctx.globalAlpha=a;ctx.fillStyle=C.soft;ctx.fillRect(bx,by,bw,h);ctx.globalAlpha=1};
+    const pr4=clamp((t-T4)/.6);
+    if(pr4>0){box(86,pr4);txt('상관계수 r',bx+12,by+20,C.muted,`11px ${SANS}`,'left',pr4);
+      const rv=t<T5?lerp(0,F0.r,ease(clamp((t-T4-.3)/1.4))):Fr;txt(f3(rv),bx+12,by+56,oP>.05?C.c4:C.c2,`700 32px ${MONO}`,'left',pr4);
+      txt(Math.abs(rv)>.7?'강한 양의 관계':Math.abs(rv)>.4?'뚜렷한 양의 관계':'약한 관계',bx+12,by+76,C.ink,`11.5px ${SANS}`,'left',pr4);by+=98}
+    if(t>=T5){const a=clamp((t-T5)/.4);box(70,a);const sse=t<T6?sseAt(P,F0.mx,F0.my,bTry):(oP>.5?F1.sse:F0.sse);
+      txt(t<T6?'잔차 제곱합 (작을수록 좋음)':'잔차 제곱합 (최소)',bx+12,by+20,C.muted,`11px ${SANS}`,'left',a);txt(f1(sse),bx+12,by+52,C.c4,`700 26px ${MONO}`,'left',a);
+      if(t<T6){const w=bw-24,mx=sseAt(P,F0.mx,F0.my,.24);ctx.globalAlpha=a;ctx.fillStyle=C.line;ctx.fillRect(bx+12,by+60,w,5);ctx.fillStyle=C.c4;ctx.fillRect(bx+12,by+60,w*clamp(sse/mx),5);ctx.globalAlpha=1}by+=82}
+    if(t>=T6){const a=clamp((t-T6)/.6);box(96,a);txt('회귀식',bx+12,by+20,C.muted,`11px ${SANS}`,'left',a);
+      txt(`ŷ = ${f2(Fa)} + ${f3(Fb)}x`,bx+12,by+44,C.c1,`700 14px ${MONO}`,'left',a);txt(`R² = ${f2(Fr*Fr)}`,bx+12,by+66,C.c1,`700 14px ${MONO}`,'left',a);
+      txt(`1㎡ 늘 때 약 ${Math.round(Fb*10000).toLocaleString()}만 원`,bx+12,by+86,C.ink,`11.5px ${SANS}`,'left',a);by+=108}}
+  else{const pr4=clamp((t-T4)/.6);if(pr4>0){const rv=t<T5?lerp(0,F0.r,ease(clamp((t-T4-.3)/1.4))):Fr;txt(`r = ${f3(rv)}`,l+8,top+14,C.c2,`700 13px ${MONO}`,'left',pr4)}
+    if(t>=T6)txt(`ŷ = ${f2(Fa)} + ${f3(Fb)}x`,l+8,top+30,C.c1,`700 12px ${MONO}`,'left',clamp((t-T6)/.6))}
+  // 6단계: 기울기 계단 표시
+  const p6=clamp((t-T6-.6)/.6)*(1-clamp((t-T7)/.4));
+  if(p6>0){const x0=84,x1=104,y0=Fa+Fb*x0,y1=Fa+Fb*x1;ln(X(x0),Y(y0),X(x1),Y(y0),C.c3,2.5,null,p6);ln(X(x1),Y(y0),X(x1),Y(y1),C.c3,2.5,null,p6);
+    txt('+20㎡',(X(x0)+X(x1))/2,Y(y0)+16,C.c3,`700 12px ${SANS}`,'center',p6);txt(`+${f1(Fb*20)}억`,X(x1)+6,(Y(y0)+Y(y1))/2+4,C.c3,`700 12px ${SANS}`,'left',p6)}
+  // 예측(완성 후)
+  if(t>=T8){const a=clamp((t-T8)/.6),yh=Fa+Fb*px,inR=px>=39&&px<=135;ctx.save();ctx.beginPath();ctx.rect(l,top,plotW,plotH);ctx.clip();
+    ln(X(px),base,X(px),Y(yh),C.c3,1.5,[4,3],a);ln(l,Y(yh),X(px),Y(yh),C.c3,1.5,[4,3],a);ctx.restore();
+    if(px>=XMIN&&px<=XMAX&&yh<=YMAX){ctx.globalAlpha=a;ctx.fillStyle=inR?C.c3:C.c4;ctx.beginPath();ctx.arc(X(px),Y(yh),6,0,7);ctx.fill();ctx.globalAlpha=1}
+    // 자료 범위
+    ctx.globalAlpha=.25*a;ctx.fillStyle=C.c2;ctx.fillRect(X(39),base-4,X(135)-X(39),4);ctx.globalAlpha=1}
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'(면적, 가격) 짝 30개',e:'아파트 거래 30건의 전용면적과 매매가입니다. 한 건마다 "면적 몇 ㎡, 가격 몇 억" 두 숫자가 짝을 이룹니다.',u:'n = 30인 이변량 자료 (xᵢ, yᵢ)입니다. x는 설명변수(전용면적), y는 반응변수(매매가)로 둡니다.'},
+ {t:T2,n:'점 찍기',s:'가로 = 면적, 세로 = 가격',e:'짝 하나를 점 하나로 찍습니다. 가로 위치는 면적, 세로 위치는 가격입니다. 점들이 오른쪽 위로 올라가는 모양이 보입니다.',u:'각 관측치를 평면 위의 점 (xᵢ, yᵢ)로 표시합니다. 점 구름의 방향, 형태(직선/곡선), 퍼짐, 이상치를 시각적으로 진단합니다.'},
+ {t:T3,n:'평균선으로 나누기',s:'같은 방향 vs 반대 방향',e:'면적 평균과 가격 평균에 선을 그어 네 칸으로 나눕니다. "넓고 비싼" 칸과 "좁고 싼" 칸(초록)에 점이 많으면, 둘이 같은 방향으로 움직인다는 뜻입니다.',u:'평균점 (x̄, ȳ)을 기준으로 사분면을 나누면 편차곱 (xᵢ−x̄)(yᵢ−ȳ)의 부호가 정해집니다. 1·3사분면(양의 곱)이 우세하면 공분산이 양수입니다.'},
+ {t:T4,n:'상관계수 r',s:'관계의 강도를 숫자로',e:'같은 방향 점이 얼마나 많고 선 모양에 얼마나 가까운지를 −1부터 +1 사이 숫자로 나타낸 것이 상관계수 r입니다. 1에 가까울수록 강한 관계입니다.',u:'r = Σ(xᵢ−x̄)(yᵢ−ȳ) / √[Σ(xᵢ−x̄)² Σ(yᵢ−ȳ)²]. 편차곱의 합을 각 변수의 산포로 표준화한 값으로, 선형 관계의 방향과 강도를 나타냅니다.'},
+ {t:T5,n:'가장 알맞은 직선 찾기',s:'잔차 제곱합이 가장 작게',e:'평균점을 중심으로 직선을 돌려 봅니다. 점에서 선까지의 세로 거리(빨간 선)를 네모로 만들어 넓이를 모두 더했을 때, 그 합이 가장 작은 선이 회귀선입니다.',u:'최소제곱법(OLS)은 잔차 eᵢ = yᵢ − ŷᵢ의 제곱합 SSE = Σeᵢ²를 최소화하는 a, b를 구합니다. 해는 b = Sxy/Sxx, a = ȳ − b·x̄이며 회귀선은 항상 (x̄, ȳ)를 지납니다.'},
+ {t:T6,n:'결과 읽기',s:'기울기와 R²',e:'회귀선의 기울기는 "면적이 1㎡ 늘면 가격이 평균적으로 얼마나 오르나"를 뜻합니다. 20㎡ 넓어지면 주황 계단만큼 비싸집니다. R²는 가격 차이 중 면적으로 설명되는 비율입니다.',u:'기울기 b는 x 한 단위 증가에 따른 y의 조건부 기대 변화량입니다. R² = 1 − SSE/SST는 설명된 변동의 비율이며, 단순회귀에서는 r²과 같습니다.'},
+ {t:T7,n:'이상치의 영향',s:'점 하나가 선을 끌어당김',e:'좁은데 아주 비싼 거래 한 건(빨강)을 넣으면 회귀선이 그쪽으로 끌려가고 r도 크게 떨어집니다. 점 하나가 결과를 바꿀 수 있습니다.',u:'x의 극단에 위치하면서 잔차가 큰 관측치는 지렛값(leverage)과 영향력(influence)이 커서 OLS 추정치를 크게 바꿉니다. 쿡의 거리 등으로 진단합니다.'},
+ {t:T8,n:'완성',s:'산점도 + 회귀선',e:'',u:''}];
+function finalMsg(){return lv==='e'?`완성입니다. 면적과 가격은 강한 양의 관계(r = ${f2(F0.r)})이고, 1㎡ 넓어질 때마다 약 ${Math.round(F0.b*10000).toLocaleString()}만 원씩 비싸집니다. 아래 "예측해 보기"로 면적을 움직여 보세요. 자료 범위(39~135㎡)를 벗어나면 예측을 믿기 어렵습니다.`
+  :`완성입니다. ŷ = ${f2(F0.a)} + ${f3(F0.b)}x, R² = ${f2(F0.r2)}. 예측은 관측 범위(39~135㎡) 안에서만 타당하며, 범위 밖 예측(외삽)은 선형성 가정이 유지된다는 보장이 없습니다. 잔차도와 이상치 진단을 함께 확인하세요.`}
+const LEDE={e:'산점도는 두 가지 숫자(전용면적과 매매가)가 함께 움직이는지 보는 그래프이고, 회귀선은 그 관계를 가장 잘 나타내는 직선입니다. 점을 찍고, 관계를 숫자로 재고, 가장 알맞은 선을 찾는 과정을 보여줍니다.',u:'산점도(scatter plot)는 두 연속형 변수의 결합분포를 표현하고, 단순선형회귀선은 최소제곱법으로 추정한 조건부 평균 E[Y|X]의 직선 근사입니다. 편차곱과 상관계수, 잔차 제곱합 최소화, 계수 해석, 이상치 영향을 단계별로 보여줍니다.'};
+const PC={
+ pro:[
+  {t:'두 숫자가 함께 움직이는지 바로 보인다',e:'점들이 오른쪽 위로 올라가면 "넓을수록 비싸다", 오른쪽 아래로 내려가면 "넓을수록 싸다"는 것이 바로 보입니다.',u:'관계의 방향(양·음), 강도(점의 밀집도), 형태(선형·비선형)를 동시에 시각적으로 진단합니다.',x:'<b>면적과 가격</b>, <b>역 거리와 가격</b>의 관계 확인.'},
+  {t:'튀는 값과 덩어리를 찾을 수 있다',e:'혼자 멀리 떨어진 점(이상치)이나, 점들이 두세 덩어리로 나뉘는 모습을 쉽게 찾습니다.',u:'이상치, 군집(하위 집단), 곡선 관계, 이분산성 같은 회귀 가정 위반을 탐지하는 데 유용합니다.',x:'<b>펜트하우스</b>나 <b>지분 거래</b>처럼 비정상 거래 찾기.'},
+  {t:'관계를 식 하나로 요약하고 예측한다',e:'회귀선 덕분에 "1㎡ 넓어지면 얼마 비싸지나"를 숫자로 말할 수 있고, 면적만 알면 가격을 대략 예상할 수 있습니다.',u:'회귀계수로 한계효과를 정량화하고, 적합값으로 조건부 예측을 제공합니다. 헤도닉 가격모형의 출발점입니다.',x:'위의 <b>예측해 보기</b>로 84㎡ 예상가 계산.'},
+  {t:'원자료가 하나하나 다 보인다',e:'평균 하나로 줄이지 않고 거래 30건이 모두 점으로 남아 있어 속사정이 숨지 않습니다.',u:'집계에 따른 정보 손실이 없어 분포 전체를 보존합니다. 요약 통계(r, R²)만으로는 놓치는 패턴(Anscombe의 4중주)을 드러냅니다.',x:'r이 같아도 <b>점 모양이 전혀 다른</b> 경우를 구분.'}],
+ con:[
+  {t:'함께 움직인다고 원인은 아니다',e:'면적이 넓은 집이 비싼 것은 면적 때문일 수도 있지만, 넓은 집이 주로 좋은 동네에 있어서일 수도 있습니다.',u:'상관은 인과를 함의하지 않습니다. 입지 같은 교란변수(confounder)가 두 변수를 함께 움직일 수 있으므로 다중회귀로 통제해야 합니다.',x:'<b>강남의 대형 평형</b>이 많으면 면적 효과가 부풀려집니다.'},
+  {t:'곧은 선은 휘어진 관계를 놓친다',e:'관계가 곡선 모양이면 직선은 잘 맞지 않습니다. 그런데도 r 숫자만 보면 관계가 없다고 착각할 수 있습니다.',u:'피어슨 r과 단순선형회귀는 선형 관계만 포착합니다. 비선형 관계는 변수 변환(로그), 다항항, 비모수 평활(LOESS)로 다룹니다.',x:'준공연수와 가격은 <b>U자형</b>(재건축 기대)일 수 있습니다.'},
+  {t:'점 하나에 선이 크게 흔들린다',e:'7단계처럼 아주 튀는 거래 한 건만 들어가도 회귀선이 기울어지고 r이 크게 떨어집니다.',u:'OLS는 잔차 제곱을 최소화하므로 큰 잔차에 민감합니다. 지렛값·쿡의 거리로 영향점을 진단하고, 필요시 로버스트 회귀를 고려합니다.',x:'<b>이상치 1건 추가</b> 버튼으로 r의 변화를 확인하세요.'},
+  {t:'자료 범위 밖 예측은 위험하다',e:'39~135㎡ 자료로 만든 선으로 200㎡ 가격을 예측하면 맞지 않을 수 있습니다. 자료가 없는 곳은 선이 맞는지 알 수 없습니다.',u:'외삽(extrapolation)은 관측 범위 밖에서도 선형성이 유지된다는 검증되지 않은 가정에 의존합니다. 예측구간도 범위 끝으로 갈수록 넓어집니다.',x:'예측 슬라이더를 <b>200㎡</b>로 옮기면 경고가 나옵니다.'},
+  {t:'점이 많으면 겹쳐서 안 보인다',e:'거래가 수천 건이면 점이 겹쳐 시커멓게 되어 어디에 많이 몰렸는지 알기 어렵습니다.',u:'과다표시(overplotting) 문제입니다. 투명도 조절, 지터링, 육각 빈(hexbin), 2차원 밀도 등고선으로 대응합니다.',x:'<b>서울 아파트 실거래 1만 건</b>은 투명도를 낮추거나 육각 빈으로.'}],
+ tip:{e:'<b>정리:</b> 산점도는 두 숫자의 관계를 보는 가장 기본 그래프이고, 회귀선은 그 관계를 식으로 요약합니다. 다만 "같이 움직인다 = 원인"은 아니며, 튀는 값 하나와 자료 범위 밖 예측을 늘 조심하세요.',
+      u:'<b>권장 사용법:</b> ① 회귀 전에 반드시 산점도로 형태 확인 ② r과 함께 R², 회귀식, n 제시 ③ 잔차도로 선형성·등분산성 점검 ④ 영향점 진단(쿡의 거리) ⑤ 관측 범위 내에서만 예측 ⑥ 인과 해석은 교란변수 통제(다중회귀) 후에.'}};
+function rsSvg(r){const W=80,H=70,Rr=rng(Math.round((r+2)*1000));const nr=()=>{let u=0,v=0;while(!u)u=Rr();while(!v)v=Rr();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};let s='';
+  for(let i=0;i<40;i++){const x=nr(),y=r*x+Math.sqrt(1-r*r)*nr();s+=`<circle cx="${(40+x*14).toFixed(1)}" cy="${(35-y*12).toFixed(1)}" r="2" style="fill:var(--c1)"/>`}return `<svg viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`}
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('sum').innerHTML=[['표본 수 n',N,0],['x 평균(㎡)',F0.mx,1],['y 평균(억)',F0.my,2],['기울기 b',F0.b,3],['절편 a',F0.a,2],['상관계수 r',F0.r,3],['결정계수 R²',F0.r2,3],['잔차 제곱합',F0.sse,1],['이상치 추가 시 r',F1.r,3]].map(([k,v,d])=>`<div><span>${k}</span><strong>${v.toFixed(d)}</strong></div>`).join('');
+  $('formula').innerHTML=`b = Σ(x−x̄)(y−ȳ) / Σ(x−x̄)² = ${f3(F0.b)}<br>a = ȳ − b·x̄ = ${f2(F0.my)} − ${f3(F0.b)}×${f1(F0.mx)} = ${f2(F0.a)}<br>R² = 1 − SSE/SST = 1 − ${f1(F0.sse)}/${f1(F0.sst)} = ${f3(F0.r2)}`;
+  $('fNote').textContent=lv==='e'?`기울기 ${f3(F0.b)}는 "1㎡ 넓어지면 ${f3(F0.b)}억(약 ${Math.round(F0.b*10000).toLocaleString()}만 원) 비싸진다"는 뜻입니다. 절편은 면적 0㎡일 때의 값이라 실제 의미는 없습니다.`:'절편은 x = 0에서의 외삽값이므로 해석하지 않습니다. 기울기의 표준오차와 t검정, 잔차 분석은 jamovi의 Regression → Linear Regression에서 확인할 수 있습니다.';
+  $('rsNote').textContent=lv==='e'?'r이 1에 가까울수록 점이 한 줄로 모이고, 0에 가까울수록 흩어집니다. 음수면 오른쪽 아래로 내려갑니다.':'r의 크기는 점 구름의 직선 밀집도, 부호는 기울기 방향을 나타냅니다. r = 0이 "관계 없음"이 아니라 "선형 관계 없음"임에 유의합니다.';
+  $('rs').innerHTML=[-.9,-.5,0,.5,.9].map(r=>`<figure>${rsSvg(r)}<b>r = ${r}</b></figure>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1;updPred()}
+function updPred(){const F=outUser?F1:F0,yh=F.a+F.b*px,inR=px>=39&&px<=135;$('pxo').textContent=`${px}㎡ → 약 ${f1(yh)}억`;
+  const w=$('pxw');w.hidden=inR;if(!inR)w.textContent=lv==='e'?'⚠ 자료 범위(39~135㎡) 밖이라 믿기 어려운 예측입니다':'⚠ 관측 범위 밖 외삽: 선형성 가정이 검증되지 않음'}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  outCur=Math.abs(outCur-outUser)<.003?outUser:lerp(outCur,outUser,.08);resCur=Math.abs(resCur-resUser)<.003?resUser:lerp(resCur,resUser,.1);draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.8;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('outT').onclick=()=>{outUser=outUser?0:1;$('outT').setAttribute('aria-pressed',!!outUser);$('outT').textContent=outUser?'이상치 빼기':'이상치 1건 추가';toEnd();updPred()};
+$('resT').onclick=()=>{resUser=resUser?0:1;$('resT').setAttribute('aria-pressed',!!resUser);toEnd()};
+$('px').oninput=e=>{px=+e.target.value;updPred();toEnd()};
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('scatLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('scatLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

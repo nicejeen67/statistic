@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>선그래프가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 24개월 시간축, 월별 거래 점 → 중앙값 → 선 → 지수화 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:500px}
+@media (max-width:560px){canvas{height:460px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 240px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.formula{font:14px var(--mono);background:var(--soft);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:nowrap;margin:8px 0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+td.s{color:var(--c1);font-weight:500}td.r{color:var(--c3);font-weight:500}
+.mini{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:8px}
+.mini figure{margin:0;display:grid;gap:4px;font-size:12.5px;color:var(--muted)}
+.mini figcaption b{display:block;color:var(--ink);font-weight:500;font-size:14px}
+.mini svg{width:100%;height:auto;background:var(--soft);border-radius:6px}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 08 · 추이</div>
+    <h1>선그래프가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="월별 거래가가 모여 서울과 지방 광역시의 가격 추이 선그래프가 되는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="세로축 값"><span>세로축</span><button id="yP" type="button" aria-pressed="false">가격(억원)</button><button id="yI" type="button" aria-pressed="true">지수(기준=100)</button></div>
+    <div class="grp seg" role="group" aria-label="세로축 범위"><span>범위</span><button id="rZ" type="button" aria-pressed="false">0부터</button><button id="rF" type="button" aria-pressed="true">확대</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="21" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>가격을 지수로 바꾸는 방법</h2>
+      <p id="idxText"></p>
+      <div class="formula">지수ₜ = (t월 중앙값 ÷ 기준월 중앙값) × 100</div>
+      <div class="tbl"><table><thead><tr><th>지역</th><th>기준월 가격</th><th>마지막 달 가격</th><th>가격 변화</th><th>마지막 달 지수</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>같은 자료, 다른 인상</h2>
+      <p class="note" id="miniNote"></p>
+      <div class="mini" id="mini"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">선그래프를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 거래가와 지수는 설명용으로 생성한 예시 값이며 실제 서울·지방 광역시 시세가 아닙니다. 실제 수업에서는 국토교통부 실거래가나 한국부동산원 가격지수로 바꿔 그려 보세요.</p>
+</div>
+
+<script>
+(function(){
+const M=24,TOTAL=21,T2=2.0,T3=4.4,T4=7.6,T5=10.2,T6=12.8,T7=15.4,T8=19.4;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1);
+const MON=Array.from({length:M},(_,i)=>`${24+Math.floor(i/12)}.${i%12+1}`);
+
+// ── 예시 자료: 월별 거래(점)와 중앙값
+const R=rng(7024),nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+function series(start,drift,season,noise){let v=start;const out=[];for(let i=0;i<M;i++){v*=1+drift+season*Math.sin(i/12*2*Math.PI-1)+noise*nrm();if(i>=8&&i<=11)v*=1-drift*1.6;out.push(v)}return out}
+const REG=[{n:'서울',med:series(9.6,.009,.004,.004),col:'c1'},{n:'지방 광역시',med:series(3.9,.002,.003,.004),col:'c3'}];
+REG.forEach(r=>{r.dots=r.med.map(m=>Array.from({length:12},()=>({v:Math.exp(Math.log(m)+.24*nrm()),j:R()*2-1}))).map(a=>a.sort((x,y)=>x.v-y.v));
+  // 그 달 점들의 중앙값이 정확히 목표 대표값이 되도록 점 전체를 비례 조정
+  r.dots.forEach((a,i)=>{const md=(a[5].v+a[6].v)/2,k=r.med[i]/md;a.forEach(d=>d.v*=k)});
+  r.idx=r.med.map(m=>m/r.med[0]*100)});
+const IDXMIN=Math.floor(Math.min(...REG.flatMap(r=>r.idx))/2)*2-2,IDXMAX=Math.ceil(Math.max(...REG.flatMap(r=>r.idx))/2)*2+2;
+const PMAX=Math.ceil(Math.max(...REG.flatMap(r=>r.dots.flat().map(d=>d.v)))/2)*2;
+// 가장 긴 하락 구간(서울)
+const fall=(()=>{const a=REG[0].med;let best=[0,0],s=0;for(let i=1;i<M;i++){if(a[i]<a[i-1]){if(i-s>best[1]-best[0])best=[s,i]}else s=i}return best})();
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',yUser=1,yCur=0,rUser=1,rCur=1;
+try{const v=localStorage.getItem('lineLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560,l=narrow?40:58,rr=narrow?54:170,top=50,base=H-50;L={W,H,narrow,l,rr,top,base,plotW:W-l-rr,plotH:base-top}}
+const X=i=>L.l+(i+.5)/M*L.plotW;
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper'),soft:col('--soft')};
+  const{W,H,l,top,base,plotW,plotH,narrow}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  // 세로축 상태: q = 가격(0) ↔ 지수(1), z = 0부터(0) ↔ 확대(1)
+  let q,z;
+  if(t<T5)q=0;else if(t<T8)q=ease(clamp((t-T5)/1.6));else q=yCur;
+  if(t>=T7&&t<T8){z=1-ease(clamp((t-T7-.3)/1.2))*(1-ease(clamp((t-T7-2.6)/1.2)))}else if(t<T8)z=1;else z=rCur;
+  // 가격 축은 항상 0부터, 지수 축은 z에 따라 0 또는 확대 범위
+  const iLo=lerp(0,IDXMIN,z),iHi=IDXMAX;
+  const Yp=v=>base-v/PMAX*plotH,Yi=v=>base-(v-iLo)/(iHi-iLo)*plotH;
+  const Y=(p,i)=>lerp(Yp(p),Yi(i),q);
+  const a0=clamp(t/.5);
+  // 격자와 눈금: 가격(1-q) / 지수(q)
+  for(let v=0;v<=PMAX;v+=2){const y=Yp(v);ln(l,y,l+plotW,y,C.line,1,null,a0*(1-q));txt(v,l-6,y+3,C.muted,`10px ${MONO}`,'right',a0*(1-q))}
+  const st=(iHi-iLo)>60?20:(iHi-iLo)>30?10:4;for(let v=Math.ceil(iLo/st)*st;v<=iHi;v+=st){const y=Yi(v);ln(l,y,l+plotW,y,v===100?C.muted:C.line,1,v===100?[4,3]:null,q);txt(v,l-6,y+3,v===100?C.ink:C.muted,`${v===100?700:400} 10px ${MONO}`,'right',q)}
+  ctx.save();ctx.translate(13,(top+base)/2);ctx.rotate(-Math.PI/2);txt('중위 매매가(억원)',0,0,C.muted,`11px ${SANS}`,'center',a0*(1-q));txt('가격지수 (24년 1월 = 100)',0,0,C.muted,`11px ${SANS}`,'center',q);ctx.restore();
+  ln(l,base,l+plotW,base,C.ink,1.5,null,a0);
+  MON.forEach((m,i)=>{if(i%(narrow?6:3)===0)txt(m,X(i),base+16,C.muted,`10px ${MONO}`,'center',a0)});
+  txt('연.월',l+plotW,base+32,C.muted,`10px ${MONO}`,'right',a0);
+  // 하락 구간 음영(6단계)
+  const p6=clamp((t-T6)/.8)*(t<T7?1:1-clamp((t-T7)/.5))+(t>=T8?0:0);
+  if(p6>0){const x0=X(fall[0]),x1=X(fall[1]);ctx.globalAlpha=.12*p6;ctx.fillStyle=C.c4;ctx.fillRect(x0,top,x1-x0,plotH);ctx.globalAlpha=1;txt(`하락 구간 ${MON[fall[0]]}~${MON[fall[1]]}`,(x0+x1)/2,top+14,C.c4,`700 11px ${SANS}`,'center',p6)}
+  // 범위 표시 상자(7단계)
+  const zb=(t>=T7&&t<T8)?clamp((t-T7)/.4)*(1-clamp((t-T8+.4)/.4)):0;
+  if(zb>0){const bx=l+12,by=top+6;ctx.globalAlpha=.95*zb;ctx.fillStyle=C.paper;ctx.fillRect(bx,by,narrow?150:210,40);ctx.strokeStyle=C.c4;ctx.strokeRect(bx,by,narrow?150:210,40);ctx.globalAlpha=1;
+    txt(`세로축 범위: ${Math.round(iLo)} ~ ${iHi}`,bx+10,by+17,C.c4,`700 12px ${SANS}`,'left',zb);txt(z>.5?'확대: 변화가 크게 보임':'0부터: 거의 평평해 보임',bx+10,by+33,C.ink,`11.5px ${SANS}`,'left',zb)}
+  // ── 지역별 점·중앙값·선
+  REG.forEach((r,k)=>{const c=C[r.col],start=k===0?0:T4,dotA=k===0?a0:clamp((t-T4)/.5);
+    const dotFade=1-clamp((t-T5)/.8),medT=k===0?T2:T4+.5,lineT=k===0?T3:T4+1.2,lineDur=k===0?2.6:1.6;
+    // 점(그 달 거래들)
+    if(dotA>0&&dotFade>0)r.dots.forEach((arr,i)=>{const pi=k===0?clamp((t-i*.05)/.4):1;arr.forEach(d=>{ctx.globalAlpha=dotA*dotFade*pi*.45*(t>=medT?.6:1);ctx.fillStyle=c;ctx.beginPath();ctx.arc(X(i)+d.j*plotW/M*.28,Yp(d.v),2.4,0,7);ctx.fill()});ctx.globalAlpha=1});
+    // 중앙값 표시
+    r.med.forEach((m,i)=>{const pm=clamp((t-medT-i*.04)/.35);if(pm<=0)return;const y=Y(m,r.idx[i]);
+      if(t<lineT+1&&q<.01){const w=plotW/M*.36;ln(X(i)-w,y,X(i)+w,y,c,2.5,null,pm)}
+      ctx.globalAlpha=pm;ctx.fillStyle=c;ctx.beginPath();ctx.arc(X(i),y,narrow?2.6:3.4,0,7);ctx.fill();ctx.globalAlpha=1});
+    // 선 긋기(펜이 지나가듯)
+    const pl=clamp((t-lineT)/lineDur);
+    if(pl>0){const n=pl*(M-1);ctx.strokeStyle=c;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(X(0),Y(r.med[0],r.idx[0]));
+      for(let i=1;i<=Math.floor(n);i++)ctx.lineTo(X(i),Y(r.med[i],r.idx[i]));
+      const fr=n-Math.floor(n),j=Math.floor(n);if(j<M-1&&fr>0){const x=lerp(X(j),X(j+1),fr),y=lerp(Y(r.med[j],r.idx[j]),Y(r.med[j+1],r.idx[j+1]),fr);ctx.lineTo(x,y);ctx.stroke();ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.fill()}else ctx.stroke();ctx.lineWidth=1}
+    // 끝 이름표
+    const pe=clamp((t-lineT-lineDur)/.5);
+    if(pe>0){const y=Y(r.med[M-1],r.idx[M-1]),chg=(r.idx[M-1]-100);
+      ctx.globalAlpha=pe;ctx.fillStyle=c;ctx.beginPath();ctx.arc(X(M-1),y,5,0,7);ctx.fill();ctx.globalAlpha=1;
+      const lbl=q>.5?`${r.n} ${f1(r.idx[M-1])} (${chg>=0?'+':''}${f1(chg)}%)`:`${r.n} ${f1(r.med[M-1])}억`;
+      txt(narrow?r.n:lbl,X(M-1)+8,y+4+(k===1&&q>.5&&Math.abs(Y(REG[0].med[M-1],REG[0].idx[M-1])-y)<16?14:0),c,`700 ${narrow?11:12}px ${SANS}`,'left',pe)}
+  });
+  // 5단계 안내: 기준선 100
+  const p5=clamp((t-T5-1.4)/.6)*(1-clamp((t-T6)/.6));
+  if(p5>0)txt('두 지역 모두 24년 1월 = 100에서 출발',X(1),Yi(100)-10,C.ink,`700 12px ${SANS}`,'left',p5);
+  // 6단계: 기울기 비교
+  if(p6>0){REG.forEach((r,k)=>{const i0=fall[1],i1=M-1,y0=Yi(r.idx[i0]),y1=Yi(r.idx[i1]);ln(X(i0),y0,X(i1),y1,C[r.col],1.5,[5,4],p6*.9)});
+    txt('기울기가 가파를수록 빨리 오름',X(Math.floor((fall[1]+M)/2)),Yi(IDXMAX)+14,C.ink,`700 12px ${SANS}`,'center',p6)}
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'달마다 거래가 점으로',e:'서울 아파트가 달마다 여러 건씩 거래됩니다. 한 달에 찍힌 점 12개가 그 달의 거래들입니다. 같은 달에도 가격이 꽤 다릅니다.',u:'월별로 반복 관측된 거래가(횡단면 자료의 시계열 묶음)입니다. 시점마다 분포가 있으므로 먼저 대표값으로 요약해야 시계열이 됩니다.'},
+ {t:T2,n:'달마다 대표값',s:'한 달을 숫자 하나로',e:'달마다 가운데 가격(중앙값)을 짧은 선으로 표시합니다. 비싼 거래 몇 건에 덜 흔들리도록 평균 대신 중앙값을 씁니다.',u:'각 시점의 중앙값을 대표값으로 사용합니다. 거래 구성(고가 단지 비중)이 달마다 달라 평균은 변동이 크므로, 가격 통계에서는 중위가격이 흔히 쓰입니다.'},
+ {t:T3,n:'시간 순서로 잇기',s:'점을 왼쪽부터 선으로',e:'대표값을 1월부터 차례로 선으로 이어 갑니다. 선이 올라가면 가격이 오른 것, 내려가면 내린 것입니다.',u:'시간 순서대로 대표값을 연결합니다. 선분의 기울기가 인접 시점 간 변화율을 나타내며, 시간축이 연속·등간격이라는 전제가 있습니다.'},
+ {t:T4,n:'두 번째 지역 추가',s:'지방 광역시 겹치기',e:'지방 광역시의 거래도 같은 방법으로 선을 그립니다. 그런데 가격 자체가 서울보다 훨씬 낮아서 선이 아래쪽에 납작하게 붙어 있습니다.',u:'수준(level)이 크게 다른 두 계열을 같은 축에 그리면 낮은 계열의 변동이 축소되어 보입니다. 증가율 비교에는 부적절한 배치입니다.'},
+ {t:T5,n:'지수로 바꾸기',s:'출발점을 100으로',e:'두 지역 모두 첫 달 가격을 100으로 놓고, 그 뒤 가격을 "첫 달보다 몇 % 올랐나"로 바꿉니다. 이제 두 지역의 오르는 속도를 공정하게 비교할 수 있습니다.',u:'기준시점 지수 Iₜ = Pₜ/P₀ × 100으로 변환합니다. 수준 차이를 제거하고 누적 상대 변화를 비교할 수 있게 하며, 한국부동산원 등 공식 통계도 이 방식의 지수를 발표합니다.'},
+ {t:T6,n:'추세 읽기',s:'기울기와 하락 구간',e:'빨간 구간은 서울 가격이 내려간 기간입니다. 그 뒤 점선의 기울기를 보면 서울이 지방보다 더 빨리 올랐습니다.',u:'국면(하락 구간)과 회복기 기울기를 비교합니다. 기울기는 기간 평균 변화율에 대응하며, 회복기 서울의 상승 속도가 더 큽니다.'},
+ {t:T7,n:'세로축 범위의 함정',s:'0부터 vs 확대',e:'세로축을 0부터 그리면 선이 거의 평평해 보이고, 좁게 확대하면 크게 오른 것처럼 보입니다. 숫자는 똑같습니다.',u:'선그래프는 위치로 값을 부호화하므로 막대와 달리 0 기준선이 필수는 아닙니다. 그러나 축 범위가 기울기의 시각적 인상을 결정하므로 범위를 명시하고 목적에 맞게 선택해야 합니다.'},
+ {t:T8,n:'완성',s:'지수로 본 가격 추이',e:'',u:''}];
+function finalMsg(){const s=REG[0].idx[M-1]-100,r=REG[1].idx[M-1]-100;
+  return lv==='e'?`완성입니다. 2년 동안 서울은 ${f1(s)}%, 지방 광역시는 ${f1(r)}% 올랐습니다. 위의 "세로축"과 "범위" 버튼을 눌러 같은 자료가 얼마나 다르게 보이는지 직접 비교해 보세요.`
+   :`완성된 지수 선그래프입니다. 24개월 누적 변화율은 서울 ${f1(s)}%, 지방 광역시 ${f1(r)}%. 보고 시에는 기준시점, 대표값(중위가격), 세로축 범위를 명시하고, 월별 거래 건수가 적은 시점의 변동은 해석에 주의합니다.`}
+const LEDE={e:'선그래프는 "시간에 따라 어떻게 변했나"를 보여주는 그래프입니다. 달마다 흩어진 거래가 대표값 하나로 모이고, 시간 순서대로 이어져 선이 되는 과정과, 서울과 지방을 공정하게 비교하는 방법을 보여줍니다.',u:'선그래프는 시계열 자료의 추세, 국면, 변화율을 표현합니다. 시점별 분포의 대표값 요약, 시간순 연결, 수준 차이를 제거하는 기준시점 지수화, 축 범위 선택에 따른 인상 차이를 단계별로 보여줍니다.'};
+const IDXT={e:'서울은 10억, 지방은 4억처럼 출발점이 다르면 같은 1억 상승도 의미가 다릅니다. 첫 달을 100으로 맞추면 "몇 % 올랐나"를 같은 눈금으로 비교할 수 있습니다.',u:'기준시점 고정 지수(fixed-base index)입니다. 계열 간 수준 차이를 제거해 누적 증가율을 비교합니다. 기준시점을 바꾸면 이후 지수값이 모두 바뀌므로, 비교 시 동일한 기준시점을 써야 합니다.'};
+const PC={
+ pro:[
+  {t:'시간에 따른 흐름이 한눈에 보인다',e:'선이 올라가는지, 내려가는지, 언제 바뀌었는지 바로 보입니다.',u:'추세(trend), 국면 전환(변곡점), 계절성 같은 시계열 패턴을 직관적으로 드러냅니다.',x:'24개월 가격지수에서 <b>하락 후 반등 시점</b>을 바로 찾을 수 있습니다.'},
+  {t:'여러 지역을 겹쳐 비교하기 좋다',e:'선 2~3개를 겹치면 어느 지역이 더 빨리 오르는지 기울기로 비교됩니다.',u:'동일 시간축에 여러 계열을 중첩해 상대 성과와 동조화 여부를 비교할 수 있습니다. 지수화하면 수준이 다른 계열도 비교 가능합니다.',x:'<b>서울 vs 지방 광역시</b> 상승 속도 비교.'},
+  {t:'시점이 많아도 깔끔하다',e:'24개월을 막대로 그리면 막대가 24개지만, 선은 하나로 깔끔하게 그려집니다.',u:'데이터 잉크가 적어 긴 시계열(수십~수백 시점)도 혼잡하지 않게 표현합니다.',x:'<b>10년치 월별 지수</b>(120개 시점)도 선 하나로.'},
+  {t:'0부터 시작하지 않아도 된다',e:'막대와 달리 선은 세로축을 잘라도 괜찮아서, 작은 변화를 자세히 볼 수 있습니다.',u:'위치 부호화이므로 0 기준선이 필수는 아닙니다. 변화폭이 수준에 비해 작은 지수 자료에서 변동을 확대해 볼 수 있습니다.',x:'지수 95~120 구간을 <b>확대</b>해 월별 등락을 관찰.'}],
+ con:[
+  {t:'세로축 범위로 인상이 크게 바뀐다',e:'같은 자료라도 세로축을 좁게 잡으면 폭등, 넓게 잡으면 제자리처럼 보입니다.',u:'축 범위와 종횡비가 기울기 인상을 결정합니다. 의도적 확대·축소로 오도할 수 있으므로 범위를 명시하고 일관되게 사용해야 합니다.',x:'7단계처럼 <b>0부터 vs 확대</b>로 같은 지수가 전혀 다르게 보입니다.'},
+  {t:'규모가 다른 지역은 그대로 비교하면 안 된다',e:'서울과 지방을 가격 그대로 그리면 지방 선이 납작해 보입니다. 지수로 바꿔야 공정하지만, 첫 달을 언제로 잡느냐에 따라 또 달라집니다.',u:'수준이 다른 계열은 지수화나 로그 척도가 필요하며, 기준시점 선택이 비교 결과를 바꿉니다(고점 기준이면 하락, 저점 기준이면 상승으로 보임).',x:'기준월을 <b>하락 구간의 바닥</b>으로 잡으면 상승률이 훨씬 커 보입니다.'},
+  {t:'선이 많으면 엉킨다',e:'지역 5개, 10개를 한꺼번에 그리면 선이 뒤엉켜 국수 가락처럼 됩니다.',u:'계열이 많으면 스파게티 차트가 됩니다. 핵심 계열만 강조색, 나머지는 회색으로 두거나 소형 다중 그래프로 나눕니다.',x:'서울 <b>25개 자치구</b>는 강조할 2~3개만 색칠.'},
+  {t:'사이를 이으면 "중간 값"이 있는 것처럼 보인다',e:'1월과 2월 사이를 선으로 이으면 그 사이에도 값이 있는 것처럼 보입니다. 이름(지역, 주택유형)을 잇는 데 쓰면 안 됩니다.',u:'선분은 연속성을 함의하므로 범주형 가로축에는 부적절합니다. 결측 시점이나 불규칙 간격을 그대로 이으면 변화가 왜곡됩니다.',x:'<b>자치구별 가격</b>을 선으로 이으면 의미 없는 오르내림이 생깁니다.'},
+  {t:'선 뒤의 거래 사정이 가려진다',e:'선은 달마다 숫자 하나만 보여줘서, 거래가 3건뿐인 달인지 300건인 달인지 알 수 없습니다.',u:'대표값만 표시되어 시점별 분포와 표본 크기가 사라집니다. 거래량이 적은 달의 중앙값은 변동이 크므로 거래량을 함께 제시(콤보 차트)하는 것이 좋습니다.',x:'거래가 급감한 달의 <b>급등·급락</b>은 몇 건의 영향일 수 있습니다.'}],
+ tip:{e:'<b>정리:</b> 선그래프는 "시간에 따라 어떻게 변했나"를 보여주는 데 가장 좋습니다. 규모가 다른 지역은 지수로 바꿔 비교하고, 세로축 범위를 꼭 확인하세요.',
+      u:'<b>권장 사용법:</b> ① 가로축은 등간격 시간 ② 수준이 다른 계열은 동일 기준시점 지수 또는 로그 척도 ③ 세로축 범위·기준시점 명시 ④ 계열은 3~4개 이내, 나머지는 회색 처리 ⑤ 거래량 등 표본 크기 정보는 콤보 차트로 보완.'}};
+function mini(kind){const W=170,H=110,l=8,b=100,tp=10;const a=REG[0].idx;const lo=kind==='z'?0:IDXMIN,hi=IDXMAX;const Yv=v=>b-(v-lo)/(hi-lo)*(b-tp);
+  let s=`<line x1="${l}" x2="${W-6}" y1="${b}" y2="${b}" style="stroke:var(--muted)"/>`;let d='';a.forEach((v,i)=>{d+=`${i?'L':'M'}${(l+(i+.5)/M*(W-l-6)).toFixed(1)},${Yv(v).toFixed(1)}`});
+  s+=`<path d="${d}" style="fill:none;stroke:var(--c1);stroke-width:2"/><text x="${l+2}" y="${tp+4}" style="font:9px var(--mono);fill:var(--muted)">${hi}</text><text x="${l+2}" y="${b-3}" style="font:9px var(--mono);fill:var(--muted)">${lo}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`}
+
+function renderText(){$('lede').textContent=LEDE[lv];$('idxText').textContent=IDXT[lv];
+  $('tbody').innerHTML=REG.map((r,k)=>`<tr><td>${r.n}</td><td>${f1(r.med[0])}억</td><td>${f1(r.med[M-1])}억</td><td>${r.med[M-1]>=r.med[0]?'+':''}${f1(r.med[M-1]-r.med[0])}억</td><td class="${k?'r':'s'}">${f1(r.idx[M-1])}</td></tr>`).join('');
+  $('miniNote').textContent=lv==='e'?'둘 다 똑같은 서울 지수입니다. 세로축을 어디서 시작하느냐만 다릅니다.':'동일 계열에 세로축 범위만 달리 적용한 결과입니다. 시각적 기울기는 축 범위와 종횡비에 따라 달라집니다.';
+  $('mini').innerHTML=`<figure>${mini('z')}<figcaption><b>0부터</b>${lv==='e'?'거의 그대로인 것처럼 보임':'변화가 수준 대비 작게 표현'}</figcaption></figure><figure>${mini('f')}<figcaption><b>확대</b>${lv==='e'?'크게 오른 것처럼 보임':'변동이 강조되어 표현'}</figcaption></figure>`;
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  yCur=Math.abs(yCur-yUser)<.003?yUser:lerp(yCur,yUser,.08);rCur=Math.abs(rCur-rUser)<.003?rUser:lerp(rCur,rUser,.08);draw();ui();requestAnimationFrame(frame)}
+function setY(v){yUser=v;$('yP').setAttribute('aria-pressed',v===0);$('yI').setAttribute('aria-pressed',v===1);if(t<T8){t=T8;yCur=1;playing=false}lastPhase=-1}
+function setR(v){rUser=v;$('rZ').setAttribute('aria-pressed',v===0);$('rF').setAttribute('aria-pressed',v===1);if(t<T8){t=T8;yCur=1;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('yP').onclick=()=>setY(0);$('yI').onclick=()=>setY(1);$('rZ').onclick=()=>setR(0);$('rF').onclick=()=>setR(1);
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('lineLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('lineLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+yCur=1;layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

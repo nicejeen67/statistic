@@ -1,0 +1,438 @@
+<title>이원 교차분석 블록 도시</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gothic+A1:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 16:9 아이소메트릭 미니어처 도시 스테이지(교차표 = 블록 건물) + 컨트롤 + 장면 버튼 + 대본 패널 */
+:root{
+  --bg:#eef4f6; --surface:#ffffff; --fg:#22314a; --muted:#5b6a80; --line:#cfdbe2;
+  --accent:#1f9e89; --accent-2:#7a5af0; --soft:#dcf0ea;
+  --display:"Jua","Gothic A1","Malgun Gothic",sans-serif;
+  --body:"Gothic A1","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121a24; --surface:#1b2633; --fg:#e8eef4; --muted:#9fb0c2; --line:#2e3d4e;
+  --accent:#3cc2a8; --accent-2:#9c86ff; --soft:#173a33; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121a24; --surface:#1b2633; --fg:#e8eef4; --muted:#9fb0c2; --line:#2e3d4e;
+  --accent:#3cc2a8; --accent-2:#9c86ff; --soft:#173a33; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.08em;color:var(--muted)}
+h1{margin:0;font-family:var(--display);font-weight:400;font-size:36px;line-height:1.15;text-wrap:balance}
+.seg{display:inline-flex;background:var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg button{font:inherit;border:0;background:transparent;color:var(--fg);padding:7px 16px;border-radius:10px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--accent);font-weight:700;box-shadow:0 2px 8px rgba(34,49,74,.15)}
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:#e3eff4;border-radius:20px;overflow:hidden;box-shadow:0 14px 40px rgba(34,49,74,.18)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:12px;padding:6px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.main{background:var(--accent);border-color:var(--accent);color:#fff;min-width:96px;font-weight:700}
+.btn[aria-pressed="true"]{background:var(--soft);border-color:var(--accent)}
+.btn:focus-visible,.seg button:focus-visible,.scenes button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent-2);outline-offset:2px}
+select{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:12px;padding:5px 8px}
+.scrub{flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:8px}
+.scrub input{flex:1;min-width:0;accent-color:var(--accent)}
+.time{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;white-space:nowrap}
+.scenes{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.scenes button{font:inherit;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:12px;padding:6px 10px;cursor:pointer;min-width:0}
+.scenes .n{display:block;font-family:var(--display);font-size:15px;color:var(--accent);line-height:1.2}
+.scenes .l{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scenes button[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.scenes button[aria-current="true"] .n{color:#fff}
+@media (max-width:760px){.scenes{grid-template-columns:repeat(4,minmax(0,1fr))}h1{font-size:28px}}
+.script{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.tag{font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.script h2{margin:0;font-family:var(--display);font-weight:400;font-size:24px;line-height:1.25}
+.now{margin:0;font-size:16px;line-height:1.85;max-width:72ch}
+.tip{margin:0;font-size:14px;color:var(--muted);background:var(--soft);border-radius:10px;padding:8px 12px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px 16px}
+summary{cursor:pointer;font-weight:700}
+#sAll{margin:10px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:10px}
+#sAll li{cursor:pointer;line-height:1.75;max-width:80ch}
+#sAll li.on{background:var(--soft);border-radius:8px}
+.foot{margin:0;font-size:13px;color:var(--muted)}
+.hint{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(20,28,40,.88);color:#fff;font-size:13px;padding:6px 12px;border-radius:999px;opacity:0;transition:opacity .4s;pointer-events:none;z-index:5}
+.hint.show{opacity:1}
+body.rec{background:#000}
+body.rec .wrap>*:not(.stage){display:none!important}
+body.rec .wrap{max-width:none;padding:0;height:100vh;justify-content:center;align-items:center}
+body.rec .stage{width:min(100vw,177.78vh);border-radius:0;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.hint{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div><p class="eyebrow">AI 부동산 통계 기초 · 강의 영상 자료</p><h1>이원 교차분석 블록 도시</h1></div>
+    <div class="seg" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+  </header>
+
+  <div class="stage" id="stage"><canvas id="cv" aria-label="이원 교차분석 애니메이션 화면"></canvas></div>
+
+  <div class="ctrl">
+    <button class="btn" id="rew" title="처음으로">⏮ 처음</button>
+    <button class="btn" id="prev" title="이전 장면 (←)">◀ 이전</button>
+    <button class="btn main" id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+    <button class="btn" id="next" title="다음 장면 (→)">다음 ▶</button>
+    <select id="spd" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="0.75">0.75배</option><option value="1" selected>1배</option><option value="1.5">1.5배</option></select>
+    <button class="btn" id="auto" aria-pressed="true" title="장면이 끝나면 자동으로 멈춤">장면마다 멈춤</button>
+    <button class="btn" id="fs">전체화면</button>
+    <button class="btn" id="rec" title="영상 화면만 남기기 (H)">녹화 모드 (H)</button>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="60" step="0.05" value="0" aria-label="재생 위치"><span class="time" id="time">0:00 / 1:00</span></div>
+  </div>
+
+  <div class="scenes" id="scenes"></div>
+
+  <section class="script" aria-live="polite">
+    <div class="head"><span class="tag" id="sTag"></span><button class="btn" id="copy">전체 대본 복사</button></div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+  </section>
+
+  <details><summary>전체 시나리오 보기</summary><ol id="sAll"></ol></details>
+
+  <p class="foot">예시 데이터(응답자 300명의 연령대와 선호 주택유형)는 설명을 위해 만든 가상의 수치입니다. 기대빈도, χ², 자유도, p, 크라메르 V, 표준화잔차는 페이지 안에서 직접 계산합니다. 단축키: Space 재생/정지 · ←/→ 장면 이동 · H 녹화 모드</p>
+</div>
+<div class="hint" id="hint">H 키를 누르면 원래 화면으로 돌아옵니다</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d))}
+addEventListener('resize',resize);resize();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 데이터 (가상) : 행 = 연령대, 열 = 선호 주택유형 ---------- */
+const O=[[35,50,15],[60,20,20],[40,15,45]];
+const RN=3,CN=3;
+const rowT=O.map(r=>r.reduce((a,b)=>a+b,0)),colT=[0,1,2].map(j=>O.reduce((a,r)=>a+r[j],0)),N=rowT.reduce((a,b)=>a+b,0);
+const E=O.map((r,i)=>r.map((o,j)=>rowT[i]*colT[j]/N));
+const CT=O.map((r,i)=>r.map((o,j)=>(o-E[i][j])**2/E[i][j]));
+const RES=O.map((r,i)=>r.map((o,j)=>(o-E[i][j])/Math.sqrt(E[i][j])));
+const chi=CT.flat().reduce((a,b)=>a+b,0),df=(RN-1)*(CN-1),V=Math.sqrt(chi/(N*Math.min(RN-1,CN-1)));
+const minE=Math.min(...E.flat()),lowE=E.flat().filter(v=>v<5).length;
+let moreN=0,lessN=0;O.forEach((r,i)=>r.forEach((o,j)=>{if(o>E[i][j])moreN++;else if(o<E[i][j])lessN++}));
+/* 카이제곱 분포 : 정규화 상단 불완전감마 Q(a,x) */
+function lnG(z){const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.1208650973866179e-2,-.5395239384953e-5];let x=z,y=z,t=x+5.5;t-=(x+.5)*Math.log(t);let s=1.000000000190015;for(const k of c)s+=k/++y;return -t+Math.log(2.5066282746310005*s/x)}
+function gammq(a,x){if(x<=0)return 1;const gl=lnG(a);
+ if(x<a+1){let ap=a,sum=1/a,del=sum;for(let n=0;n<300;n++){ap++;del*=x/ap;sum+=del;if(Math.abs(del)<Math.abs(sum)*1e-14)break}return 1-sum*Math.exp(-x+a*Math.log(x)-gl)}
+ let b=x+1-a,c=1e300,d=1/b,h=d;for(let i=1;i<300;i++){const an=-i*(i-a);b+=2;d=an*d+b;if(Math.abs(d)<1e-300)d=1e-300;c=b+an/c;if(Math.abs(c)<1e-300)c=1e-300;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<1e-14)break}
+ return Math.exp(-x+a*Math.log(x)-gl)*h}
+const pOf=x=>gammq(df/2,x/2);
+let lo=0,hi=100;for(let i=0;i<90;i++){const m=(lo+hi)/2;if(pOf(m)>.05)lo=m;else hi=m}const crit=(lo+hi)/2;
+const pval=pOf(chi);
+const dens=x=>x<=0?0:Math.exp((df/2-1)*Math.log(x)-x/2-(df/2)*Math.log(2)-lnG(df/2));
+const f1=v=>v.toFixed(1),f2=v=>v.toFixed(2),f3=v=>v.toFixed(3);
+const pTxt=pval<.001?'< .001':'= '+f3(pval);
+
+/* ---------- 이름 ---------- */
+const AGE=['청년','중년','장년'],AGES=['20–30대','40–50대','60대 이상'],TYP=['아파트','오피스텔','단독주택'];
+const cellName=(i,j)=>`${AGE[i]}·${TYP[j]}`;
+const rank=[];CT.forEach((r,i)=>r.forEach((v,j)=>rank.push({i,j,v})));rank.sort((a,b)=>b.v-a.v);
+
+/* ---------- 색과 글꼴 ---------- */
+const INK='#22314a',MUT='#5f6e84',WHITE='#ffffff',SKY1='#eaf4f8',SKY2='#cfe4ec',GROUND='#d9eadf',GROUND2='#c7ddcf',SLAB='#a9c4b4',MORE='#e2574c',LESS='#3d8bd8',GOLD='#f2c14e';
+const TC=['#1f9e89','#7a5af0','#f0a03c'];
+const DISP='"Jua","Gothic A1",sans-serif',BODY='"Gothic A1",sans-serif',MONO='"IBM Plex Mono",monospace';
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=t=>t<.5?2*t*t:1-((-2*t+2)**2)/2;
+const back=t=>{const c=1.70158,c3=c+1;return 1+c3*((t-1)**3)+c*((t-1)**2)};
+const lerp=(a,b,m)=>a+(b-a)*m;
+const hp=s=>{const x=Math.sin(s*12.9898+78.233)*43758.5453;return x-Math.floor(x)};
+function shade(hex,f){const p=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));const q=f<=1?p.map(v=>v*f):p.map(v=>v+(255-v)*(f-1));return `rgb(${q.map(v=>Math.round(clamp(v,0,255))).join(',')})`}
+
+/* ---------- 그리기 도구 ---------- */
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function card(x,y,w,h,a,o={}){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.shadowColor='rgba(34,49,74,.20)';ctx.shadowBlur=26;ctx.shadowOffsetY=10;
+ rr(x,y+(1-a)*14,w,h,o.r||20);ctx.fillStyle=o.fill||WHITE;ctx.fill();ctx.restore()}
+function txt(s,x,y,o={}){const a=o.a==null?1:o.a;if(a<=0)return;const sz=o.sz||24;
+ ctx.save();ctx.globalAlpha=a;ctx.font=`${o.w||500} ${sz}px ${o.f||BODY}`;ctx.fillStyle=o.c||INK;ctx.textAlign=o.al||'left';ctx.textBaseline=o.bl||'alphabetic';
+ if(o.p!=null&&o.p<1){if(o.p<=0){ctx.restore();return}const W=ctx.measureText(s).width;const x0=o.al==='center'?x-W/2:o.al==='right'?x-W:x;ctx.beginPath();ctx.rect(x0-4,y-sz*1.3,W*o.p+6,sz*1.8);ctx.clip()}
+ ctx.fillText(s,x,y);ctx.restore()}
+function para(s,x,y,maxW,lh,o={}){ctx.save();ctx.font=`${o.w||500} ${o.sz||20}px ${o.f||BODY}`;const words=s.split(' ');const lines=[];let cur='';
+ words.forEach(w=>{const t=cur?cur+' '+w:w;if(ctx.measureText(t).width>maxW&&cur){lines.push(cur);cur=w}else cur=t});if(cur)lines.push(cur);ctx.restore();
+ lines.forEach((l,i)=>txt(l,x,y+i*lh,o));return lines.length}
+function line(x1,y1,x2,y2,o={}){const p=o.p==null?1:clamp(o.p),a=o.a==null?1:o.a;if(p<=0||a<=0)return;
+ ctx.save();ctx.globalAlpha=a;ctx.strokeStyle=o.c||INK;ctx.lineWidth=o.w||3;ctx.lineCap='round';if(o.dash)ctx.setLineDash(o.dash);
+ ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(lerp(x1,x2,p),lerp(y1,y2,p));ctx.stroke();ctx.restore()}
+function pill(s,x,y,a,o={}){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.font=`400 ${o.sz||22}px ${DISP}`;const w=ctx.measureText(s).width+34,h=(o.sz||22)+20;
+ const X0=o.al==='right'?x-w:o.al==='center'?x-w/2:x;ctx.shadowColor='rgba(34,49,74,.22)';ctx.shadowBlur=12;ctx.shadowOffsetY=4;rr(X0,y,w,h,h/2);ctx.fillStyle=o.fill||INK;ctx.fill();ctx.shadowColor='transparent';
+ ctx.fillStyle=o.c||WHITE;ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillText(s,X0+17,y+h/2+1);ctx.restore()}
+function poly(pts,fill,stroke,lw){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||1.4;ctx.stroke()}}
+
+/* ---------- 아이소메트릭 ---------- */
+const TW=150,TH=76,OX=440,OY=236,K=3.6; /* 한 사람 = 3.6px, 한 층(10명) = 36px */
+const iso=(gx,gy,z=0)=>[OX+(gx-gy)*TW/2,OY+(gx+gy)*TH/2-z];
+function box(x0,y0,w,d,z0,h,col,a=1,o={}){if(h<=.3||a<=0)return;ctx.save();ctx.globalAlpha=a;const z1=z0+h;
+ const Lf=[iso(x0,y0+d,z0),iso(x0+w,y0+d,z0),iso(x0+w,y0+d,z1),iso(x0,y0+d,z1)];
+ const Rf=[iso(x0+w,y0,z0),iso(x0+w,y0+d,z0),iso(x0+w,y0+d,z1),iso(x0+w,y0,z1)];
+ const Tf=[iso(x0,y0,z1),iso(x0+w,y0,z1),iso(x0+w,y0+d,z1),iso(x0,y0+d,z1)];
+ poly(Lf,shade(col,.86),INK,1.3);poly(Rf,shade(col,.68),INK,1.3);poly(Tf,shade(col,1.18),INK,1.3);
+ if(o.floors){ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1.3;for(let f=36;f<h-3;f+=36){const zz=z0+f;ctx.beginPath();ctx.moveTo(...iso(x0,y0+d,zz));ctx.lineTo(...iso(x0+w,y0+d,zz));ctx.lineTo(...iso(x0+w,y0,zz));ctx.stroke()}
+  ctx.fillStyle='rgba(255,255,255,.55)';for(let f=10;f<h-14;f+=36){for(let q=0;q<3;q++){const u=x0+w*(.2+q*.27);const p1=iso(u,y0+d,z0+f),p2=iso(u+w*.14,y0+d,z0+f),p3=iso(u+w*.14,y0+d,z0+f+14),p4=iso(u,y0+d,z0+f+14);poly([p1,p2,p3,p4],'rgba(255,255,255,.5)')}}}
+ ctx.restore()}
+function wire(x0,y0,w,d,h,col,a=1){if(a<=0||h<=0)return;ctx.save();ctx.globalAlpha=a;ctx.setLineDash([6,5]);ctx.strokeStyle=col;ctx.lineWidth=2;
+ const T=[iso(x0,y0,h),iso(x0+w,y0,h),iso(x0+w,y0+d,h),iso(x0,y0+d,h)];poly(T,'rgba(255,255,255,.28)',col,2);
+ [[x0,y0+d],[x0+w,y0+d],[x0+w,y0],[x0,y0]].forEach(([u,v],k)=>{ctx.globalAlpha=a*(k===3?.35:1);ctx.beginPath();ctx.moveTo(...iso(u,v,0));ctx.lineTo(...iso(u,v,h));ctx.stroke()});ctx.restore()}
+const CX0=.2,CW=.6;
+function board(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;const m=.28,th=18;
+ const P=[iso(-m,-m),iso(3+m,-m),iso(3+m,3+m),iso(-m,3+m)];
+ poly([P[3],P[2],[P[2][0],P[2][1]+th],[P[3][0],P[3][1]+th]],shade(SLAB,.92));poly([P[1],P[2],[P[2][0],P[2][1]+th],[P[1][0],P[1][1]+th]],shade(SLAB,.75));
+ poly(P,GROUND);
+ for(let i=0;i<3;i++)if(i%2===0)poly([iso(-m,i),iso(3+m,i),iso(3+m,i+1),iso(-m,i+1)],GROUND2);
+ ctx.strokeStyle='rgba(34,49,74,.18)';ctx.lineWidth=1.2;for(let k=1;k<3;k++){ctx.beginPath();ctx.moveTo(...iso(k,-m));ctx.lineTo(...iso(k,3+m));ctx.moveTo(...iso(-m,k));ctx.lineTo(...iso(3+m,k));ctx.stroke()}
+ ctx.restore();
+ for(let j=0;j<3;j++){const[x,y]=iso(j+.5,3.95);pill(TYP[j],x,y-16,a,{al:'center',fill:TC[j],sz:18})}
+ for(let i=0;i<3;i++){const[x,y]=iso(3.62,i+.5);txt(AGE[i],x,y+2,{f:DISP,sz:22,w:400,a});txt(AGES[i],x,y+24,{sz:15,c:MUT,a})}
+ const[ax,ay]=iso(-.3,3.9);txt(L.colAx,ax-40,ay+44,{sz:17,w:700,c:MUT,a,al:'right'});
+ const[bx,by]=iso(3.9,-.3);txt(L.rowAx,bx+10,by-6,{sz:17,w:700,c:MUT,a})}
+function legend(a,L){if(a<=0)return;txt(L.floor,60,672,{sz:17,w:700,c:MUT,a});
+ const x=60,y=636;box_(x,y,a)}
+function box_(x,y,a){ctx.save();ctx.globalAlpha=a;const s=[[x,y],[x+16,y-8],[x+32,y],[x+16,y+8]];poly(s,shade(TC[0],1.18),INK,1.2);poly([[x,y],[x+16,y+8],[x+16,y+24],[x,y+16]],shade(TC[0],.86),INK,1.2);poly([[x+16,y+8],[x+32,y],[x+32,y+16],[x+16,y+24]],shade(TC[0],.68),INK,1.2);ctx.restore()}
+
+/* ---------- 사람 아이콘 (장면 1·2) ---------- */
+const people=[];O.forEach((r,i)=>r.forEach((o,j)=>{for(let q=0;q<Math.round(o/5);q++){const s=people.length;people.push({i,j,q,gx:.15+hp(s*3.7+1)*2.7,gy:i+.18+hp(s*1.9+5)*.64})}}));
+people.sort((a,b)=>(a.gx+a.gy)-(b.gx+b.gy));
+function person(x,y,col,a=1,s=1){if(a<=0||s<=0)return;ctx.save();ctx.globalAlpha=a;ctx.translate(x,y);ctx.scale(s,s);
+ ctx.fillStyle='rgba(34,49,74,.18)';ctx.beginPath();ctx.ellipse(0,0,8,3.5,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle=col;ctx.strokeStyle=INK;ctx.lineWidth=1.2;rr(-6,-17,12,15,5);ctx.fill();ctx.stroke();ctx.beginPath();ctx.arc(0,-23,5,0,Math.PI*2);ctx.fillStyle='#f7dcc4';ctx.fill();ctx.stroke();ctx.restore()}
+
+/* ---------- 타임라인 ---------- */
+const S=[0,8,16,25,34,43,51,60],END=60;
+let T=0,playing=true,speed=1,level='mid',autoStop=true;
+const sceneIdx=t=>{let k=0;for(let i=0;i<S.length-1;i++)if(t>=S[i])k=i;return k};
+
+/* ---------- 화면 문구 ---------- */
+const TX={
+ mid:{sub:'설문 응답자 300명 · 가상 데이터',
+  scenes:['교차분석이란?','건물로 쌓기 (교차표)','관계가 없다면? (기대빈도)','차이 점수 χ²','관계의 세기 V','우연일까?','결과표와 주의점'],
+  colAx:'좋아하는 집 →',rowAx:'← 나이',floor:'한 층 = 10명',q0:'나이에 따라 살고 싶은 집이 다를까?',q0s:'사람 1명 아이콘 = 5명',
+  tbl:'교차표 (사람 수)',tot:'합계',t1:'청년 줄은 오피스텔이, 장년 줄은 단독주택이 높아요',
+  eT:'기대빈도 = 관계가 없다면 나올 인원',eF:'(줄 합계 × 열 합계) ÷ 전체',eX:`청년·아파트 : 100 × ${colT[0]} ÷ ${N} = ${f1(E[0][0])}명`,eM:`예상보다 많음 : ${moreN}칸`,eL:`예상보다 적음 : ${lessN}칸`,eW:'점선 건물 = 예상 인원',
+  cT:'칸마다 차이 점수',cF:'(실제 − 예상)² ÷ 예상',cS:'아홉 칸 점수의 합',
+  vT:'크라메르 V : 0 부터 1 까지',bands:['거의 없음','약함','중간','강함'],mini:['모든 줄이 같은 모양','우리 조사','나이로 집을 맞힘'],ours:`우리 V = ${f2(V)}`,
+  resT:'예상보다 많은 칸 · 적은 칸',resS:'빨강 = 많음, 파랑 = 적음',
+  h0:'질문 : 관계가 없는데 우연히 이만큼 차이가 났을까?',tl:[`차이 점수 χ² = ${f1(chi)}`,`자유도 = (3 − 1) × (3 − 1) = ${df}`,`기준선 = ${f2(crit)}`,`우연일 확률 p ${pval<.001?'< 0.001':'= '+f3(pval)}`],
+  tz:'우연이라고 보기 어려운 구역',verdict:'→ 우연이 아니에요 (나이와 집 취향은 관계가 있어요)',
+  tbT:'교차분석 결과표',tbH:['','값','자유도','우연일 확률 p'],tbR:['차이 점수 χ²','전체 인원 N'],vR:'관계 세기 V',
+  note:`V = ${f2(V)} : 나이와 좋아하는 집 사이에 중간 정도의 관계`,
+  warnT:'꼭 기억하기',warn:['예상 인원 5명 이상','관계 ≠ 원인','어느 칸인지는 따로'],
+  warnS:['예상 인원이 너무 적은 칸이 많으면 결과가 흔들려요','소득·가족 수 같은 다른 이유도 따져 봐요','색칸(잔차)으로 어디가 다른지 확인해요']},
+ uni:{sub:'응답자 N = 300 · 3 × 3 분할표 · 가상 데이터',
+  scenes:['교차분석 (Crosstabs)','관측빈도 분할표','H₀ 독립 · 기대빈도','피어슨 χ² 통계량','효과크기 · 잔차','χ² 독립성 검정','Contingency Tables 보고'],
+  colAx:'열 : 주택유형 (j)',rowAx:'행 : 연령대 (i)',floor:'1층 = 10명 (높이 ∝ Oᵢⱼ)',q0:'연령대 × 주택유형 : 독립인가?',q0s:'아이콘 1개 = 5명',
+  tbl:'관측빈도 Oᵢⱼ',tot:'합계',t1:'행마다 조건부 분포의 모양이 다름',
+  eT:'H₀ : 두 변수는 독립',eF:'Eᵢⱼ = nᵢ. × n.ⱼ / N',eX:`E₁₁ = 100 × ${colT[0]} / ${N} = ${f2(E[0][0])}`,eM:`Oᵢⱼ > Eᵢⱼ : ${moreN}개 셀`,eL:`Oᵢⱼ < Eᵢⱼ : ${lessN}개 셀`,eW:`점선 = Eᵢⱼ,  min E = ${f2(minE)}`,
+  cT:'셀별 기여도',cF:'(Oᵢⱼ − Eᵢⱼ)² / Eᵢⱼ',cS:'χ² = Σ 기여도',
+  vT:"Cramér's V = √( χ² / (N·min(r−1, c−1)) )",bands:['< .1','.1 – .3','.3 – .5','≥ .5'],mini:['V = 0 (독립)','관측 자료','V = 1 (완전 연관)'],ours:`V = ${f3(V)}`,
+  resT:'표준화잔차 (O − E) / √E',resS:'|잔차| > 2 : 주된 연관 셀',
+  h0:'H₀ : 독립     H₁ : 연관 있음',tl:[`χ² = ${f2(chi)},  N = ${N}`,`df = (r − 1)(c − 1) = ${df}`,`χ²₀.₀₅(${df}) = ${f3(crit)}`,`p ${pTxt}  (오른쪽 꼬리)`],
+  tz:`기각역 χ² > ${f3(crit)}`,verdict:'→ H₀ 기각 : 연령대와 주택유형은 유의하게 연관',
+  tbT:'χ² Tests',tbH:['','Value','df','p'],tbR:['χ²','N'],vR:"Cramer's V",
+  note:`Note. 가상 데이터, E < 5 셀 ${lowE}개 (${Math.round(lowE/9*100)}%)`,
+  warnT:'해석 시 주의',warn:['기대빈도 조건','관련성 ≠ 인과','셀 해석은 잔차로'],
+  warnS:['E < 5 셀이 20%를 넘으면 범주 통합 검토','제3변수(소득·가구원 수) 통제 필요','표준화·조정잔차로 어느 셀인지 확인']}
+};
+
+/* ---------- 배경 · 머리말 ---------- */
+function bgDeco(){const g=ctx.createLinearGradient(0,0,0,LH);g.addColorStop(0,SKY1);g.addColorStop(1,SKY2);ctx.fillStyle=g;ctx.fillRect(0,0,LW,LH);
+ ctx.fillStyle='rgba(255,255,255,.55)';[[1120,70,1],[980,40,.7],[180,600,.8]].forEach(([x,y,s])=>{ctx.beginPath();ctx.ellipse(x,y,60*s,18*s,0,0,Math.PI*2);ctx.ellipse(x+34*s,y-10*s,36*s,20*s,0,0,Math.PI*2);ctx.fill()})}
+function header(k,lt,L){txt('이원 교차분석',60,70,{f:DISP,sz:40,w:400});txt(L.sub,62,102,{sz:18,c:MUT});
+ const sl=reduce?1:back(clamp(lt/.55));pill(`${'①②③④⑤⑥⑦'[k]} ${L.scenes[k]}`,1224+(1-sl)*300,34,clamp(lt/.3),{al:'right',fill:INK,sz:22})}
+
+/* ---------- 건물 ---------- */
+const cells=[];for(let i=0;i<3;i++)for(let j=0;j<3;j++)cells.push({i,j});cells.sort((a,b)=>(a.i+a.j)-(b.i+b.j));
+function towers(grow,a,o={}){cells.forEach(({i,j})=>{const g=typeof grow==='function'?grow(i,j):grow;const h=O[i][j]*K*g;
+ const dim=o.dim?o.dim(i,j):1;box(j+CX0,i+CX0,CW,CW,0,h,TC[j],a*dim,{floors:true});
+ if(o.more&&O[i][j]>E[i][j]){const e=E[i][j]*K;box(j+CX0-.002,i+CX0-.002,CW+.004,CW+.004,e,(O[i][j]-E[i][j])*K,MORE,a*o.more*.8)}
+ if(o.wire)wire(j+CX0-.03,i+CX0-.03,CW+.06,CW+.06,E[i][j]*K,O[i][j]>=E[i][j]?MORE:LESS,a*o.wire(i,j));
+ if(o.label){const[x,y]=iso(j+.5,i+.5,Math.max(O[i][j],o.lab2?E[i][j]:0)*K*g+18);o.label(i,j,x,y)}})}
+
+/* ---------- 장면 ---------- */
+const SC=[];
+SC[0]={draw(lt,L){board(clamp(lt/.6),L);
+ people.forEach((p,k)=>{const d=clamp((lt-.8-k*.035)/.5);if(d<=0)return;const[x,y]=iso(p.gx,p.gy);person(x,y-(1-(reduce?1:ease(d)))*120,TC[p.j],d)})},
+ front(lt,L){const qa=clamp((lt-3.6)/.5);card(840,150,390,150,qa,{fill:GOLD});
+  para(L.q0,866,206,340,36,{f:DISP,sz:28,w:400,a:qa,p:clamp((lt-3.9)/1.2)});
+  txt(L.q0s,866,276,{sz:17,c:INK,a:qa*clamp((lt-4.8)/.5)});
+  const la=clamp((lt-5.4)/.5);for(let j=0;j<3;j++){person(880+j*120,620,TC[j],la);txt(TYP[j],896+j*120,618,{sz:17,w:700,a:la})}}};
+SC[1]={draw(lt,L){board(1,L);
+ towers((i,j)=>reduce?1:ease(clamp((lt-1.6-(i*3+j)*.12)/1.4)),1,{label:(i,j,x,y)=>txt(String(O[i][j]),x,y,{f:MONO,sz:18,w:600,al:'center',a:clamp((lt-3.2-(i*3+j)*.12)/.4)})});
+ people.forEach((p,k)=>{const m=reduce?1:ease(clamp((lt-.3-k*.012)/1.3));const gx=lerp(p.gx,p.j+.5,m),gy=lerp(p.gy,p.i+.5,m);const[x,y]=iso(gx,gy);const fade=1-clamp((lt-1.7-(p.i*3+p.j)*.12)/.6);person(x,y-Math.sin(m*Math.PI)*40,TC[p.j],fade)})},
+ front(lt,L){const ca=clamp((lt-4.2)/.4);card(820,140,420,330,ca);
+  txt(L.tbl,846,186,{f:DISP,sz:24,w:400,a:ca});
+  const cx=[985,1065,1145,1205];
+  TYP.forEach((t,j)=>txt(t,cx[j],228,{sz:15,w:700,al:'center',c:TC[j],a:ca}));txt(L.tot,cx[3],228,{sz:15,w:700,al:'center',c:MUT,a:ca});
+  line(846,242,1220,242,{w:1.5,c:'#c3d2dc',a:ca});
+  O.forEach((r,i)=>{const y=278+i*40,pp=clamp((lt-4.6-i*.4)/.4);txt(AGE[i],846,y,{sz:18,w:700,a:pp});
+   r.forEach((o,j)=>txt(String(o),cx[j],y,{f:MONO,sz:19,w:600,al:'center',a:pp}));txt(String(rowT[i]),cx[3],y,{f:MONO,sz:18,al:'center',c:MUT,a:pp})});
+  const tp=clamp((lt-6)/.4);line(846,392,1220,392,{w:1.5,c:'#c3d2dc',a:tp});txt(L.tot,846,424,{sz:18,w:700,c:MUT,a:tp});
+  colT.forEach((c,j)=>txt(String(c),cx[j],424,{f:MONO,sz:18,al:'center',c:MUT,a:tp}));txt(String(N),cx[3],424,{f:MONO,sz:18,w:600,al:'center',a:tp});
+  const na=clamp((lt-6.6)/.5);card(820,494,420,70,na,{fill:'#fff4d6'});para(L.t1,846,536,370,26,{sz:17,w:700,a:na,p:clamp((lt-6.8)/1)})}};
+SC[2]={draw(lt,L){board(1,L);
+ towers(1,1,{wire:(i,j)=>clamp((lt-.8-(i*3+j)*.15)/.5),more:clamp((lt-4.6)/.6),dim:(i,j)=>O[i][j]<E[i][j]?1-.35*clamp((lt-4.6)/.6):1,lab2:true,
+  label:(i,j,x,y)=>{const a=clamp((lt-2.4-(i*3+j)*.12)/.4);txt(level==='mid'?`${O[i][j]} / ${f1(E[i][j])}`:`${O[i][j]} | ${f1(E[i][j])}`,x,y,{f:MONO,sz:15,w:600,al:'center',a,c:O[i][j]>E[i][j]?MORE:LESS})}})},
+ front(lt,L){const ca=clamp((lt-.3)/.4);card(820,140,420,380,ca);
+  para(L.eT,846,188,370,30,{f:DISP,sz:24,w:400,a:ca,p:clamp((lt-.5)/.9)});
+  txt(L.eF,846,262,{sz:20,w:700,f:level==='uni'?MONO:BODY,c:INK,a:ca,p:clamp((lt-1.4)/.8)});
+  txt(L.eX,846,302,{sz:17,f:MONO,c:MUT,a:ca,p:clamp((lt-2.2)/.8)});
+  const la=clamp((lt-3.6)/.4);ctx.save();ctx.globalAlpha=la;ctx.setLineDash([6,5]);ctx.strokeStyle=INK;ctx.lineWidth=2;ctx.strokeRect(848,336,22,22);ctx.restore();txt(L.eW,882,354,{sz:17,a:la});
+  const ma=clamp((lt-4.8)/.4);ctx.save();ctx.globalAlpha=ma;ctx.fillStyle=MORE;rr(848,384,22,22,5);ctx.fill();ctx.fillStyle=LESS;rr(848,428,22,22,5);ctx.fill();ctx.restore();
+  txt(L.eM,882,402,{sz:18,w:700,c:MORE,a:ma});txt(L.eL,882,446,{sz:18,w:700,c:LESS,a:clamp((lt-5.3)/.4)});
+  txt(level==='mid'?'실제 / 예상':'O | E',846,494,{sz:15,c:MUT,f:MONO,a:clamp((lt-5.8)/.4)})}};
+SC[3]={draw(lt,L){board(1,L);
+ towers(1,.55+.45*(1-clamp((lt-.2)/.6)),{label:(i,j,x,y)=>{const a=clamp((lt-1-rank.findIndex(r=>r.i===i&&r.j===j)*.18)/.4);const v=CT[i][j];pill(f1(v),x,y-20,a,{al:'center',fill:v>8?MORE:v>3?'#d98a3d':'#7f8da0',sz:16})}})},
+ front(lt,L){const ca=clamp((lt-.3)/.4);card(820,110,420,560,ca);
+  txt(L.cT,846,154,{f:DISP,sz:24,w:400,a:ca});txt(L.cF,846,186,{sz:17,f:level==='uni'?MONO:BODY,c:MUT,a:ca,p:clamp((lt-.6)/.8)});
+  const mx=rank[0].v,W=170;
+  cells.slice().sort((a,b)=>(a.i*3+a.j)-(b.i*3+b.j)).forEach(({i,j},k)=>{const y=226+k*38,pp=clamp((lt-1.6-k*.28)/.4),bp=ease(clamp((lt-1.8-k*.28)/.6));
+   txt(cellName(i,j),846,y+6,{sz:15,w:700,a:pp});ctx.save();ctx.globalAlpha=pp;rr(990,y-10,Math.max(3,W*CT[i][j]/mx*bp),20,6);ctx.fillStyle=TC[j];ctx.fill();ctx.restore();
+   txt(f2(CT[i][j]),1222,y+6,{f:MONO,sz:15,w:600,al:'right',a:pp})});
+  const sa=clamp((lt-4.6)/.4);line(846,572,1218,572,{w:2,c:'#c3d2dc',a:sa});txt(L.cS,846,612,{sz:18,w:700,c:MUT,a:sa});
+  txt(`χ² = ${f1(chi*(reduce?1:ease(clamp((lt-4.6)/1.4))))}`,1218,640,{f:MONO,sz:30,w:600,al:'right',c:MORE,a:sa})}};
+function miniHeat(cx,cy,M,a,hl,lab){if(a<=0)return;card(cx-66,cy-62,132,124,a,{r:14,fill:hl?'#fff4d6':WHITE});
+ const s=30;
+ ctx.save();ctx.globalAlpha=a;for(let i=0;i<3;i++)for(let j=0;j<3;j++){const v=M[i][j];ctx.globalAlpha=a*(.15+.85*clamp(v/60));ctx.fillStyle=TC[j];rr(cx-49+j*(s+3),cy-48+i*(s+3),s,s,5);ctx.fill()}ctx.restore();
+ txt(lab,cx,cy+84,{sz:15,w:700,al:'center',a})}
+SC[4]={front(lt,L){const ca=clamp(lt/.4);card(70,120,1140,540,ca);
+ txt(L.vT,110,174,{f:level==='uni'?MONO:DISP,sz:level==='uni'?22:28,w:level==='uni'?600:400,a:ca,p:clamp((lt-.3)/.9)});
+ const NL0=130,NL1=690,nl=v=>NL0+v*(NL1-NL0),ny=440;
+ const IND=[[33,33,34],[33,33,34],[34,33,33]],STR=[[100,0,0],[0,100,0],[0,0,100]].map(r=>r.map(v=>v*.6));
+ const OB=O;miniHeat(nl(0)+70,280,IND,clamp((lt-.9)/.4),false,L.mini[0]);miniHeat(nl(V),280,OB,clamp((lt-1.2)/.4),true,L.mini[1]);miniHeat(nl(1)-70,280,STR,clamp((lt-1.5)/.4),false,L.mini[2]);
+ const bb=[0,.1,.3,.5,1],bc=['#d9e2ea','#bfe3d9','#6cc4b0','#1f9e89'],bp=clamp((lt-2.4)/1);
+ for(let k=0;k<4;k++){const x0=nl(bb[k]),x1=nl(bb[k+1]),aa=clamp(bp*4-k);ctx.save();ctx.globalAlpha=aa;ctx.fillStyle=bc[k];ctx.fillRect(x0,ny-14,x1-x0,28);ctx.restore();
+  txt(L.bands[k],(x0+x1)/2,ny+46,{sz:k===0&&level==='mid'?13:15,w:700,al:'center',a:aa})}
+ ctx.save();ctx.globalAlpha=bp;rr(NL0,ny-14,NL1-NL0,28,8);ctx.lineWidth=2;ctx.strokeStyle=INK;ctx.stroke();ctx.restore();
+ [0,.5,1].forEach(v=>txt(String(v),nl(v),ny-24,{f:MONO,sz:15,al:'center',c:MUT,a:bp}));
+ const dp=clamp((lt-3.6)/.9),yy=lerp(ny-120,ny,reduce?1:back(dp));if(dp>0){ctx.save();ctx.globalAlpha=dp;ctx.fillStyle=INK;ctx.beginPath();ctx.moveTo(nl(V),yy-16);ctx.lineTo(nl(V)-12,yy-36);ctx.lineTo(nl(V)+12,yy-36);ctx.closePath();ctx.fill();ctx.restore();
+  pill(L.ours,nl(V),ny+66,clamp((lt-4.3)/.4),{al:'center',fill:GOLD,c:INK,sz:20})}
+ // 잔차 히트맵
+ const ha=clamp((lt-5)/.4);if(ha<=0)return;const hx=800,hy=210,cs=104;
+ txt(L.resT,hx-30,174,{f:level==='uni'?MONO:DISP,sz:level==='uni'?19:24,w:level==='uni'?600:400,a:ha});
+ TYP.forEach((t,j)=>txt(t,hx+40+j*cs+cs/2,hy+18,{sz:15,w:700,al:'center',c:TC[j],a:ha}));
+ for(let i=0;i<3;i++){txt(AGE[i],hx+26,hy+40+i*cs+cs/2+6,{sz:17,w:700,al:'right',a:ha});
+  for(let j=0;j<3;j++){const r=RES[i][j],pp=clamp((lt-5.3-(i*3+j)*.12)/.4),t=clamp(Math.abs(r)/4.5);
+   ctx.save();ctx.globalAlpha=pp;ctx.fillStyle=r>0?MORE:LESS;ctx.globalAlpha=pp*(.12+.8*t);rr(hx+42+j*cs,hy+40+i*cs,cs-6,cs-6,12);ctx.fill();ctx.restore();
+   txt(level==='uni'?(r>0?'+':'')+f2(r):(r>0?'많음':'적음'),hx+42+j*cs+(cs-6)/2,hy+40+i*cs+(cs-6)/2+7,{f:level==='uni'?MONO:BODY,sz:level==='uni'?19:17,w:700,al:'center',c:t>.5?WHITE:INK,a:pp})}}
+ txt(L.resS,hx-30,hy+40+3*cs+34,{sz:16,c:MUT,a:clamp((lt-6.6)/.5)})}};
+SC[5]={front(lt,L){const ca=clamp(lt/.4);card(70,120,1140,540,ca);
+ txt(L.h0,110,176,{sz:level==='uni'?26:21,w:700,f:level==='uni'?MONO:BODY,a:ca,p:clamp((lt-.3)/1)});
+ L.tl.forEach((s,i)=>txt(s,110,250+i*52,{sz:20,f:level==='uni'?MONO:BODY,w:i===3?700:500,c:i===3?MORE:INK,p:clamp((lt-1.3-i*.8)/.7)}));
+ const G0=560,G1=1160,base=560,XM=60,H=250/dens(2),tr=v=>G0+v/XM*(G1-G0);
+ const ga=clamp((lt-1.2)/.5),gp=clamp((lt-1.2)/1.4);if(ga<=0)return;
+ ctx.save();ctx.globalAlpha=ga;ctx.beginPath();ctx.moveTo(tr(crit),base);for(let x=crit;x<=XM;x+=.1)ctx.lineTo(tr(x),base-dens(x)*H);ctx.lineTo(tr(XM),base);ctx.closePath();ctx.fillStyle='rgba(226,87,76,.38)';ctx.fill();
+ ctx.beginPath();for(let x=0;x<=XM*gp;x+=.1){const X0=tr(x),Y0=base-dens(x)*H;x===0?ctx.moveTo(X0,Y0):ctx.lineTo(X0,Y0)}ctx.lineWidth=4;ctx.strokeStyle=INK;ctx.lineJoin='round';ctx.stroke();
+ ctx.beginPath();ctx.moveTo(G0,base);ctx.lineTo(G1,base);ctx.lineWidth=2.5;ctx.stroke();ctx.restore();
+ [0,10,20,30,40,50,60].forEach(v=>txt(String(v),tr(v),base+28,{sz:15,f:MONO,al:'center',c:MUT,a:ga}));
+ const za=clamp((lt-2.6)/.5);line(tr(crit),base,tr(crit),base-150,{c:MORE,w:2.5,dash:[6,6],a:za});
+ txt(L.tz,tr(crit)+12,base-160,{sz:17,w:700,c:MORE,a:za});txt(level==='uni'?`df = ${df}`:`자유도 ${df}`,tr(4),base-262,{sz:16,f:MONO,c:MUT,a:ga});
+ const mp=clamp((lt-4)/1.4),cv_=lerp(0,chi,reduce?1:ease(mp));if(mp>0){const xx=tr(Math.min(cv_,XM));ctx.save();ctx.globalAlpha=mp;ctx.fillStyle=INK;ctx.beginPath();ctx.moveTo(xx,base-6);ctx.lineTo(xx-13,base-34);ctx.lineTo(xx+13,base-34);ctx.closePath();ctx.fill();ctx.restore();
+  txt(`χ² = ${f1(cv_)}`,xx,base-46,{f:MONO,sz:19,w:600,al:'center',a:mp})}
+ txt(L.verdict,110,620,{f:DISP,sz:level==='mid'?23:25,w:400,c:MORE,p:clamp((lt-5.8)/1)})}};
+SC[6]={front(lt,L){const ta=clamp(lt/.4);card(60,120,740,540,ta);
+ txt(L.tbT,96,172,{f:level==='uni'?MONO:DISP,sz:28,w:level==='uni'?600:400,a:ta});line(96,192,764,192,{w:2.5,p:clamp((lt-.3)/.6)});
+ const cX=[96,420,560,690];
+ L.tbH.forEach((h,k)=>{if(k)txt(h,cX[k],228,{sz:17,w:700,al:'center',a:ta})});line(96,244,764,244,{w:1.2,c:'#9fb0c2',a:ta});
+ const vals=[[f2(chi),String(df),pTxt.replace('= ','')],[String(N),'','']];
+ L.tbR.forEach((s,i)=>{const ry=286+i*48,pp=clamp((lt-.8-i*.5)/.45);
+  if(i===0){const h=clamp((lt-3.8)/.5);if(h>0){ctx.save();ctx.globalAlpha=.6;ctx.fillStyle=GOLD;ctx.fillRect(84,ry-30,(cX[3]+60-84)*h,42);ctx.restore()}}
+  txt(s,cX[0],ry,{sz:18,w:i===0?700:500,a:pp});vals[i].forEach((v,k)=>txt(v,cX[k+1],ry,{sz:19,f:MONO,w:600,al:'center',a:pp,c:i===0&&k===0?MORE:INK}))});
+ line(96,356,764,356,{w:2.5,p:clamp((lt-1.8)/.5)});
+ const na=clamp((lt-2.2)/.4);txt(level==='uni'?'Nominal':'관계 세기',96,412,{f:level==='uni'?MONO:DISP,sz:22,w:level==='uni'?600:400,a:na});line(96,428,764,428,{w:1.2,c:'#9fb0c2',a:na});
+ const vh=clamp((lt-4.3)/.5);if(vh>0){ctx.save();ctx.globalAlpha=.6;ctx.fillStyle=GOLD;ctx.fillRect(84,440,(cX[1]+60-84)*vh,42);ctx.restore()}
+ txt(L.vR,cX[0],470,{sz:18,w:700,a:clamp((lt-2.6)/.4)});txt(f3(V),cX[1],470,{sz:19,f:MONO,w:600,al:'center',c:MORE,a:clamp((lt-2.6)/.4)});
+ line(96,500,764,500,{w:2.5,p:clamp((lt-3)/.5)});
+ para(L.note,96,548,660,28,{sz:level==='mid'?19:17,w:level==='mid'?700:500,c:level==='mid'?INK:MUT,p:clamp((lt-3.4)/1)});
+ const wa=clamp((lt-5)/.4);card(830,120,390,540,wa,{fill:'#fff4d6'});txt(L.warnT,860,172,{f:DISP,sz:28,w:400,a:wa});
+ L.warn.forEach((s,i)=>{const pp=clamp((lt-5.4-i*.7)/.5),y=238+i*136;if(pp<=0)return;
+  box_(860,y-26,pp);txt(s,904,y,{f:DISP,sz:24,w:400,a:pp});para(L.warnS[i],862,y+38,330,26,{sz:17,a:pp})})}};
+
+/* ---------- 프레임 ---------- */
+function frame(){
+ const t=T,k=sceneIdx(t),lt=t-S[k],L=TX[level];
+ ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);
+ bgDeco();
+ if(k>=4){const a=.9-.75*ease(clamp(lt/.8));board(a,L);towers(1,a)}
+ if(SC[k].draw)SC[k].draw(lt,L);
+ if(k<=3)legend(1,L);
+ if(SC[k].front)SC[k].front(lt,L);
+ header(k,lt,L);
+}
+
+/* ---------- 대본 ---------- */
+const t1=rank[0],t2=rank[1];
+const SCRIPT={
+ mid:[
+  {s:'부동산 회사가 300명에게 "어떤 집에 살고 싶나요?"라고 물었어요. 사람들은 나이에 따라 청년, 중년, 장년 세 줄로 서 있고, 옷 색깔은 좋아하는 집이에요. 초록은 아파트, 보라는 오피스텔, 주황은 단독주택이에요. 이렇게 나이와 좋아하는 집처럼 둘 다 "종류"로 나뉘는 두 가지가 서로 관계가 있는지 알아보는 방법이 교차분석이에요. 두 가지를 가로세로로 엇갈려 보기 때문에 이원 교차분석이라고 불러요.',tip:'학생들에게 "20대는 어떤 집을 좋아할까?"를 먼저 예상하게 하고 시작하세요. 상관분석은 숫자끼리, 교차분석은 종류끼리 관계를 본다는 차이를 짚어 주세요.'},
+  {s:'이제 같은 칸에 들어가는 사람끼리 모아 건물처럼 쌓아요. 한 층이 10명이에요. 가로는 집 종류, 세로는 나이라서 칸이 모두 아홉 개예요. 오른쪽처럼 숫자로 정리한 표를 교차표라고 해요. 청년 줄에서는 오피스텔 건물이 가장 높고, 장년 줄에서는 단독주택 건물이 높죠? 나이마다 건물 높이의 모양이 달라 보여요.',tip:'합계 줄과 합계 칸을 꼭 함께 보여 주세요. 다음 장면에서 기대빈도를 계산할 때 그대로 쓰입니다.'},
+  {s:()=>`만약 나이와 집 취향이 아무 관계가 없다면, 어느 나이든 아파트를 고르는 비율이 똑같아야 해요. 그때 나와야 할 사람 수를 기대빈도라고 하고, 점선 건물로 표시했어요. 계산은 (그 줄의 합계 × 그 열의 합계) ÷ 전체 인원이에요. 청년·아파트라면 100 × ${colT[0]} ÷ ${N} = ${f1(E[0][0])}명이에요. 실제 건물이 점선보다 높아서 빨갛게 솟은 칸은 예상보다 많은 칸, 점선보다 낮은 칸은 예상보다 적은 칸이에요.`,tip:'기대빈도는 "관계가 없다고 가정한 동네"의 건물이라고 비유하면 이해가 빠릅니다.'},
+  {s:()=>`이제 칸마다 실제와 예상의 차이를 점수로 바꿔요. 차이를 제곱해서 크기만 남기고, 예상 인원으로 나눠서 공평하게 비교해요. 아홉 칸의 점수를 모두 더한 값이 카이제곱(χ²)이고, 우리 조사에서는 ${f1(chi)}이에요. 점수가 가장 큰 칸은 ${cellName(t1.i,t1.j)}과 ${cellName(t2.i,t2.j)}이에요.`,tip:'예상 인원으로 나누는 이유는 "예상 100명 중 10명 차이"와 "예상 10명 중 10명 차이"의 무게가 다르다는 예로 설명하세요.'},
+  {s:()=>`χ²는 조사한 사람 수가 많을수록 커지기 때문에, 관계의 세기를 보려면 0부터 1 사이 점수로 바꿔요. 이것이 크라메르 V예요. 0이면 모든 나이 줄이 똑같은 모양이고, 1에 가까울수록 나이만 알면 좋아하는 집을 맞힐 수 있을 만큼 관계가 강해요. 우리는 ${f2(V)}로 중간 정도의 관계예요. 오른쪽 색칸은 어느 칸이 예상보다 많았는지(빨강), 적었는지(파랑)를 보여 줘요.`,tip:'크라메르 V의 기준(0.1·0.3·0.5)은 흔히 쓰는 관례이고, 표 크기에 따라 기준이 달라질 수 있다고 덧붙여 주세요.'},
+  {s:()=>`그런데 이 차이가 혹시 우연은 아닐까요? 관계가 없는 세상에서 χ²가 어떻게 나오는지 그린 그래프가 카이제곱 분포예요. 자유도는 (줄 수 − 1) × (칸 수 − 1) = ${df}예요. 대부분 왼쪽에 몰려 있고, ${f2(crit)}보다 크면 우연이라고 보기 어려운 구역이에요. 우리 값 ${f1(chi)}은 훨씬 오른쪽에 있어요. 우연일 확률 p가 0.001보다 작으니 나이와 집 취향은 관계가 있다고 말할 수 있어요.`,tip:'p값은 "관계가 없다고 가정했을 때 이만큼 큰 χ²가 나올 확률"이라는 정확한 뜻도 한 번 짚어 주세요.'},
+  {s:()=>`JAMOVI에서 교차분석을 하면 이런 결과표가 나와요. χ²는 ${f2(chi)}, 자유도는 ${df}, 우연일 확률은 0.001보다 작고, 크라메르 V는 ${f2(V)}예요. 꼭 기억할 점도 세 가지 있어요. 첫째, 예상 인원이 5명보다 적은 칸이 많으면 결과를 믿기 어려워요. 둘째, 관계가 있다고 나이가 원인이라는 뜻은 아니에요. 소득이나 가족 수가 함께 작용할 수 있거든요. 셋째, χ²는 관계가 있다는 것만 알려 주니, 어느 칸이 다른지는 색칸(잔차)으로 따로 봐야 해요.`,tip:'예시 데이터는 설명용 가상 수치라는 점을 한 번 말해 주세요.'}
+ ],
+ uni:[
+  {s:()=>`교차분석(cross-tabulation)은 두 범주형 변수의 관련성을 분할표로 분석합니다. 이원 교차분석은 두 변수를 행과 열로 교차시키며, 독립성 검정에는 피어슨 카이제곱 검정을 사용합니다. 예시는 응답자 N = ${N}의 연령대(3수준)와 선호 주택유형(3수준)으로 만든 3 × 3 분할표입니다.`,tip:'상관분석은 연속형(등간·비율) 변수, 교차분석은 명목·서열형 변수라는 측정 수준의 차이를 먼저 정리해 주세요.'},
+  {s:()=>`각 응답을 (연령대, 주택유형) 셀에 배정해 관측빈도 Oᵢⱼ를 셉니다. 행 주변합 nᵢ.는 모두 100, 열 주변합 n.ⱼ는 ${colT.join(', ')}입니다. 블록 높이가 관측빈도이며, 행마다 조건부 분포의 모양이 다르다는 것이 시각적으로 드러납니다. 행 백분율로 바꾸면 연령대별 선호 비율을 직접 비교할 수 있습니다.`,tip:'JAMOVI에서 Cells → Percentages의 Row 옵션을 켜면 행 백분율이 출력됩니다.'},
+  {s:()=>`귀무가설 H₀는 "두 변수는 독립이다"입니다. H₀ 하에서 기대빈도는 Eᵢⱼ = nᵢ. × n.ⱼ / N 입니다. 예를 들어 E₁₁ = 100 × ${colT[0]} / ${N} = ${f2(E[0][0])}입니다. 점선 블록이 기대빈도이고, 실제 블록과의 차이 Oᵢⱼ − Eᵢⱼ가 독립에서 벗어난 정도입니다. 이 자료의 최소 기대빈도는 ${f2(minE)}로 5 이상 조건을 만족합니다.`,tip:'독립이면 P(A∩B) = P(A)·P(B)이므로 Eᵢⱼ = N·(nᵢ./N)·(n.ⱼ/N)이 된다는 점을 확률의 정의와 연결해 주세요.'},
+  {s:()=>`셀별 기여도 (Oᵢⱼ − Eᵢⱼ)² / Eᵢⱼ를 모두 더하면 피어슨 χ² = ${f2(chi)}입니다. 기여가 가장 큰 셀은 ${cellName(t1.i,t1.j)}(${f2(t1.v)})과 ${cellName(t2.i,t2.j)}(${f2(t2.v)})입니다. 제곱은 부호를 없애고, Eᵢⱼ로 나누는 것은 기대 규모에 맞춰 차이를 표준화하는 과정입니다.`,tip:'χ² = Σ(표준화잔차)²라는 관계를 보여 주면 다음 장면의 잔차 해석으로 자연스럽게 이어집니다.'},
+  {s:()=>`χ²는 N에 비례해 커지므로 효과크기로 Cramér's V = √(χ² / (N·min(r−1, c−1))) = ${f3(V)}를 보고합니다. 흔히 0.1 약함, 0.3 중간, 0.5 강함으로 해석하지만 자유도에 따라 기준이 달라집니다. 오른쪽은 표준화잔차 (O − E)/√E로, 절댓값이 약 2를 넘는 셀이 연관을 만드는 주된 셀입니다.`,tip:'Cohen(1988)의 w 기준(0.1, 0.3, 0.5)을 √df*로 나누면 V 기준이 됩니다. df* = min(r−1, c−1) = 2이면 대략 0.07, 0.21, 0.35입니다.'},
+  {s:()=>`검정통계량 χ²는 H₀ 하에서 자유도 df = (r − 1)(c − 1) = ${df}인 카이제곱 분포를 근사적으로 따릅니다. α = .05의 임계값은 ${f3(crit)}이고, χ² = ${f2(chi)}는 기각역에 속하므로 p ${pTxt}로 H₀를 기각합니다. 카이제곱 독립성 검정은 항상 오른쪽 꼬리 검정입니다.`,tip:'근사가 성립하려면 기대빈도 5 미만 셀이 20% 이하이고 1 미만 셀이 없어야 한다는 Cochran의 조건을 함께 설명하세요.'},
+  {s:()=>`JAMOVI Contingency Tables의 χ² Tests 형식입니다. χ² = ${f2(chi)}, df = ${df}, p ${pTxt}, N = ${N}, Cramér's V = ${f3(V)}입니다. 보고 예: "연령대와 선호 주택유형 사이에는 유의한 연관이 있었다, χ²(${df}, N = ${N}) = ${f2(chi)}, p ${pTxt}, V = ${f2(V)}". 기대빈도 조건을 만족하지 못하면 범주 통합이나 정확검정(2 × 2 표는 Fisher)을 검토하고, 연관의 방향은 잔차로 해석합니다.`,tip:'JAMOVI에서 Frequencies → Independent Samples (χ² test of association)를 고르고, Statistics의 Phi and Cramer\'s V를 켜야 V가 출력됩니다. 숫자는 가상 데이터로 계산했습니다.'}
+ ]};
+const sv=o=>typeof o.s==='function'?o.s():o.s;
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+const scBtns=TX.mid.scenes.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">장면 ${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);$('scenes').appendChild(b);return b});
+function setPlay(p){playing=p;$('play').textContent=p?'❚❚ 일시정지':'▶ 재생'}
+function goScene(i){T=S[i]+.001;setPlay(true)}
+function togglePlay(){if(!playing){if(T>=END-.01)T=0;else{const k=sceneIdx(T);if(S[k+1]-T<.03)T=S[k+1]+.001}}setPlay(!playing)}
+$('play').onclick=togglePlay;cv.onclick=togglePlay;
+$('rew').onclick=()=>{T=0;setPlay(true)};
+const jump=d=>{const k=sceneIdx(T);goScene(clamp(k+d,0,S.length-2))};
+$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);
+$('spd').onchange=e=>speed=+e.target.value;
+$('auto').onclick=()=>{autoStop=!autoStop;$('auto').setAttribute('aria-pressed',autoStop)};
+$('scrub').oninput=e=>{T=+e.target.value;setPlay(false)};
+$('fs').onclick=()=>{try{if(document.fullscreenElement)document.exitFullscreen();else stage.requestFullscreen().catch(()=>{})}catch(e){}};
+let hintT;function rec(){document.body.classList.toggle('rec');setTimeout(resize,50);const h=$('hint');if(document.body.classList.contains('rec')){h.classList.add('show');clearTimeout(hintT);hintT=setTimeout(()=>h.classList.remove('show'),2200)}else h.classList.remove('show')}
+$('rec').onclick=rec;
+function setLevel(lv){level=lv;$('lvMid').setAttribute('aria-pressed',lv==='mid');$('lvUni').setAttribute('aria-pressed',lv==='uni');scBtns.forEach((b,i)=>b.querySelector('.l').textContent=TX[lv].scenes[i]);uiK=-1;buildAll()}
+$('lvMid').onclick=()=>setLevel('mid');$('lvUni').onclick=()=>setLevel('uni');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+ if(e.code==='Space'){e.preventDefault();togglePlay()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H'||e.key==='ㅗ')rec()});
+function buildAll(){const ol=$('sAll');ol.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TX[level].scenes[i]}</b><br>${sv(o)}<br><small>강의 팁 · ${o.tip}</small>`;li.onclick=()=>goScene(i);ol.appendChild(li)})}
+let uiK=-1;
+function updUI(){const k=sceneIdx(T);$('scrub').value=T;const fm=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;$('time').textContent=`${fm(T)} / ${fm(END)}`;
+ if(k===uiK)return;uiK=k;scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...$('sAll').children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];$('sTag').textContent=`장면 ${k+1} / 7 · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;$('sTitle').textContent=TX[level].scenes[k];$('sNow').textContent=sv(o);$('sTip').textContent='강의 팁 · '+o.tip}
+$('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TX[level].scenes[i]}\n${sv(o)}\n(강의 팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ const done=()=>{btn.textContent='복사했습니다';setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+ try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(all).then(done,()=>{fb();done()});else{fb();done()}}catch(e){fb();done()}};
+buildAll();
+
+/* ---------- 루프 ---------- */
+let last=performance.now();
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+ if(playing){let nt=T+dt*speed;const k=sceneIdx(T);
+  if(nt>=END){nt=END-.001;setPlay(false)}
+  else if(autoStop&&nt>=S[k+1]){nt=S[k+1]-.002;setPlay(false)}
+  T=nt}
+ frame();updUI();requestAnimationFrame(loop)}
+if(document.fonts&&document.fonts.load){Promise.all([document.fonts.load('400 24px "Jua"'),document.fonts.load('500 20px "Gothic A1"'),document.fonts.load('600 20px "IBM Plex Mono"')]).catch(()=>{})}
+requestAnimationFrame(loop);
+window.__STATS={chi,df,pval,crit,V,minE,moreN,lessN};
+})();
+</script>

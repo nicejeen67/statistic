@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>레이더 차트가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 지표 표 → 0~1 막대 → 막대가 돌아 바퀴살 → 다각형 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:540px}
+@media (max-width:560px){canvas{height:520px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 240px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.formula{font:14px var(--mono);background:var(--soft);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:nowrap;margin:8px 0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:460px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+td.a{color:var(--c1);font-weight:500}td.b{color:var(--c3);font-weight:500}
+.mini svg{width:100%;height:auto;background:var(--soft);border-radius:6px;margin-top:8px}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 07 · 비교</div>
+    <h1>레이더 차트가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="두 단지의 입지 지표를 정규화해 레이더 차트로 그리는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="축 순서"><span>축 순서</span><button id="oA" type="button" aria-pressed="true">원래 순서</button><button id="oB" type="button" aria-pressed="false">바꾼 순서</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="21" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>원래 값을 0~1 점수로 바꾸는 방법</h2>
+      <p id="normText"></p>
+      <div class="formula">좋을수록 큰 지표: (x − 최소) / (최대 − 최소)<br>작을수록 좋은 지표: (최대 − x) / (최대 − 최소)</div>
+      <div class="tbl"><table><thead><tr><th>지표</th><th>원래 값 A</th><th>원래 값 B</th><th>기준 범위</th><th>점수 A</th><th>점수 B</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <div class="panel mini">
+      <h2>같은 자료를 묶음 막대로 그리면</h2>
+      <p class="note" id="miniNote"></p>
+      <div id="miniSvg"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">레이더 차트를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 두 단지의 지표 값과 기준 범위는 설명용 예시이며 실제 단지 자료가 아닙니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+// 지표: [이름, 원지표 설명, 단위, A값, B값, 최소, 최대, 작을수록 좋음]
+const IND=[
+ ['교통','지하철역까지 거리','m',250,900,100,1500,true],
+ ['학군','반경 1km 학교 수','개',7,5,0,10,false],
+ ['상권','반경 500m 상가 수','개',420,160,0,500,false],
+ ['녹지','1인당 공원 면적','㎡',4,14,0,15,false],
+ ['의료','반경 1km 병원 수','개',35,20,0,50,false],
+ ['신축도','준공연도','년',1998,2019,1985,2024,false]];
+const score=(x,mn,mx,rev)=>clamp(rev?(mx-x)/(mx-mn):(x-mn)/(mx-mn));
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const SA=IND.map(r=>score(r[3],r[5],r[6],r[7])),SB=IND.map(r=>score(r[4],r[5],r[6],r[7]));
+const ORDER_A=[0,1,2,3,4,5],ORDER_B=[0,2,1,4,5,3]; // 바꾼 순서: 교통·상권·학군·의료·신축도·녹지
+const posA=ORDER_A.map((_,i)=>ORDER_A.indexOf(i)),posB=ORDER_A.map((_,i)=>ORDER_B.indexOf(i));
+const TOTAL=21,T2=1.8,T3=5.0,T4=7.6,T5=10.4,T6=12.4,T7=15.2,T8=19.2;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f2=v=>v.toFixed(2);
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',ordUser=0,ordCur=0;
+try{const v=localStorage.getItem('radarLv');if(v==='e'||v==='u')lv=v}catch(e){}
+
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560;
+  const top=78,rowH=Math.min(62,(H-top-40)/6),labelX=narrow?16:Math.max(24,W/2-300),barX=labelX+(narrow?78:120),barLen=Math.min(W-barX-(narrow?70:200),360);
+  const R=Math.min(W*.36,(H-120)/2,200),cx=W/2,cy=H/2+18;
+  L={W,H,narrow,top,rowH,labelX,barX,barLen,R,cx,cy}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+// 축 i의 각도: 순서 진행도 m(0=원래, 1=바꾼 순서)
+const ang=(i,m)=>-Math.PI/2+2*Math.PI*lerp(posA[i],posB[i],m)/6;
+// 축 i의 선분: 막대 상태(s=0) → 바퀴살 상태(s=1)
+function axisSeg(i,s,m){const{barX,barLen,top,rowH,cx,cy,R}=L,y=top+(i+.5)*rowH,a=ang(i,m);
+  return{x0:lerp(barX,cx,s),y0:lerp(y,cy,s),x1:lerp(barX+barLen,cx+Math.cos(a)*R,s),y1:lerp(y,cy+Math.sin(a)*R,s)}}
+const ptOn=(sg,v)=>({x:lerp(sg.x0,sg.x1,v),y:lerp(sg.y0,sg.y1,v)});
+function areaOf(S,m){let a=0;const P=S.map((v,i)=>{const g=ang(i,m);return[Math.cos(g)*v,Math.sin(g)*v]});
+  const idx=S.map((_,i)=>i).sort((p,q)=>lerp(posA[p],posB[p],m)-lerp(posA[q],posB[q],m));
+  for(let k=0;k<idx.length;k++){const[x1,y1]=P[idx[k]],[x2,y2]=P[idx[(k+1)%idx.length]];a+=x1*y2-x2*y1}
+  return Math.abs(a)/2/(6*Math.sin(Math.PI/3)/2)} // 최대 육각형 대비 비율
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper')};
+  const{W,H,top,rowH,labelX,barX,barLen,cx,cy,R,narrow}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  let m;if(t>=T7&&t<T8){m=ease(clamp((t-T7-.3)/1.4))*(1-ease(clamp((t-T7-2.8)/1.2)))}else m=ordCur;
+  const s=ease(clamp((t-T3)/1.6)); // 막대 → 바퀴살
+  const p2=ease(clamp((t-T2)/1));  // 원래 값 → 점수 막대
+  // 범례
+  [['A단지 (도심)',C.c1],['B단지 (신도시)',C.c3]].forEach(([n,c],k)=>{const x=(narrow?16:24)+k*(narrow?120:150);ctx.globalAlpha=a0;ctx.fillStyle=c;ctx.fillRect(x,18,12,12);ctx.globalAlpha=1;txt(n,x+17,29,C.ink,`500 13px ${SANS}`,'left',a0)});
+  // 머리글(표 단계)
+  const ha=a0*(1-s);
+  if(ha>0){txt('지표',labelX,top-12,C.muted,`11px ${MONO}`,'left',ha);
+    txt(p2<.5?'원래 값 (단위가 제각각)':'0~1 점수 (1에 가까울수록 좋음)',barX,top-12,C.muted,`11px ${SANS}`,'left',ha);
+    if(p2>0){[0,.5,1].forEach(v=>{const x=barX+v*barLen;ln(x,top,x,top+rowH*6,C.line,1,null,ha*p2);txt(v,x,top+rowH*6+14,C.muted,`10px ${MONO}`,'center',ha*p2)})}}
+  // 동심 다각형(눈금)
+  const ga=clamp((t-T3-1.2)/.8);
+  if(ga>0){[.25,.5,.75,1].forEach(v=>{ctx.beginPath();IND.forEach((_,i)=>{const p=ptOn(axisSeg(i,1,m),v);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)});
+      // 순서대로 잇기
+      const idx=IND.map((_,i)=>i).sort((p,q)=>lerp(posA[p],posB[p],m)-lerp(posA[q],posB[q],m));ctx.beginPath();idx.forEach((i,k)=>{const p=ptOn(axisSeg(i,1,m),v);k?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)});ctx.closePath();
+      ctx.globalAlpha=ga;ctx.strokeStyle=C.line;ctx.stroke();ctx.globalAlpha=1;txt(v,cx+4,cy-v*R+12,C.muted,`9px ${MONO}`,'left',ga*(v<1?1:0))})}
+  // 축(막대 바탕 → 바퀴살)
+  IND.forEach((r,i)=>{const sg=axisSeg(i,s,m),y=top+(i+.5)*rowH;
+    ln(sg.x0,sg.y0,sg.x1,sg.y1,C.muted,1,null,a0*(p2>0?1:0));
+    // 지표 이름: 왼쪽 → 바퀴살 끝 바깥
+    const a=ang(i,m),lx=lerp(labelX,cx+Math.cos(a)*(R+(narrow?26:34)),s),ly=lerp(y-6,cy+Math.sin(a)*(R+22)+4,s);
+    txt(r[0],lx,ly,C.ink,`700 ${narrow?13:14}px ${SANS}`,s>.5?'center':'left',a0);
+    txt(`${r[1]}`,labelX,y+12,C.muted,`11px ${SANS}`,'left',a0*(1-s)*(1-p2*.0));
+    // 원래 값 표시(1단계)
+    const ra=a0*(1-p2);
+    if(ra>0){txt(`A ${r[3].toLocaleString()}${r[2]}`,barX,y-2,C.c1,`500 13px ${MONO}`,'left',ra);txt(`B ${r[4].toLocaleString()}${r[2]}`,barX+(narrow?110:150),y-2,C.c3,`500 13px ${MONO}`,'left',ra);
+      txt(r[7]?'작을수록 좋음':'클수록 좋음',barX+(narrow?110:150)*2,y-2,r[7]?C.c4:C.muted,`11px ${SANS}`,'left',ra*(narrow?0:1))}
+    // 점수 막대(2단계) → 점(3단계)
+    if(p2>0){[[SA[i],C.c1,-6],[SB[i],C.c3,6]].forEach(([v,c,off])=>{const sgS=axisSeg(i,s,m),q=ptOn(sgS,v*p2);
+      const ox=(1-s)*0,oy=(1-s)*off;
+      ctx.globalAlpha=(1-s)*.9;ctx.strokeStyle=c;ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(sgS.x0,sgS.y0+oy);ctx.lineTo(q.x,q.y+oy);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      const showDot=c===C.c1?1:clamp((t-T5)/.5)*(s>=1?1:0)+(s<1?1:0);
+      ctx.globalAlpha=Math.min(1,showDot);ctx.fillStyle=c;ctx.beginPath();ctx.arc(q.x,q.y+oy,s>0?5:4,0,7);ctx.fill();ctx.globalAlpha=1;
+      if(s<1)txt(f2(v),q.x+8,q.y+oy+4,c,`500 11px ${MONO}`,'left',p2*(1-s))})}
+  });
+  // 다각형 그리기
+  function poly(S,color,start,fillA){const pr=clamp((t-start)/1.4);if(pr<=0)return;
+    const idx=IND.map((_,i)=>i).sort((p,q)=>lerp(posA[p],posB[p],m)-lerp(posA[q],posB[q],m));const pts=idx.map(i=>ptOn(axisSeg(i,1,m),S[i]));
+    const segs=pr*6;ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+    for(let k=1;k<=6;k++){const f=clamp(segs-(k-1));if(f<=0)break;const a=pts[k-1],b=pts[k%6];ctx.lineTo(lerp(a.x,b.x,f),lerp(a.y,b.y,f))}ctx.stroke();ctx.lineWidth=1;
+    const fa=clamp((t-start-1.2)/.6);if(fa>0){ctx.beginPath();pts.forEach((p,k)=>k?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.globalAlpha=fillA*fa;ctx.fillStyle=color;ctx.fill();ctx.globalAlpha=1}}
+  if(t>=T4)poly(SA,C.c1,T4,.18);
+  if(t>=T5)poly(SB,C.c3,T5,.18);
+  // 6단계: 강약 비교 표시
+  const p6=clamp((t-T6)/.8)*(t<T7?1:1-clamp((t-T7)/.5));
+  if(p6>0)IND.forEach((r,i)=>{const a=ang(i,m),win=SA[i]>SB[i],x=cx+Math.cos(a)*(R+(narrow?26:34)),y=cy+Math.sin(a)*(R+22)+20;
+    txt(win?'A 우세':'B 우세',x,y,win?C.c1:C.c3,`700 11px ${SANS}`,'center',p6)});
+  // 7단계: 면적 비교
+  const p7=clamp((t-T7)/.6)*(1-clamp((t-T8+.4)/.4));
+  if(p7>0||m>.01){const aA=areaOf(SA,m),aB=areaOf(SB,m),bx=narrow?16:W-250,by=narrow?H-58:H-96;
+    const a=Math.max(p7,m>.01&&t>=T8?1:0);if(a>0){ctx.globalAlpha=.95*a;ctx.fillStyle=C.paper;ctx.fillRect(bx,by,narrow?W-32:234,narrow?48:80);ctx.strokeStyle=C.c4;ctx.strokeRect(bx,by,narrow?W-32:234,narrow?48:80);ctx.globalAlpha=1;
+      txt('다각형 넓이 (최대 육각형 = 100%)',bx+10,by+18,C.muted,`11px ${SANS}`,'left',a);
+      [[0,'원래 순서'],[1,'바꾼 순서']].forEach(([mm,lab],k)=>{const yy=by+(narrow?32:42)+k*(narrow?12:20),on=Math.abs(m-mm)<.5,F=`${on?700:400} ${narrow?11:13}px ${MONO}`;
+        txt(lab,bx+10,yy,on?C.c4:C.muted,`${on?700:400} ${narrow?10.5:12}px ${SANS}`,'left',a);txt(`A ${(areaOf(SA,mm)*100).toFixed(0)}%`,bx+(narrow?90:96),yy,C.c1,F,'left',a*(on?1:.6));txt(`B ${(areaOf(SB,mm)*100).toFixed(0)}%`,bx+(narrow?160:166),yy,C.c3,F,'left',a*(on?1:.6))})}}
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'단위가 제각각인 지표',e:'두 아파트 단지의 입지 정보입니다. 역까지 거리는 m, 상가는 개수, 공원은 ㎡, 준공은 연도라서 단위가 다 달라 그대로는 비교할 수 없습니다.',u:'두 관측 대상(단지)에 대해 측정 단위와 척도가 서로 다른 6개 지표가 있습니다. 다변량 프로필 비교를 위해 공통 척도로의 변환이 필요합니다.'},
+ {t:T2,n:'같은 척도로 맞추기',s:'모두 0~1 점수로',e:'모든 지표를 "0점(가장 나쁨)~1점(가장 좋음)"으로 바꿉니다. 역까지 거리처럼 작을수록 좋은 지표는 거꾸로 계산합니다.',u:'최소-최대 정규화로 각 지표를 [0, 1]로 변환합니다. 비용형 지표(거리)는 역방향 변환해 모든 축의 방향을 "클수록 우수"로 통일합니다.'},
+ {t:T3,n:'축 세우기',s:'막대가 돌아 바퀴살로',e:'가로 막대 6개가 빙글 돌아 가운데에서 바깥으로 뻗은 6개의 바퀴살이 됩니다. 가운데가 0점, 바깥 끝이 1점입니다.',u:'각 지표를 원점에서 방사형으로 뻗는 축에 대응시킵니다. 축 간 각도는 360°/6 = 60°이며, 중심이 0, 외곽이 1인 극좌표 배치입니다.'},
+ {t:T4,n:'점 찍고 잇기',s:'A단지 다각형',e:'A단지 점수를 각 바퀴살 위에 찍고 차례로 이으면 A단지만의 모양(다각형)이 생깁니다.',u:'각 축의 값 위치를 순서대로 연결해 닫힌 다각형을 만듭니다. 이 다각형이 A단지의 다변량 프로필입니다.'},
+ {t:T5,n:'B단지 겹치기',s:'두 모양을 포개기',e:'같은 방법으로 B단지 모양을 그려 겹칩니다. 두 모양이 튀어나온 방향이 서로 다릅니다.',u:'두 대상의 프로필을 같은 좌표계에 중첩합니다. 반투명 채우기로 겹친 영역과 차이 영역을 함께 읽을 수 있게 합니다.'},
+ {t:T6,n:'비교 읽기',s:'어디가 강하고 약한가',e:'A단지는 교통·학군·상권·의료 쪽으로, B단지는 녹지·신축도 쪽으로 튀어나왔습니다. "도심의 편리함 vs 신도시의 쾌적함"이 모양으로 보입니다.',u:'A는 접근성 지표(교통·상권·의료), B는 환경·물리적 품질 지표(녹지·신축도)에서 우세합니다. 프로필의 형태 차이가 입지 유형의 차이를 요약합니다.'},
+ {t:T7,n:'축 순서를 바꾸면?',s:'모양과 넓이가 달라짐',e:'같은 점수인데 축의 순서만 바꿔도 모양이 완전히 달라지고, 다각형 넓이도 바뀝니다. 넓이로 "누가 더 좋다"고 말하면 안 되는 이유입니다.',u:'축 배열은 임의적이지만 다각형 면적은 인접 축 값의 곱(½·sin60°·Σvᵢvᵢ₊₁)에 의존하므로 배열에 따라 달라집니다. 면적을 종합 점수로 해석하는 것은 잘못입니다.'},
+ {t:T8,n:'완성',s:'두 단지의 입지 프로필',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 레이더 차트는 "어느 쪽이 더 좋은가"보다 "각자 어디가 강하고 어디가 약한가"를 보여주는 데 좋습니다. 종합 점수가 필요하면 넓이가 아니라 점수를 직접 더하거나 평균 내세요.':'완성된 레이더 차트입니다. 형태 비교(프로필의 강약 패턴)에 적합하며, 정확한 값 비교와 종합 평가는 막대그래프나 가중합 지수로 수행하는 것이 바람직합니다. 정규화 기준 범위를 반드시 함께 밝혀야 합니다.'}
+const LEDE={e:'레이더 차트(방사형 차트)는 여러 가지 항목을 한꺼번에 비교하는 그래프입니다. 단위가 제각각인 입지 정보를 같은 점수로 바꾸고, 막대가 돌아 바퀴살이 되고, 점을 이어 모양이 생기는 과정을 보여줍니다.',u:'레이더 차트(radar/spider chart)는 다변량 자료를 방사형 축에 배치해 관측 대상의 프로필을 다각형으로 표현합니다. 정규화, 극좌표 변환, 다각형 구성, 중첩 비교의 과정과 축 배열에 따른 면적 왜곡을 단계별로 보여줍니다.'};
+const NORM={e:'역까지 거리 250m와 상가 420개는 단위가 달라 바로 비교할 수 없습니다. 그래서 "기준 범위 안에서 어디쯤인가"를 0~1로 바꿉니다. 작을수록 좋은 거리는 거꾸로 계산합니다.',u:'최소-최대 정규화(min-max scaling)입니다. 기준 범위(최소·최대)를 무엇으로 잡느냐에 따라 점수가 달라지므로, 비교 대상 전체(예: 서울 아파트 단지 전체)의 분포로 범위를 정하고 명시해야 합니다.'};
+const PC={
+ pro:[
+  {t:'여러 항목의 강약을 한 모양으로 본다',e:'항목이 6개여도 모양 하나만 보면 "어디가 강하고 어디가 약한지"가 바로 보입니다.',u:'다변량 프로필을 하나의 형태(gestalt)로 압축해 강약 패턴을 즉시 인지하게 합니다.',x:'A단지가 <b>교통·상권 쪽으로 뾰족한</b> 모양이면 도심형 입지.'},
+  {t:'두세 대상을 겹쳐 비교하기 좋다',e:'두 단지의 모양을 포개면 서로 다른 장점이 튀어나온 방향으로 보입니다.',u:'동일 좌표계 중첩으로 대상 간 프로필의 상보성(trade-off)을 직관적으로 드러냅니다.',x:'<b>도심 단지 vs 신도시 단지</b> 입지 장단점 설명에 효과적.'},
+  {t:'균형 잡혔는지 알 수 있다',e:'모양이 둥글면 골고루 좋고, 한쪽만 뾰족하면 특정 항목만 좋은 것입니다.',u:'다각형의 대칭성·규칙성으로 지표 간 균형도를 판단할 수 있습니다. 컨설팅 보고서의 입지 진단, 역량 평가 등에 쓰입니다.',x:'상권 입지 분석 보고서의 <b>점포 후보지 진단</b> 그림.'},
+  {t:'좁은 공간에 많은 항목을 담는다',e:'6~10개 항목을 작은 원 하나에 넣을 수 있어 보고서 한 장에 여러 단지를 나란히 놓기 좋습니다.',u:'공간 효율이 높아 소형 다중 그래프(small multiples)로 여러 대상을 배열하기에 적합합니다.',x:'후보 단지 <b>8곳의 작은 레이더</b>를 격자로 배치.'}],
+ con:[
+  {t:'축 순서에 따라 모양과 넓이가 바뀐다',e:'점수는 같은데 항목 순서만 바꿔도 모양이 달라 보이고 넓이도 바뀝니다. 넓이로 "더 좋다"고 판단하면 안 됩니다.',u:'면적이 인접 축 값의 곱에 의존해 축 배열에 따라 변합니다. 면적·모양의 인상이 임의적 배열에 좌우되므로 종합 평가 지표로 쓸 수 없습니다.',x:'7단계처럼 순서만 바꿔도 <b>두 단지의 넓이</b>가 함께 달라집니다.'},
+  {t:'점수 바꾸는 기준에 따라 결과가 달라진다',e:'0점과 1점을 무엇으로 정하느냐에 따라 같은 단지도 높게 또는 낮게 나옵니다.',u:'정규화의 기준 범위(최소·최대) 선택이 결과를 바꿉니다. 이상치가 범위를 정하면 나머지 값이 한쪽에 몰립니다. 기준을 반드시 명시해야 합니다.',x:'역까지 거리 최대를 <b>1,500m가 아니라 5,000m</b>로 잡으면 B단지 교통 점수가 크게 올라갑니다.'},
+  {t:'정확한 값 비교는 어렵다',e:'바퀴살 방향이 다 달라서 "0.6과 0.7 중 무엇이 큰지" 같은 작은 차이는 읽기 어렵습니다.',u:'방향이 서로 다른 축 위의 길이 비교는 공통 기준선 위의 막대 비교보다 정확도가 낮습니다. 정밀 비교는 묶음 막대그래프가 낫습니다.',x:'같은 자료를 <b>묶음 막대</b>로 그린 오른쪽 위 그림과 비교해 보세요.'},
+  {t:'대상이 많으면 엉킨다',e:'단지 3~4곳 이상을 겹치면 선이 뒤엉켜 알아보기 어렵습니다.',u:'중첩 대상이 3개를 넘으면 가림(occlusion)이 심해집니다. 대상이 많으면 소형 다중 그래프나 평행좌표 그래프로 대체합니다.',x:'후보 단지 <b>5곳</b>은 겹치지 말고 작은 레이더 5개로.'},
+  {t:'모든 항목이 똑같이 중요해 보인다',e:'실제로는 교통이 녹지보다 중요할 수 있는데, 그래프에서는 모든 바퀴살이 같은 크기로 보입니다.',u:'모든 축이 동일 시각적 비중을 가져 지표 간 가중치를 반영하지 못합니다. 의사결정에는 가중합 지수(예: AHP 가중치) 등을 별도로 산출합니다.',x:'투자 판단에서는 <b>가중치를 준 종합 점수</b>를 따로 계산.'}],
+ tip:{e:'<b>정리:</b> 레이더 차트는 "각자의 강점과 약점 모양"을 보여주는 데 좋습니다. 점수로 바꾼 기준을 꼭 적고, 넓이나 모양만 보고 "누가 더 좋다"고 결론 내리지 마세요.',
+      u:'<b>권장 사용법:</b> ① 정규화 방법과 기준 범위 명시 ② 축은 의미가 비슷한 지표끼리 인접 배치(예: 접근성 / 환경) ③ 중첩은 2~3개 이내 ④ 면적을 종합 점수로 해석하지 않기 ⑤ 정밀 비교는 막대그래프, 종합 평가는 가중합 지수로 보완.'}};
+function miniSvg(){const W=360,H=200,l=60,rw=W-l-16,rh=26;let s='';
+  [0,.5,1].forEach(v=>{const x=l+v*rw;s+=`<line x1="${x}" x2="${x}" y1="10" y2="${10+rh*6}" style="stroke:var(--line)"/><text x="${x}" y="${10+rh*6+12}" text-anchor="middle" style="font:9px var(--mono);fill:var(--muted)">${v}</text>`});
+  IND.forEach((r,i)=>{const y=10+i*rh;s+=`<text x="${l-8}" y="${y+rh/2+4}" text-anchor="end" style="font:500 11px var(--sans);fill:var(--ink)">${r[0]}</text><rect x="${l}" y="${y+4}" width="${SA[i]*rw}" height="8" style="fill:var(--c1)"/><rect x="${l}" y="${y+13}" width="${SB[i]*rw}" height="8" style="fill:var(--c3)"/>`});
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="두 단지 점수의 묶음 막대그래프">${s}</svg>`}
+
+function renderText(){$('lede').textContent=LEDE[lv];$('normText').textContent=NORM[lv];
+  $('tbody').innerHTML=IND.map((r,i)=>`<tr><td>${r[0]}<br><span class="note">${r[1]}</span></td><td>${r[3].toLocaleString()}${r[2]}</td><td>${r[4].toLocaleString()}${r[2]}</td><td>${r[5].toLocaleString()}~${r[6].toLocaleString()}${r[7]?' (역)':''}</td><td class="a">${f2(SA[i])}</td><td class="b">${f2(SB[i])}</td></tr>`).join('');
+  $('miniNote').textContent=lv==='e'?'막대로 그리면 "학군 0.7 vs 0.5"처럼 정확한 차이는 더 잘 보이지만, 단지 전체의 모양(성격)은 레이더 차트가 더 잘 보여줍니다.':'공통 기준선을 갖는 막대는 값 비교 정확도가 높고, 레이더는 프로필 형태 인지에 유리합니다. 목적에 따라 선택하거나 함께 제시합니다.';
+  $('miniSvg').innerHTML=miniSvg();
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  ordCur=Math.abs(ordCur-ordUser)<.003?ordUser:lerp(ordCur,ordUser,.07);draw();ui();requestAnimationFrame(frame)}
+function setOrd(v,jump){ordUser=v;$('oA').setAttribute('aria-pressed',v===0);$('oB').setAttribute('aria-pressed',v===1);if(jump&&t<T6){t=T8;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;if(i<7){ordCur=0;setOrd(0)}});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;ordCur=0;setOrd(0)};
+$('speed').onchange=e=>speed=+e.target.value;
+$('oA').onclick=()=>setOrd(0,true);$('oB').onclick=()=>setOrd(1,true);
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('radarLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('radarLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

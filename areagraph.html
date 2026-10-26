@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>영역그래프가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 24개월 시간축, 거래 알갱이 → 월별 기둥 → 꼭대기 선 → 채운 영역 → 누적 영역 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:500px}
+@media (max-width:560px){canvas{height:460px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 240px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:360px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.mini{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+@media (max-width:420px){.mini{grid-template-columns:1fr}}
+.mini figure{margin:0;display:grid;gap:4px;font-size:12.5px;color:var(--muted)}
+.mini figcaption b{display:block;color:var(--ink);font-weight:500;font-size:14px}
+.mini svg{width:100%;height:auto;background:var(--soft);border-radius:6px}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 09 · 추이</div>
+    <h1>영역그래프가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="월별 거래 신고가 쌓여 거래량 영역그래프와 누적 영역그래프가 되는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="보기 방식"><span>보기</span><button id="vS" type="button" aria-pressed="false">단일 영역</button><button id="vK" type="button" aria-pressed="true">누적 영역</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="22" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>그래프에 쓰인 숫자</h2>
+      <p class="note" id="tblNote"></p>
+      <div class="tbl"><table><thead><tr><th>연도</th><th>아파트</th><th>비아파트</th><th>합계</th><th>아파트 비중</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>같은 거래량, 세 가지 그래프</h2>
+      <p class="note" id="miniNote"></p>
+      <div class="mini" id="mini"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">영역그래프를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 거래량은 설명용으로 생성한 예시 값(단위: 천 건)이며 실제 통계가 아닙니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const M=24,TOTAL=22,T2=1.8,T3=5.8,T4=8.0,T5=9.8,T6=11.8,T7=14.4,T8=20.2;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1);
+const MON=Array.from({length:M},(_,i)=>`${24+Math.floor(i/12)}.${i%12+1}`);
+// 예시 자료: 월별 거래량(천 건), 알갱이 1개 = 100건
+const R=rng(9024);
+const TOT=Array.from({length:M},(_,i)=>Math.round(Math.max(1.4,3+1.6*Math.sin(i/3.2)+i*.07+(R()-.5)*.5)*10)/10);
+// 비아파트는 거의 일정(약 1.4천 건), 계절 변동은 대부분 아파트에서 발생
+const NON=TOT.map(()=>Math.round((1.35+(R()-.5)*.2)*10)/10);
+const APT=TOT.map((v,i)=>Math.round((v-NON[i])*10)/10);
+const VMAX=Math.ceil(Math.max(...TOT)+.5),CUT=1.5;
+const tokens=[];TOT.forEach((v,i)=>{const n=Math.round(v*10),na=Math.round(APT[i]*10);for(let k=0;k<n;k++)tokens.push({m:i,k,apt:k<na,rx:R(),ry:R()})});
+const pk=TOT.indexOf(Math.max(...TOT)),lo=TOT.indexOf(Math.min(...TOT));
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',vUser=1,vCur=1;
+try{const v=localStorage.getItem('areaLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560,l=narrow?36:52,rr=narrow?14:120,top=52,base=H-48,plotW=W-l-rr,plotH=base-top,colW=plotW/M;
+  const per=narrow?2:3,cellW=(colW*.84)/per,cell=plotH/(VMAX*10/per);
+  L={W,H,narrow,l,rr,top,base,plotW,plotH,colW,per,cell,cellW,hOf:v=>v*10/per*cell}}
+const X=i=>L.l+(i+.5)*L.colW;
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper')};
+  const{W,H,l,top,base,plotW,plotH,colW,per,cell,cellW,hOf,narrow}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  // 7단계 앞부분: 축 자르기 (0 → CUT)
+  const cut=(t>=T7&&t<T8)?ease(clamp((t-T7-.2)/1))*(1-ease(clamp((t-T7-2.4)/.8))):0;
+  const yMin=CUT*cut;
+  const Y=v=>base-(hOf(v)-hOf(yMin))*(hOf(VMAX)/(hOf(VMAX)-hOf(yMin)));
+  // 쌓기 진행도 k: 단일(0) ↔ 누적(1)
+  let k;if(t<T5)k=0;else if(t<T8)k=ease(clamp((t-T5)/1.4));else k=vCur;
+  // 7단계 뒷부분: 위층만 따로 보기
+  const solo=(t>=T7&&t<T8)?clamp((t-T7-3.4)/.8)*(1-clamp((t-T8+.6)/.5)):0;
+  // 격자
+  const ga=clamp((t-T3)/.6);
+  for(let v=Math.ceil(yMin);v<=VMAX;v++){const y=Y(v);ln(l,y,l+plotW,y,C.line,1,null,ga);txt(v,l-6,y+3,C.muted,`10px ${MONO}`,'right',ga)}
+  if(ga>0){ctx.save();ctx.translate(12,(top+base)/2);ctx.rotate(-Math.PI/2);txt('거래량(천 건)',0,0,C.muted,`11px ${SANS}`,'center',ga);ctx.restore()}
+  ln(l,base,l+plotW,base,cut>.05?C.c4:C.ink,cut>.05?2.5:1.5,null,a0);
+  if(cut>.05)txt(`세로축 시작 ${f1(yMin)}천 건`,l+6,base-8,C.c4,`700 11px ${SANS}`,'left',cut);
+  MON.forEach((m,i)=>{if(i%(narrow?6:3)===0)txt(m,X(i),base+16,C.muted,`10px ${MONO}`,'center',a0)});
+  txt(t<T2?'거래 신고가 날짜순으로 들어오는 중 (알갱이 1개 = 100건)':'월별 주택 매매 거래량',l,24,C.muted,`500 12px ${SANS}`,'left',a0);
+  // 범례(누적 단계)
+  if(k>.05){[['아파트',C.c1],['비아파트',C.c2]].forEach(([n,c],j)=>{const x=l+(narrow?0:280)+j*90,y=narrow?40:20;ctx.globalAlpha=k;ctx.fillStyle=c;ctx.fillRect(x,y-9,11,11);ctx.globalAlpha=1;txt(n,x+15,y,C.ink,`12px ${SANS}`,'left',k)})}
+  // ── 알갱이(신고 → 월별 기둥)
+  const merge=clamp((t-T4)/1.2);
+  if(merge<1){tokens.forEach(tk=>{const i=tk.m,tf=T2+i*.12+tk.k*.004,p=ease(clamp((t-tf)/.8));
+      const ax=l+(i+tk.rx)*colW,ay=top+6+tk.ry*58;
+      const sx=X(i)-per*cellW/2+(tk.k%per)*cellW,sy=base-(Math.floor(tk.k/per)+1)*cell;
+      const appear=clamp((t-i*.05)/.3);
+      const x=lerp(ax,sx,p),y=lerp(ay,sy,p),sw=lerp(4,cellW-1.2,p),sh=lerp(4,cell-1.2,p);
+      const colr=t>=T5?(tk.apt?C.c1:C.c2):(p>0&&p<1?C.c3:C.c1);
+      ctx.globalAlpha=appear*(1-merge)*(p<=0?.55:1);ctx.fillStyle=colr;
+      if(p<=0){ctx.beginPath();ctx.arc(x,y,2.2,0,7);ctx.fill()}else ctx.fillRect(x,y,sw,sh);ctx.globalAlpha=1})}
+  // 월별 개수 라벨(2단계 끝)
+  const pc=clamp((t-T3+.6)/.5)*(1-clamp((t-T4)/.6));
+  if(pc>0&&!narrow)TOT.forEach((v,i)=>{if(i%2===0)txt(f1(v),X(i),Y(v)-6,C.ink,`500 9.5px ${MONO}`,'center',pc)});
+  // ── 꼭대기 선
+  const pl=clamp((t-T3)/1.8);
+  function pathTop(vals){ctx.beginPath();vals.forEach((v,i)=>{const y=Y(v);i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y)})}
+  const apt=APT.map(v=>v*k);
+  // 채우기(4단계 이후)
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,base);ctx.clip();
+  if(merge>0){
+    // 아래층(아파트, 누적일 때만 보임)
+    if(k>0){ctx.beginPath();apt.forEach((v,i)=>{const y=Y(v);i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y)});ctx.lineTo(X(M-1),base);ctx.lineTo(X(0),base);ctx.closePath();ctx.globalAlpha=merge*.8*(1-solo*.7);ctx.fillStyle=C.c1;ctx.fill();ctx.globalAlpha=1}
+    // 위층(전체 또는 비아파트)
+    ctx.beginPath();TOT.forEach((v,i)=>{const y=Y(v);i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y)});for(let i=M-1;i>=0;i--)ctx.lineTo(X(i),Y(apt[i]));ctx.closePath();
+    ctx.globalAlpha=merge*(lerp(.3,.75,k))*(1-solo*.5);ctx.fillStyle=k>.5?C.c2:C.c1;ctx.fill();ctx.globalAlpha=1;
+    if(k>0&&k<1){ctx.strokeStyle=C.paper;ctx.lineWidth=1.5;ctx.beginPath();apt.forEach((v,i)=>{const y=Y(v);i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y)});ctx.stroke();ctx.lineWidth=1}}
+  if(pl>0){const n=pl*(M-1);ctx.strokeStyle=k>.5&&merge>0?C.c2:C.c1;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(X(0),Y(TOT[0]));
+    for(let i=1;i<=Math.floor(n);i++)ctx.lineTo(X(i),Y(TOT[i]));const j=Math.floor(n),fr=n-j;if(j<M-1&&fr>0){const x=lerp(X(j),X(j+1),fr),y=lerp(Y(TOT[j]),Y(TOT[j+1]),fr);ctx.lineTo(x,y);ctx.stroke();ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.fill()}else ctx.stroke();ctx.lineWidth=1}
+  ctx.restore();
+  // 4단계 안내: 넓이 = 양
+  const p4=clamp((t-T4-.6)/.5)*(1-clamp((t-T5)/.5));
+  if(p4>0)txt('채운 넓이 = 24개월 동안의 거래량',X(M/2),Y(Math.max(...TOT)*.45),C.paper,`700 ${narrow?12:14}px ${SANS}`,'center',p4);
+  // 6단계: 읽기
+  const p6=clamp((t-T6)/.6)*(1-clamp((t-T7)/.4));
+  if(p6>0){ctx.globalAlpha=p6;ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(X(pk),Y(TOT[pk]),5,0,7);ctx.fill();ctx.beginPath();ctx.arc(X(lo),Y(TOT[lo]),5,0,7);ctx.fill();ctx.globalAlpha=1;
+    txt(`최고 ${MON[pk]} ${f1(TOT[pk])}천`,X(pk),Y(TOT[pk])-10,C.c3,`700 12px ${SANS}`,'center',p6);txt(`최저 ${MON[lo]} ${f1(TOT[lo])}천`,X(lo),Y(TOT[lo])-14,C.c3,`700 12px ${SANS}`,'center',p6);
+    const s0=APT[0]/TOT[0]*100,s1=APT[M-1]/TOT[M-1]*100;
+    if(!narrow){txt(`아파트 비중`,X(M-1)+14,Y(APT[M-1]/2)-8,C.c1,`700 11px ${SANS}`,'left',p6);txt(`${s0.toFixed(0)}% → ${s1.toFixed(0)}%`,X(M-1)+14,Y(APT[M-1]/2)+8,C.c1,`700 12px ${MONO}`,'left',p6)}}
+  // 7단계 뒷부분: 비아파트 실제 추이
+  if(solo>0){ctx.strokeStyle=C.c4;ctx.lineWidth=2.5;ctx.setLineDash([6,4]);ctx.globalAlpha=solo;ctx.beginPath();NON.forEach((v,i)=>{const y=Y(v);i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y)});ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1;
+    txt('비아파트만 바닥에서 다시 그린 실제 추이',X(1),Y(Math.max(...NON))-12,C.c4,`700 12px ${SANS}`,'left',solo)}
+  // 끝 라벨(완성)
+  const pe=t>=T8?clamp((t-T8)/.5):0;
+  if(pe>0&&!narrow){if(k>.5){txt(`아파트 ${f1(APT[M-1])}`,X(M-1)+10,Y(APT[M-1]/2)+4,C.c1,`700 12px ${SANS}`,'left',pe);txt(`비아파트 ${f1(NON[M-1])}`,X(M-1)+10,Y(APT[M-1]+NON[M-1]/2)+4,C.c2,`700 12px ${SANS}`,'left',pe)}
+    else txt(`합계 ${f1(TOT[M-1])}천`,X(M-1)+10,Y(TOT[M-1])+4,C.c1,`700 12px ${SANS}`,'left',pe)}
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'거래 신고가 하나씩',e:'집을 사고팔면 거래 신고가 들어옵니다. 작은 알갱이 하나가 신고 100건입니다. 날짜 순서대로 위쪽에 흩어져 있습니다.',u:'개별 신고 건(사건 자료, event data)이 시간에 따라 발생합니다. 이를 월 단위로 집계해 계수형 시계열(count time series)을 만듭니다.'},
+ {t:T2,n:'달마다 쌓기',s:'알갱이가 자기 달로',e:'알갱이가 자기 달의 칸으로 떨어져 쌓입니다. 기둥이 높을수록 그 달에 거래가 많았다는 뜻입니다.',u:'월별로 사건 수를 집계합니다. 이 단계는 시간축 막대그래프(단위 차트)와 같으며, 기둥 높이가 월간 거래량입니다.'},
+ {t:T3,n:'꼭대기 잇기',s:'기둥 끝을 선으로',e:'각 기둥의 꼭대기를 1월부터 차례로 선으로 잇습니다. 여기까지는 선그래프와 똑같습니다.',u:'월별 집계값을 시간 순서로 연결합니다. 선분은 인접 시점 사이의 변화를 나타냅니다.'},
+ {t:T4,n:'아래를 채우기',s:'선 아래 = 거래의 양',e:'선 아래를 0까지 색으로 채웁니다. 알갱이들이 합쳐져 하나의 넓이가 되었습니다. 이 넓이가 "거래가 얼마나 많았나"를 보여줍니다.',u:'선과 기준선 0 사이를 채우면 면적이 누적량(∑ 거래량 × 기간)을 시각적으로 부호화합니다. 그래서 영역그래프는 양(量)을 나타내는 변수에 적합합니다.'},
+ {t:T5,n:'종류별로 나눠 쌓기',s:'누적 영역그래프',e:'같은 넓이를 아파트(아래)와 비아파트(위)로 나눠 쌓습니다. 전체 거래량과 그 안의 구성을 한 번에 볼 수 있습니다.',u:'누적 영역그래프(stacked area chart)는 각 계열을 위로 쌓아 상단 경계가 합계가 되도록 합니다. 전체량과 구성의 시간 변화를 동시에 표현합니다.'},
+ {t:T6,n:'추이 읽기',s:'최고·최저와 비중 변화',e:'거래가 가장 많았던 달과 적었던 달을 찾고, 아래층(아파트)이 점점 두꺼워지는 것을 봅니다. 전체 중 아파트 비중이 커졌습니다.',u:'총량의 국면(최고·최저)과 구성비 변화를 함께 읽습니다. 하단 계열은 기준선이 0이라 추세 판독이 정확합니다.'},
+ {t:T7,n:'영역그래프의 함정',s:'축 자르기와 위층 읽기',e:'① 세로축을 0이 아닌 곳에서 시작하면 넓이가 왜곡됩니다. ② 위층(비아파트)은 바닥이 출렁여서 실제로는 거의 그대로인데 오르내리는 것처럼 보입니다. 빨간 점선이 비아파트의 진짜 모습입니다.',u:'① 면적 부호화이므로 기준선 0이 필수입니다. ② 누적 그래프의 상위 계열은 기준선이 하위 계열에 따라 변동해(shifting baseline) 자체 추세를 판독하기 어렵습니다. 비아파트는 실제로 거의 일정하지만 위층에서는 아파트의 계절 변동을 따라 출렁여 보입니다.'},
+ {t:T8,n:'완성',s:'월별 거래량 누적 영역',e:'',u:''}];
+function finalMsg(){const s0=APT[0]/TOT[0]*100,s1=APT[M-1]/TOT[M-1]*100;
+  return lv==='e'?`완성입니다. 전체 거래량은 계절에 따라 오르내리고, 그 안에서 아파트 비중은 ${s0.toFixed(0)}%에서 ${s1.toFixed(0)}%로 커졌습니다. 위의 "보기" 버튼으로 단일 영역과 누적 영역을 바꿔 보세요.`
+   :`완성된 누적 영역그래프입니다. 상단 경계는 총 거래량, 하단 계열은 아파트이며 아파트 비중은 ${s0.toFixed(0)}% → ${s1.toFixed(0)}%로 상승했습니다. 비아파트의 자체 추세 판단이 목적이라면 개별 선그래프나 소형 다중 그래프가 더 정확합니다.`}
+const LEDE={e:'영역그래프는 선그래프 아래를 색으로 채워 "양이 얼마나 많은가"를 강조하는 그래프입니다. 거래 신고가 달마다 쌓이고, 꼭대기를 이어 선이 되고, 아래를 채워 넓이가 되는 과정을 보여줍니다.',u:'영역그래프(area chart)는 시계열의 값을 기준선 0과의 사이 면적으로 부호화해 양적 크기를 강조합니다. 사건 자료의 월별 집계, 시간순 연결, 면적 채우기, 누적 영역으로의 확장과 판독상 함정을 단계별로 보여줍니다.'};
+const PC={
+ pro:[
+  {t:'양이 얼마나 많은지 강하게 보여준다',e:'색칠한 넓이가 크면 많고 작으면 적다는 것이 바로 느껴집니다. 거래량, 공급량처럼 "양"을 보여줄 때 좋습니다.',u:'면적이 누적량을 부호화하므로 선그래프보다 양적 크기의 인상이 강합니다. 거래량·인허가·입주 물량 같은 유량(flow) 변수에 적합합니다.',x:'<b>월별 아파트 거래량</b>의 회복 시점을 넓이로 강조.'},
+  {t:'흐름과 크기를 한 번에 본다',e:'선그래프처럼 언제 오르내렸는지 보이면서, 그 크기도 넓이로 같이 느낄 수 있습니다.',u:'추세(선의 형태)와 규모(면적)를 동시에 전달합니다.',x:'계절적 등락과 <b>연간 총량</b>을 한 그림에서.'},
+  {t:'쌓으면 전체와 구성이 함께 보인다',e:'아파트와 비아파트를 쌓으면 전체 거래량도 보이고, 그 안에서 아파트가 얼마나 되는지도 보입니다.',u:'누적 영역그래프는 총량(상단 경계)과 구성(층 두께)의 변화를 동시에 표현합니다. 100% 누적으로 바꾸면 구성비 변화만 볼 수 있습니다.',x:'<b>아파트 비중 확대</b>를 아래층이 두꺼워지는 모습으로.'},
+  {t:'눈길을 끄는 강조 효과가 있다',e:'색이 넓게 칠해져 있어 보고서나 발표에서 눈에 잘 띕니다.',u:'단일 계열 강조나 대시보드의 요약 지표(스파크라인 영역)에 시각적 무게를 줍니다.',x:'시장 동향 보고서 <b>첫 페이지의 거래량 그림</b>.'}],
+ con:[
+  {t:'반드시 0부터 시작해야 한다',e:'세로축을 중간부터 자르면 넓이가 실제와 달라져 차이가 과장됩니다. 막대그래프와 같은 규칙입니다.',u:'면적 부호화이므로 기준선이 0이 아니면 면적 비가 값의 비와 달라집니다. 선그래프와 달리 축 절단이 허용되지 않습니다.',x:'7단계처럼 <b>1.5천 건부터</b> 그리면 적은 달이 거의 사라집니다.'},
+  {t:'위층은 추세를 읽기 어렵다',e:'쌓은 그래프에서 위층은 아래층 때문에 바닥이 출렁여서, 실제로는 그대로인데 오르내리는 것처럼 보입니다.',u:'누적 영역의 상위 계열은 기준선이 이동(shifting baseline)하므로 두께 변화를 판독해야 해 오차가 큽니다. 정확한 추세는 개별 선그래프로 확인합니다.',x:'빨간 점선처럼 <b>비아파트는 거의 평평</b>한데 위층에서는 출렁여 보입니다.'},
+  {t:'겹쳐 그리면 서로 가린다',e:'쌓지 않고 여러 영역을 겹쳐 칠하면 뒤쪽 영역이 앞쪽에 가려 보이지 않습니다.',u:'비누적 중첩 영역은 가림(occlusion)이 발생합니다. 투명도를 써도 2개 이상이면 판독이 어려워 선그래프가 낫습니다.',x:'서울·경기·인천 거래량을 <b>겹쳐 칠하면</b> 인천이 묻힙니다.'},
+  {t:'가격·비율처럼 "양"이 아닌 값에는 맞지 않는다',e:'가격이나 지수는 쌓이는 양이 아니라서 넓이가 의미가 없습니다. 이럴 때는 선그래프를 씁니다.',u:'면적이 누적량으로 해석되므로 수준 변수(가격, 지수, 금리)나 비율에 쓰면 오해를 줍니다. 저량(stock)·가격 변수는 선그래프가 적합합니다.',x:'<b>매매가격지수</b>는 영역 대신 선그래프로.'},
+  {t:'음수나 증감률은 표현하기 어렵다',e:'거래량이 "전년보다 몇 % 줄었나"처럼 마이너스가 섞이면 넓이로 그리기 어색합니다.',u:'0을 중심으로 양·음이 교차하는 변수(증감률)는 면적 해석이 모호해집니다. 발산형 막대나 선그래프를 사용합니다.',x:'<b>전년 동월 대비 증감률</b>은 막대로.'}],
+ tip:{e:'<b>정리:</b> 영역그래프는 거래량처럼 "쌓이는 양"을 보여줄 때 씁니다. 꼭 0부터 그리고, 쌓은 그래프에서는 맨 아래층만 정확히 읽힌다는 점을 기억하세요.',
+      u:'<b>권장 사용법:</b> ① 유량·계수형 변수에만 사용 ② 기준선 0 준수 ③ 누적 시 가장 중요한 계열을 맨 아래에 배치 ④ 상위 계열 추세는 별도 선그래프로 확인 ⑤ 구성비가 핵심이면 100% 누적 영역, 가격·지수는 선그래프.'}};
+function mini(kind){const W=150,H=96,l=6,b=88,tp=8,mx=VMAX;const Yv=v=>b-v/mx*(b-tp),Xi=i=>l+(i+.5)/M*(W-l-6);let s=`<line x1="${l}" x2="${W-4}" y1="${b}" y2="${b}" style="stroke:var(--muted)"/>`;
+  if(kind==='b')TOT.forEach((v,i)=>s+=`<rect x="${Xi(i)-2}" y="${Yv(v)}" width="4" height="${b-Yv(v)}" style="fill:var(--c1)"/>`);
+  else{const d=TOT.map((v,i)=>`${i?'L':'M'}${Xi(i).toFixed(1)},${Yv(v).toFixed(1)}`).join('');
+    if(kind==='a')s+=`<path d="${d}L${Xi(M-1)},${b}L${Xi(0)},${b}Z" style="fill:var(--c1);fill-opacity:.35"/>`;
+    s+=`<path d="${d}" style="fill:none;stroke:var(--c1);stroke-width:2"/>`}
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`}
+const MINI={e:[['막대','달마다 따로따로 비교'],['선','오르내림 흐름에 집중'],['영역','쌓인 양을 강조']],u:[['막대','개별 시점 간 비교'],['선','추세·변화율 강조'],['영역','누적량·규모 강조']]};
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  const yr=y=>{const a=APT.slice(y*12,y*12+12).reduce((s,v)=>s+v,0),n=NON.slice(y*12,y*12+12).reduce((s,v)=>s+v,0);return[a,n]};
+  $('tbody').innerHTML=[0,1].map(y=>{const[a,n]=yr(y);return `<tr><td>${2024+y}년</td><td>${f1(a)}</td><td>${f1(n)}</td><td>${f1(a+n)}</td><td>${(a/(a+n)*100).toFixed(1)}%</td></tr>`}).join('');
+  $('tblNote').textContent=lv==='e'?'월별 거래량을 1년씩 더한 값입니다(단위: 천 건). 영역의 넓이가 바로 이 합계를 나타냅니다.':'연간 합계(단위: 천 건)는 연도 구간의 영역 면적에 해당합니다. 구성비는 누적 영역의 층 두께 비율과 같습니다.';
+  $('miniNote').textContent=lv==='e'?'같은 24개월 거래량을 세 가지로 그렸습니다. 무엇을 강조하고 싶은지에 따라 고르세요.':'동일 계수형 시계열의 세 가지 부호화입니다. 목적(개별 비교·추세·규모)에 따라 선택합니다.';
+  $('mini').innerHTML=['b','l','a'].map((k,i)=>`<figure>${mini(k)}<figcaption><b>${MINI[lv][i][0]}</b>${MINI[lv][i][1]}</figcaption></figure>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  vCur=Math.abs(vCur-vUser)<.003?vUser:lerp(vCur,vUser,.08);draw();ui();requestAnimationFrame(frame)}
+function setV(v){vUser=v;$('vS').setAttribute('aria-pressed',v===0);$('vK').setAttribute('aria-pressed',v===1);if(t<T8){t=T8;vCur=1;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('vS').onclick=()=>setV(0);$('vK').onclick=()=>setV(1);
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('areaLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('areaLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

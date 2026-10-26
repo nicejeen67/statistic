@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>트리맵이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 정렬 막대 → 전체 사각형 → 타일로 쪼개기 → 권역으로 묶기 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:560px}
+@media (max-width:560px){canvas{height:560px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:340px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft);position:sticky;top:0}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.mini{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:8px}
+.mini figure{margin:0;display:grid;gap:4px;font-size:12.5px;color:var(--muted)}
+.mini figcaption b{display:block;color:var(--ink);font-weight:500;font-size:14px}
+.mini svg{width:100%;height:auto;background:var(--soft);border-radius:6px}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 17 · 구성</div>
+    <h1>트리맵이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="서울 25개 자치구 거래금액 막대가 사각형 타일로 바뀌고 권역별로 묶여 트리맵이 되는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 타일에 마우스를 올리거나(휴대폰은 누르기) 하면 그 구의 금액과 비중이 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="묶음"><span>묶음</span><button id="hF" type="button" aria-pressed="false">구만</button><button id="hH" type="button" aria-pressed="true">권역 › 구</button></div>
+    <div class="grp seg" role="group" aria-label="배치 방식"><span>배치</span><button id="lS" type="button" aria-pressed="true">정사각형 위주</button><button id="lD" type="button" aria-pressed="false">띠 나누기</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="23" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>그래프에 쓰인 숫자</h2>
+      <p class="note" id="tblNote"></p>
+      <div class="tbl"><table><thead><tr><th>권역 · 구</th><th>거래금액(조원)</th><th>비중</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>배치 방식에 따라</h2>
+      <p class="note" id="miniNote"></p>
+      <div class="mini" id="mini"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">트리맵을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 자치구별 거래금액은 설명용으로 만든 예시 값이며 실제 통계가 아닙니다. 권역 구분은 서울시 생활권 구분을 참고한 예시입니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const REG=['동남권','도심권','동북권','서북권','서남권'];
+const RAW=[['강남',31,0],['서초',24,0],['송파',22,0],['강동',9,0],['용산',12,1],['종로',2,1],['중구',2,1],['성동',10,2],['광진',5,2],['노원',5,2],['성북',4,2],['동대문',3,2],['중랑',2,2],['강북',1.5,2],['도봉',1.5,2],['마포',9,3],['서대문',4,3],['은평',4,3],['영등포',8,4],['양천',7,4],['동작',6,4],['강서',6,4],['구로',4,4],['관악',3,4],['금천',2,4]];
+const D=RAW.map(([n,v,r],i)=>({n,v,r,i})).sort((a,b)=>b.v-a.v);
+const TOT=D.reduce((s,d)=>s+d.v,0),RT=REG.map((_,r)=>D.filter(d=>d.r===r).reduce((s,d)=>s+d.v,0));
+const TOTAL=23,T2=1.6,T3=4.2,T4=5.6,T5=10.4,T6=12.8,T7=15.0,T8=20.2;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1);
+// 정사각형 위주 배치(squarified)
+function squarify(items,x,y,w,h){const out={};let rest=[...items].sort((a,b)=>b.v-a.v);const sum=rest.reduce((s,d)=>s+d.v,0);if(!sum)return out;const k=w*h/sum;
+  let X=x,Y=y,Wd=w,Ht=h;const worst=(row,side)=>{const s=row.reduce((a,d)=>a+d.v*k,0),mx=Math.max(...row.map(d=>d.v*k)),mn=Math.min(...row.map(d=>d.v*k));return Math.max(side*side*mx/(s*s),s*s/(side*side*mn))};
+  while(rest.length){const side=Math.min(Wd,Ht);let row=[rest[0]],i=1;while(i<rest.length&&worst([...row,rest[i]],side)<=worst(row,side)){row.push(rest[i]);i++}
+    const s=row.reduce((a,d)=>a+d.v*k,0);if(Wd>=Ht){const cw=s/Ht;let yy=Y;row.forEach(d=>{const hh=d.v*k/cw;out[d.n]={x:X,y:yy,w:cw,h:hh};yy+=hh});X+=cw;Wd-=cw}else{const rh=s/Wd;let xx=X;row.forEach(d=>{const ww=d.v*k/rh;out[d.n]={x:xx,y:Y,w:ww,h:rh};xx+=ww});Y+=rh;Ht-=rh}
+    rest=rest.slice(row.length)}return out}
+// 띠 나누기(slice-and-dice)
+function slice(items,x,y,w,h,vert){const out={};const sum=items.reduce((s,d)=>s+d.v,0);let p=0;[...items].sort((a,b)=>b.v-a.v).forEach(d=>{const f=d.v/sum;out[d.n]=vert?{x:x+p*w,y,w:f*w,h}:{x,y:y+p*h,w,h:f*h};p+=f});return out}
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',hUser=1,hCur=1,dUser=0,dCur=0,ptr=null,LAY={};
+try{const v=localStorage.getItem('treeLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560,pad=narrow?12:24,top=48,bx=pad,bw=W-2*pad,bh=H-top-pad;
+  L={W,H,narrow,pad,top,bx,bw,bh,barL:narrow?54:70,rowH:(H-top-20)/D.length};
+  // 배치 미리 계산
+  const flatS=squarify(D,bx,top,bw,bh),flatD=slice(D,bx,top,bw,bh,true);
+  const regRS=squarify(REG.map((n,r)=>({n:'R'+r,v:RT[r]})),bx,top,bw,bh),regRD=slice(REG.map((n,r)=>({n:'R'+r,v:RT[r]})),bx,top,bw,bh,true);
+  const hierS={},hierD={},g=narrow?2:3,hd=narrow?14:18;
+  REG.forEach((_,r)=>{const a=regRS['R'+r],b=regRD['R'+r],its=D.filter(d=>d.r===r);Object.assign(hierS,squarify(its,a.x+g,a.y+hd,a.w-2*g,a.h-hd-g));Object.assign(hierD,slice(its,b.x+g,b.y+hd,b.w-2*g,b.h-hd-g,false))});
+  LAY={flatS,flatD,hierS,hierD,regRS,regRD,hd}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+const lr=(a,b,p)=>({x:lerp(a.x,b.x,p),y:lerp(a.y,b.y,p),w:lerp(a.w,b.w,p),h:lerp(a.h,b.h,p)});
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c3:col('--c3'),c4:col('--c4')};
+  const RC=[col('--c1'),col('--c5'),col('--c2'),col('--c3'),col('--c4')];
+  const{W,H,narrow,pad,top,bx,bw,bh,barL,rowH}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  // 상태
+  const barA=1;const pT=t<T4?0:1;
+  let hh;if(t<T5)hh=0;else if(t<T8)hh=ease(clamp((t-T5)/1.6));else hh=hCur;   // 권역 묶기
+  let dd;if(t>=T7+2.4&&t<T8)dd=ease(clamp((t-T7-2.4)/1))*(1-ease(clamp((t-T7-4.4)/.8)));else if(t>=T8)dd=dCur;else dd=0; // 띠 나누기
+  const p3=(t>=T3&&t<T5)?clamp((t-T3)/.5)*(1-clamp((t-T4-1)/.6)):0;
+  txt(t<T4?'서울 25개 자치구 아파트 거래금액 (단위: 조원, 큰 순서)':'',pad,28,C.muted,`500 12px ${SANS}`,'left',a0);
+  const regA=hh;
+  // 권역 바탕(계층일 때)
+  if(regA>0)REG.forEach((n,r)=>{const R0=lr(LAY.regRS['R'+r],LAY.regRD['R'+r],dd);ctx.globalAlpha=regA;ctx.fillStyle=C.soft;ctx.fillRect(R0.x+1,R0.y+1,R0.w-2,R0.h-2);ctx.strokeStyle=RC[r];ctx.lineWidth=2.5;ctx.strokeRect(R0.x+1,R0.y+1,R0.w-2,R0.h-2);ctx.lineWidth=1;ctx.globalAlpha=1;
+    if(R0.w>60)txt(`${n} ${f1(RT[r]/TOT*100)}%`,R0.x+6,R0.y+LAY.hd-5,RC[r],`700 ${narrow?10:12}px ${SANS}`,'left',regA)});
+  // 3단계: 전체 사각형
+  if(p3>0){ctx.globalAlpha=p3;ctx.strokeStyle=C.ink;ctx.lineWidth=3;ctx.setLineDash([8,5]);ctx.strokeRect(bx,top,bw,bh);ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1;
+    const sa=p3*(1-clamp((t-T4)/.6));txt(`서울 전체 거래금액 ${f1(TOT)}조원 = 이 사각형 넓이 100%`,bx+bw/2,top+bh/2,C.ink,`700 ${narrow?13:16}px ${SANS}`,'center',sa)}
+  // 타일(막대 → 타일)
+  const hits=[];
+  D.forEach((d,k)=>{const y=top+k*rowH,bar={x:barL,y:y+1,w:(W-barL-pad-60)*d.v/D[0].v,h:rowH-3};
+    const flat=lr(LAY.flatS[d.n],LAY.flatD[d.n],dd),hier=lr(LAY.hierS[d.n],LAY.hierD[d.n],dd),tile=lr(flat,hier,hh);
+    const pk=t<T4?0:ease(clamp((t-T4-k*.15)/.9));const R0=lr(bar,tile,pk);
+    // 막대 이름
+    if(pk<1){txt(d.n,barL-6,y+rowH-5,C.ink,`${narrow?10:11.5}px ${SANS}`,'right',a0*(1-pk));txt(f1(d.v),bar.x+bar.w+4,y+rowH-5,C.muted,`${narrow?9.5:10.5}px ${MONO}`,'left',a0*(1-pk)*clamp((t-T2)/.5))}
+    const growA=t<T2?clamp(t/.6):1,bwid=t<T2?R0.w*ease(clamp(t/1.2)):R0.w;
+    ctx.globalAlpha=a0*.9;ctx.fillStyle=t<T5?(pk>0&&pk<1?C.c3:RC[0]):lerpColor(RC[0],RC[d.r],hh);
+    ctx.fillRect(R0.x+1,R0.y+1,Math.max(0,(pk<1&&t<T4?bwid:R0.w)-2),Math.max(0,R0.h-2));ctx.globalAlpha=1;
+    if(pk>=1)hits.push({d,r:R0});
+    // 타일 이름표
+    const la=clamp((t-T4-k*.15-.6)/.4)*(pk>=1?1:0);
+    if(la>0&&R0.w>34&&R0.h>22){const big=R0.w>70&&R0.h>40;txt(d.n,R0.x+6,R0.y+(big?20:16),'#fff',`700 ${big?(narrow?12:14):(narrow?10:11)}px ${SANS}`,'left',la);
+      if(R0.h>38&&R0.w>44)txt(`${f1(d.v/TOT*100)}%`,R0.x+6,R0.y+(big?38:30),'#fff',`${big?12:10}px ${MONO}`,'left',la*.9)}});
+  // 7단계: 비슷한 값, 다른 모양
+  const p7=(t>=T7&&t<T7+2.4)?clamp((t-T7)/.5)*(1-clamp((t-T7-2)/.4)):0;
+  if(p7>0){const pair=['광진','노원'],cs=[C.ink,C.ink];pair.forEach(n=>{const h=hits.find(x=>x.d.n===n);if(!h)return;ctx.globalAlpha=p7;ctx.strokeStyle=C.ink;ctx.lineWidth=3.5;ctx.setLineDash([6,4]);ctx.strokeRect(h.r.x+2,h.r.y+2,h.r.w-4,h.r.h-4);ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1});
+    const bxx=narrow?pad+4:W-pad-300,byy=top+bh-64;ctx.globalAlpha=.96*p7;ctx.fillStyle=C.paper;ctx.fillRect(bxx,byy,narrow?W-2*pad-8:292,56);ctx.strokeStyle=C.c4;ctx.strokeRect(bxx,byy,narrow?W-2*pad-8:292,56);ctx.globalAlpha=1;
+    txt('점선 두 타일은 둘 다 5조원(같은 넓이)',bxx+10,byy+22,C.ink,`700 12px ${SANS}`,'left',p7);txt('모양이 다르면 크기가 같아도 달라 보임',bxx+10,byy+42,C.c4,`700 12px ${SANS}`,'left',p7)}
+  const p7d=(t>=T7+2.4&&t<T8)?clamp((t-T7-2.4)/.4)*(1-clamp((t-T8+.4)/.4)):0;
+  if(p7d>0){const bxx=narrow?pad+4:W-pad-300,byy=top+bh-64;ctx.globalAlpha=.96*p7d;ctx.fillStyle=C.paper;ctx.fillRect(bxx,byy,narrow?W-2*pad-8:292,56);ctx.strokeStyle=C.c4;ctx.strokeRect(bxx,byy,narrow?W-2*pad-8:292,56);ctx.globalAlpha=1;
+    txt('띠 나누기 배치: 얇고 긴 타일이 많아짐',bxx+10,byy+22,C.ink,`700 12px ${SANS}`,'left',p7d);txt('그래서 정사각형에 가깝게 배치함',bxx+10,byy+42,C.c2,`700 12px ${SANS}`,'left',p7d)}
+  // 가리키기
+  if(t>=T8&&ptr){const h=hits.find(x=>ptr.x>=x.r.x&&ptr.x<x.r.x+x.r.w&&ptr.y>=x.r.y&&ptr.y<x.r.y+x.r.h);
+    if(h){const d=h.d;ctx.strokeStyle=C.ink;ctx.lineWidth=3;ctx.strokeRect(h.r.x+1.5,h.r.y+1.5,h.r.w-3,h.r.h-3);ctx.lineWidth=1;
+      const lines=[[`${d.n} · ${REG[d.r]}`,`700 13px ${SANS}`,C.ink],[`거래금액 ${f1(d.v)}조원`,`12px ${SANS}`,C.muted],[`서울 전체의 ${f1(d.v/TOT*100)}%`,`700 12px ${SANS}`,RC[d.r]],[`${REG[d.r]} 안에서 ${f1(d.v/RT[d.r]*100)}%`,`12px ${SANS}`,C.muted]];
+      ctx.font=`700 13px ${SANS}`;const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=ptr.x+14,y0=ptr.y+14;if(x0+bw2>W-6)x0=ptr.x-14-bw2;if(y0+bh2>H-6)y0=ptr.y-14-bh2;
+      ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c],k)=>txt(s0,x0+10,y0+20+k*18,c,f,'left',1))}}
+}
+function lerpColor(a,b,p){const h=s=>{s=s.replace('#','');if(s.length===3)s=s.split('').map(c=>c+c).join('');const n=parseInt(s,16);return[n>>16&255,n>>8&255,n&255]};const A=h(a),B=h(b);return`rgb(${A.map((v,i)=>Math.round(lerp(v,B[i],p))).join(',')})`}
+
+const top3=D.slice(0,3),top3s=top3.reduce((s,d)=>s+d.v,0)/TOT*100;
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'25개 구의 거래금액',e:'서울 25개 자치구의 아파트 거래금액입니다. 큰 순서로 막대를 그렸습니다. 막대 25개는 길어서 한눈에 보기 어렵고, 원그래프로는 조각이 너무 작아집니다.',u:'25개 범주의 양적 값(거래금액)입니다. 범주가 많아 원그래프는 판독이 불가능하고, 정렬 막대는 공간을 많이 차지합니다.'},
+ {t:T2,n:'크기 확인',s:'막대 길이 = 금액',e:'막대 옆에 금액을 적었습니다. 강남, 서초, 송파가 특히 크고, 아래쪽 구들은 매우 작습니다.',u:'값의 분포가 상위에 집중된(오른쪽 꼬리가 긴) 형태입니다. 트리맵은 이런 집중 구조를 면적으로 표현하는 데 적합합니다.'},
+ {t:T3,n:'전체를 사각형 하나로',s:'넓이 = 100%',e:'서울 전체 거래금액을 큰 사각형 하나로 놓습니다. 이 사각형의 넓이가 100%입니다.',u:'전체 합계를 단일 사각형의 면적으로 정의합니다. 이후 각 범주는 값에 비례하는 면적의 하위 사각형으로 분할됩니다.'},
+ {t:T4,n:'사각형 쪼개기',s:'막대가 타일로',e:'큰 구부터 차례로 막대가 사각형 조각(타일)으로 바뀌며 큰 사각형을 채웁니다. 금액이 클수록 타일이 넓습니다. 빈틈 없이 꽉 찹니다.',u:'정렬된 값을 순서대로 배치하는 squarified 알고리즘으로 공간을 재귀 분할합니다. 각 타일 면적 ∝ 값이며, 타일의 가로세로 비를 1에 가깝게 유지합니다.'},
+ {t:T5,n:'권역으로 묶기',s:'권역 › 구 두 단계',e:'구들을 동남권, 도심권 같은 권역으로 먼저 묶고, 그 안에서 다시 구로 나눕니다. 굵은 테두리 하나가 권역, 그 안의 작은 타일이 구입니다.',u:'2단계 계층(권역 → 구)의 중첩 트리맵입니다. 상위 노드 면적 = 하위 노드 합이므로 권역 비중과 권역 내 구성을 동시에 표현합니다.'},
+ {t:T6,n:'집중도 읽기',s:'큰 타일 몇 개가 대부분',e:`강남·서초·송파 세 구가 서울 전체 거래금액의 ${top3s.toFixed(0)}%를 차지합니다. 동남권 테두리가 화면의 절반 가까이를 차지하는 것이 바로 보입니다.`,u:`상위 3개 범주 점유율은 ${top3s.toFixed(1)}%입니다. 트리맵은 이러한 집중도(concentration)와 계층별 점유 구조 판독에 유리합니다.`},
+ {t:T7,n:'트리맵의 함정',s:'모양이 다르면 비교 어려움',e:'점선 두 타일(광진, 노원)은 금액이 같아 넓이도 같은데, 하나는 세로로 길쭉하고 하나는 가로로 넓어서 크기가 달라 보입니다. 사각형을 띠처럼 나누면 이런 길쭉한 타일이 더 많아져서, 보통은 정사각형에 가깝게 배치합니다.',u:'면적 판독은 가로세로 비에 영향을 받아 오차가 커집니다. slice-and-dice 배치는 종횡비가 극단적인 타일을 만들고, squarified 배치는 판독성을 높이는 대신 순서·위치 안정성을 희생합니다.'},
+ {t:T8,n:'완성',s:'권역 › 구 트리맵',e:'',u:''}];
+function finalMsg(){return lv==='e'?`완성입니다. 25개 구가 한 화면에 들어갔고, 동남권이 서울 전체의 ${f1(RT[0]/TOT*100)}%를 차지합니다. 타일을 가리키면 금액과 비중이 나옵니다. 위의 "묶음", "배치" 버튼으로 모양을 바꿔 보세요.`
+  :`완성된 2단계 트리맵입니다. 동남권 점유율 ${f1(RT[0]/TOT*100)}%. 타일의 위치는 배치 알고리즘의 결과일 뿐 지리적 위치가 아니며, 시점 간 비교에는 배치가 바뀌므로 막대그래프를 병행합니다.`}
+const LEDE={e:'트리맵은 큰 사각형 하나를 전체로 놓고, 각 항목을 금액만큼의 넓이로 잘라 채운 그래프입니다. 25개 자치구 막대가 사각형 조각으로 바뀌고, 권역으로 묶이는 과정을 보여줍니다.',u:'트리맵(treemap)은 계층 자료의 각 노드를 값에 비례하는 면적의 사각형으로 재귀 분할해 표현합니다. 정렬 막대에서 공간 분할로의 전환, squarified 배치, 2단계 중첩, 집중도 판독, 종횡비에 따른 면적 판독 한계를 단계별로 보여줍니다.'};
+const PC={
+ pro:[
+  {t:'많은 항목을 한 화면에 담는다',e:'25개 구처럼 항목이 많아도 사각형 하나 안에 모두 들어갑니다. 원그래프로는 불가능한 개수입니다.',u:'공간 충전형(space-filling) 레이아웃으로 수십~수백 개 범주를 제한된 면적에 표현합니다.',x:'서울 <b>25개 자치구</b> 거래금액 한 장에.'},
+  {t:'큰 묶음과 작은 항목을 동시에 본다',e:'권역 테두리로 큰 덩어리를 보고, 그 안의 타일로 구별 크기도 볼 수 있습니다.',u:'중첩 구조로 계층의 상위·하위 수준 점유율을 동시에 전달합니다.',x:'<b>동남권 › 강남·서초·송파·강동</b>.'},
+  {t:'어디에 몰려 있는지 바로 보인다',e:'큰 타일 몇 개가 화면 대부분을 차지하면 "몇 곳에 몰려 있다"는 것이 한눈에 보입니다.',u:'상위 집중도와 롱테일 구조를 면적 대비로 직관적으로 보여줍니다.',x:`강남3구가 <b>${top3s.toFixed(0)}%</b>를 차지하는 집중.`},
+  {t:'빈 공간 없이 공간을 쓴다',e:'축이나 빈칸 없이 화면 전체를 쓰기 때문에 대시보드에서 공간 효율이 높습니다.',u:'데이터-잉크 비율이 높고 축·여백이 불필요해 대시보드의 고밀도 요약에 적합합니다.',x:'부동산 시장 대시보드의 <b>지역별 거래금액 지도형 요약</b>.'}],
+ con:[
+  {t:'넓이는 정확히 비교하기 어렵다',e:'모양이 다른 두 타일은 넓이가 같아도 달라 보입니다. 정확한 순위는 막대그래프가 낫습니다.',u:'면적 판독은 길이 판독보다 부정확하며 종횡비 차이가 오차를 키웁니다.',x:'7단계 <b>광진 vs 노원</b>(둘 다 5조원).'},
+  {t:'작은 항목은 이름을 못 붙인다',e:'강북, 도봉처럼 작은 구는 타일이 너무 작아서 이름이나 숫자를 쓸 수 없습니다.',u:'소면적 노드는 라벨링이 불가능해 상호작용(툴팁)이나 "기타" 집계가 필요합니다.',x:'<b>가리키면 값 상자</b>로 보완.'},
+  {t:'위치에는 뜻이 없다',e:'타일의 위치는 크기 순서대로 배치한 결과일 뿐이라, 지도처럼 "왼쪽 위가 강남쪽"이라고 읽으면 안 됩니다.',u:'타일 좌표는 배치 알고리즘의 산물로 지리·순서 정보를 담지 않습니다. 공간 패턴이 중요하면 단계구분도(지도)를 사용합니다.',x:'구의 실제 위치는 <b>단계구분도</b>로.'},
+  {t:'시간 변화를 비교하기 어렵다',e:'올해와 작년 트리맵을 나란히 놓으면 타일 위치가 바뀌어서 무엇이 커졌는지 찾기 어렵습니다.',u:'값이 바뀌면 squarified 배치가 재배열되어 시점 간 대응이 깨집니다. 시계열 비교에는 막대·선그래프가 적합합니다.',x:'<b>2024 vs 2025 거래금액</b> 비교는 묶음 막대로.'},
+  {t:'0이나 마이너스는 표현할 수 없다',e:'넓이는 0보다 작을 수 없어서 "전년보다 몇 % 줄었나" 같은 마이너스 값은 트리맵으로 그릴 수 없습니다.',u:'면적 부호화는 양수에 한정됩니다. 증감률은 색상으로 별도 부호화하거나 다른 그래프를 사용합니다.',x:'<b>거래금액 증감률</b>은 색 또는 발산형 막대로.'}],
+ tip:{e:'<b>정리:</b> 트리맵은 "항목이 많고, 묶음이 있고, 몇 개에 몰려 있는" 자료를 한 장에 보여줄 때 좋습니다. 정확한 순위나 시간 변화는 막대그래프로, 실제 위치는 지도로 보완하세요.',
+      u:'<b>권장 사용법:</b> ① 양수 값·다수 범주·계층 자료에 사용 ② squarified 배치로 종횡비 관리 ③ 상위 계층은 굵은 테두리·헤더 ④ 소면적 노드는 툴팁·"기타" ⑤ 색은 계층 또는 별도 변수 중 하나에만 ⑥ 정밀 비교·시계열은 막대·선그래프 병행.'}};
+function miniSvg(kind){const W=170,H=120,lay=kind==='s'?squarify(D,4,4,W-8,H-8):slice(D,4,4,W-8,H-8,true);const cols=['var(--c1)','var(--c5)','var(--c2)','var(--c3)','var(--c4)'];let s='';
+  D.forEach(d=>{const r=lay[d.n];s+=`<rect x="${r.x}" y="${r.y}" width="${Math.max(0,r.w-1)}" height="${Math.max(0,r.h-1)}" style="fill:${cols[d.r]};stroke:var(--paper);stroke-width:1"/>`});return `<svg viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`}
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  const RV=['--c1','--c5','--c2','--c3','--c4'];
+  $('tbody').innerHTML=REG.map((n,r)=>`<tr><td><b><i class="sw" style="background:var(${RV[r]})"></i>${n}</b></td><td><b>${f1(RT[r])}</b></td><td><b>${f1(RT[r]/TOT*100)}%</b></td></tr>`+D.filter(d=>d.r===r).map(d=>`<tr><td style="padding-left:26px">${d.n}</td><td>${f1(d.v)}</td><td>${f1(d.v/TOT*100)}%</td></tr>`).join('')).join('')+`<tr><td><b>서울 전체</b></td><td><b>${f1(TOT)}</b></td><td><b>100%</b></td></tr>`;
+  $('tblNote').textContent=lv==='e'?'굵은 줄은 권역 합계, 들여 쓴 줄은 그 안의 구입니다.':'상위 노드(권역)와 하위 노드(구)의 값과 전체 대비 점유율입니다.';
+  $('miniNote').textContent=lv==='e'?'같은 자료를 정사각형 위주로 놓느냐, 띠처럼 나누느냐에 따라 읽기 쉬운 정도가 다릅니다.':'squarified와 slice-and-dice 배치의 종횡비 차이입니다.';
+  $('mini').innerHTML=`<figure>${miniSvg('s')}<figcaption><b>정사각형 위주</b>${lv==='e'?'크기 비교가 비교적 쉬움':'종횡비 ≈ 1, 판독성 우수'}</figcaption></figure><figure>${miniSvg('d')}<figcaption><b>띠 나누기</b>${lv==='e'?'얇은 띠가 많아 비교 어려움':'극단적 종횡비, 순서는 보존'}</figcaption></figure>`;
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  hCur=Math.abs(hCur-hUser)<.003?hUser:lerp(hCur,hUser,.08);dCur=Math.abs(dCur-dUser)<.003?dUser:lerp(dCur,dUser,.08);draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.8;playing=false}lastPhase=-1}
+function setH(v){hUser=v;$('hF').setAttribute('aria-pressed',v===0);$('hH').setAttribute('aria-pressed',v===1);toEnd()}
+function setD(v){dUser=v;$('lS').setAttribute('aria-pressed',v===0);$('lD').setAttribute('aria-pressed',v===1);toEnd()}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('hF').onclick=()=>setH(0);$('hH').onclick=()=>setH(1);$('lS').onclick=()=>setD(0);$('lD').onclick=()=>setD(1);
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('treeLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('treeLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

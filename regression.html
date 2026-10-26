@@ -1,0 +1,449 @@
+<title>단순회귀분석 사이버 스캔</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap">
+<style>
+/* Layout: 16:9 cinematic stage (canvas, 1280x720 logical) + control strip below. Single dark "cyber HUD" look. */
+:root{
+  --bg:#03060c; --panel:#0a1322; --line:#18324d;
+  --cyan:#38e8ff; --mag:#ff3fa4; --amber:#ffc24a;
+  --fg:#d7f6ff; --dim:#6f8ea8;
+  --f-display:'Orbitron','JetBrains Mono',ui-monospace,monospace;
+  --f-body:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage{position:relative;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);overflow:hidden}
+.stage:fullscreen{border:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.scan{pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(160,240,255,.045) 0 1px,transparent 1px 3px)}
+.vig{pointer-events:none;position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(0,0,0,.65) 100%)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--f-mono);font-size:13px}
+.grp{display:flex;gap:4px;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);padding:8px 12px;cursor:pointer;border-radius:2px}
+button:hover{border-color:var(--cyan);color:var(--cyan)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--cyan);color:var(--bg);border-color:var(--cyan)}
+#scrub{flex:1 1 200px;min-width:0;accent-color:var(--cyan)}
+#tc{color:var(--dim);font-variant-numeric:tabular-nums;min-width:7ch}
+.hint{color:var(--dim);font-size:12px;line-height:1.6;margin:0}
+.hint b{color:var(--cyan);font-weight:400}
+body.rec .controls,body.rec .hint,body.rec .script,body.rec .scenes{display:none}
+.scenes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+@media (max-width:640px){.scenes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.scenes button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;min-width:0}
+.scenes button .n{font-family:var(--f-display);font-size:11px;color:var(--amber);letter-spacing:.08em}
+.scenes button .l{font-family:var(--f-body);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.scenes button[aria-current="true"]{border-color:var(--cyan);background:rgba(56,232,255,.12);color:var(--cyan)}
+.scenes button[aria-current="true"] .n{color:var(--cyan)}
+.script{border:1px solid var(--line);background:var(--panel);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.script .tag{font-family:var(--f-display);font-size:12px;letter-spacing:.1em;color:var(--amber)}
+.script h2{margin:0;font-size:19px;font-weight:700;text-wrap:balance}
+.script .now{margin:0;font-size:17px;line-height:1.85;max-width:70ch;color:var(--fg)}
+.script .tip{margin:0;font-size:13px;color:var(--dim);line-height:1.6}
+.script details{border-top:1px solid var(--line);padding-top:10px}
+.script summary{cursor:pointer;color:var(--cyan);font-size:14px}
+.script ol{margin:10px 0 0;padding-left:1.4em;display:flex;flex-direction:column;gap:10px}
+.script li{line-height:1.75;font-size:14px;max-width:75ch;cursor:pointer}
+.script li b{color:var(--cyan)}
+.script li.on{color:var(--cyan)}
+.script textarea{position:absolute;left:-9999px}
+</style>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="scan"></div><div class="vig"></div>
+  </div>
+  <nav class="scenes" id="scenes" aria-label="장면 선택"></nav>
+  <div class="controls">
+    <div class="grp">
+      <button id="auto" aria-pressed="true" title="각 장면이 끝나면 자동으로 멈춥니다">장면마다 멈춤</button>
+      <button id="prev" title="이전 장면 (←)">◀◀</button>
+      <button id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+      <button id="next" title="다음 장면 (→)">▶▶</button>
+      <button id="restart">⟲ 처음부터</button>
+    </div>
+    <input type="range" id="scrub" min="0" max="53" step="0.01" value="0" aria-label="타임라인">
+    <span id="tc">00:00</span>
+    <div class="grp" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+    <div class="grp">
+      <button id="sq" aria-pressed="true">잔차 제곱 ■</button>
+      <button id="spd">속도 1×</button>
+      <button id="fs">전체화면</button>
+      <button id="rec">녹화 모드 (H)</button>
+    </div>
+  </div>
+  <section class="script" aria-live="polite">
+    <div class="head">
+      <span class="tag" id="sTag">SCENE 01 · 설명 대본</span>
+      <button id="copy">전체 대본 복사</button>
+    </div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+    <details>
+      <summary>전체 시나리오 보기 (항목을 누르면 그 장면으로 이동)</summary>
+      <ol id="sAll"></ol>
+    </details>
+  </section>
+  <p class="hint">녹화 모드에서는 아래 조작판이 사라집니다. <b>H</b> 키로 다시 표시 · <b>Space</b> 재생/정지 · <b>← →</b> 장면 이동. 데이터는 설명용 가상 예시(아파트 24건)입니다.</p>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d));}
+addEventListener('resize',resize);resize();
+
+/* ---------- 데이터 (가상, 앞 영상과 동일) ---------- */
+let seed=20261021;const rnd=()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296};
+const gauss=()=>{let u=rnd()||1e-9,v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const N=24,X=[],Y=[];
+for(let i=0;i<N;i++){const a=36+rnd()*98;X.push(a);Y.push(Math.max(1.2,0.9+0.066*a+gauss()*0.55));}
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+const xm=mean(X),ym=mean(Y);
+let Sxx=0,Sxy=0,Syy=0;for(let i=0;i<N;i++){Sxx+=(X[i]-xm)**2;Sxy+=(X[i]-xm)*(Y[i]-ym);Syy+=(Y[i]-ym)**2;}
+const B1=Sxy/Sxx,B0=ym-B1*xm;
+const YH=X.map(x=>B0+B1*x),E=Y.map((y,i)=>y-YH[i]);
+const SST=Syy,SSE=E.reduce((s,e)=>s+e*e,0),SSR=SST-SSE,R2=SSR/SST,DF=N-2;
+const MSE=SSE/DF,Sres=Math.sqrt(MSE),SEb1=Sres/Math.sqrt(Sxx),SEb0=Sres*Math.sqrt(1/N+xm*xm/Sxx);
+const T1=B1/SEb1,F=SSR/MSE,rr=Sxy/Math.sqrt(Sxx*Syy);
+/* t분포 */
+function lgamma(z){const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];if(z<.5)return Math.log(Math.PI/Math.sin(Math.PI*z))-lgamma(1-z);z-=1;let x=c[0];for(let i=1;i<9;i++)x+=c[i]/(z+i);const t=z+7.5;return .5*Math.log(2*Math.PI)+(z+.5)*Math.log(t)-t+Math.log(x)}
+const TC0=Math.exp(lgamma((DF+1)/2)-lgamma(DF/2))/Math.sqrt(DF*Math.PI);
+const tpdf=x=>TC0*Math.pow(1+x*x/DF,-(DF+1)/2);
+function tint(x){const n=400,h=x/n;let s=tpdf(0)+tpdf(x);for(let i=1;i<n;i++)s+=(i%2?4:2)*tpdf(i*h);return s*h/3}
+const pval=t=>Math.max(0,1-2*tint(Math.abs(t)));
+let lo=0,hi=10;for(let i=0;i<60;i++){const m=(lo+hi)/2;tint(m)<.475?lo=m:hi=m}const TCR=(lo+hi)/2;
+const P1=pval(T1);
+const fmtp=p=>p<.001?'< .001':p.toFixed(3);
+const ci=[B1-TCR*SEb1,B1+TCR*SEb1];
+const yhat=x=>B0+B1*x;
+const bandCI=x=>TCR*Sres*Math.sqrt(1/N+(x-xm)**2/Sxx);
+const bandPI=x=>TCR*Sres*Math.sqrt(1+1/N+(x-xm)**2/Sxx);
+const PRED=yhat(84),PI84=[PRED-bandPI(84),PRED+bandPI(84)];
+/* 변동 분해 강조 점: 평균에서 가장 먼 점 */
+let IS=0;for(let i=0;i<N;i++)if(Math.abs(Y[i]-ym)>Math.abs(Y[IS]-ym)&&Math.abs(E[i])>.25)IS=i;
+
+/* ---------- 좌표계 ---------- */
+const XMIN=30,XMAX=140,YMIN=0,YMAX=11;
+const P={x0:150,x1:890,y0:120,y1:600};
+const px=x=>P.x0+(x-XMIN)/(XMAX-XMIN)*(P.x1-P.x0);
+const py=y=>P.y1-(y-YMIN)/(YMAX-YMIN)*(P.y1-P.y0);
+const FMIN=Math.floor(Math.min(...YH))-.5,FMAX=Math.ceil(Math.max(...YH))+.5,EM=Math.ceil(Math.max(...E.map(Math.abs))*1.4*2)/2;
+const rx=f=>P.x0+(f-FMIN)/(FMAX-FMIN)*(P.x1-P.x0);
+const ry=e=>(P.y0+P.y1)/2-e/EM*(P.y1-P.y0)/2;
+
+/* ---------- 타임라인 ---------- */
+const S=[0,4,10,18,26,33,41,50],END=53;
+let t=0,playing=true,speed=1,level='mid',showSq=true;
+
+const TXT={
+ mid:{scenes:['단순회귀분석이란?','데이터와 예측선','평균과 비교하기 = 설명력','이 기울기, 우연일까? (t검정)','한 장으로 정리한 성적표','오차 점검하기','결과 정리와 예측'],
+  x:'전용면적 (㎡)',y:'가격 (억원)',rxl:'선이 예측한 가격 (억원)',ryl:'오차 (억원)',
+  model:'가격 = a + b × 면적 + 오차',b0:'시작 높이 a',b1:'기울기 b',
+  sst:'전체 차이',ssr:'선이 맞힌 부분',sse:'못 맞힌 부분',r2:'설명력',
+  tot:'평균과의 차이',exp:'맞힌 부분',res:'못 맞힌 부분',mean:'평균 가격',
+  se:'흔들림(표준오차)',t:'t값',p:'우연일 확률 p',ci:'기울기의 범위(95%)',band:'진짜 선이 있을 범위',
+  anova:['구분','제곱합','자유도','평균제곱','F','p'],rows:['선이 설명','못 설명','전체'],
+  chk:['0 선 위아래로 고르게 퍼짐','휘어진 모양 없음','퍼진 폭이 비슷함','오차를 다 더하면 0'],
+  eq:(a,b)=>`가격 = ${a.toFixed(2)} + ${b.toFixed(3)} × 면적`,
+  pred:`84㎡ 예상 ${PRED.toFixed(1)}억 (${PI84[0].toFixed(1)}~${PI84[1].toFixed(1)}억)`,
+  r2v:v=>`${Math.round(v*100)}%`,
+  rep:[['기울기',B1.toFixed(3)+'억/㎡'],['1㎡당',Math.round(B1*10000)+'만 원'],['t값',T1.toFixed(1)],['우연일 확률',fmtp(P1)],['설명력',Math.round(R2*100)+'%'],['84㎡ 예상',PRED.toFixed(1)+'억'],['예상 범위',`${PI84[0].toFixed(1)}~${PI84[1].toFixed(1)}억`]]},
+ uni:{scenes:['단순회귀모형  Y = β₀ + β₁X + ε','OLS 추정','변동 분해  SST = SSR + SSE','회귀계수 t검정  H₀: β₁ = 0','분산분석표 (ANOVA)','잔차 진단  e vs ŷ','결과 보고와 예측구간'],
+  x:'x : 전용면적 (㎡)',y:'y : 매매가 (억원)',rxl:'적합값 ŷ',ryl:'잔차 e',
+  model:'Y = β₀ + β₁X + ε,  ε ~ N(0, σ²)',b0:'b₀ (절편)',b1:'b₁ (기울기)',
+  sst:'SST',ssr:'SSR',sse:'SSE',r2:'R²',
+  tot:'yᵢ − ȳ',exp:'ŷᵢ − ȳ',res:'yᵢ − ŷᵢ',mean:'ȳ',
+  se:'SE(b₁)',t:'t',p:'p',ci:'95% CI (β₁)',band:'E(Y|x) 95% 신뢰대',
+  anova:['요인','SS','df','MS','F','p'],rows:['회귀','잔차','합계'],
+  chk:['선형성: 체계적 패턴 없음','등분산성: 퍼짐 일정','독립성: 이상 군집 없음',`Σeᵢ = ${Math.abs(E.reduce((a,b)=>a+b,0)).toFixed(3)}`],
+  eq:(a,b)=>`ŷ = ${a.toFixed(3)} + ${b.toFixed(4)}x`,
+  pred:`ŷ(84) = ${PRED.toFixed(2)},  95% PI [${PI84[0].toFixed(2)}, ${PI84[1].toFixed(2)}]`,
+  r2v:v=>v.toFixed(3),
+  rep:[['b₁',`${B1.toFixed(4)} (SE ${SEb1.toFixed(4)})`],['b₀',`${B0.toFixed(3)} (SE ${SEb0.toFixed(3)})`],['t(22)',T1.toFixed(2)],['p',fmtp(P1)],['R²',R2.toFixed(3)],['F(1,22)',F.toFixed(1)],['s',Sres.toFixed(3)],['95% PI (x=84)',`[${PI84[0].toFixed(2)}, ${PI84[1].toFixed(2)}]`]]}
+};
+
+/* ---------- 유틸 ---------- */
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=v=>{v=clamp(v);return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2};
+const sceneIdx=tt=>{for(let k=S.length-2;k>=0;k--)if(tt>=S[k])return k;return 0};
+const prog=(k,tt)=>clamp((tt-S[k])/(S[k+1]-S[k]));
+const F_={d:'Orbitron, "JetBrains Mono", monospace',m:'"JetBrains Mono", Consolas, monospace',b:'"Noto Sans KR", "Malgun Gothic", sans-serif'};
+function txt(s,x,y,{f=F_.m,sz=14,c='#d7f6ff',a=1,al='left',w='400',glow=0}={}){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.font=`${w} ${sz}px ${f}`;ctx.fillStyle=c;ctx.textAlign=al;if(glow){ctx.shadowColor=c;ctx.shadowBlur=glow}ctx.fillText(s,x,y);ctx.restore()}
+function corners(x,y,w,h,len,c,a){ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=2;ctx.shadowColor=c;ctx.shadowBlur=8;ctx.beginPath();
+ [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]].forEach(([cx,cy,dx,dy])=>{ctx.moveTo(cx+dx*len,cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+dy*len)});ctx.stroke();ctx.restore()}
+function orb(x,y,r,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;const g=ctx.createRadialGradient(x-r*.3,y-r*.3,0,x,y,r*2.6);
+ g.addColorStop(0,'#ffffff');g.addColorStop(.25,c);g.addColorStop(.5,c+'55');g.addColorStop(1,c+'00');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*2.6,0,7);ctx.fill();ctx.restore()}
+function seg(x1,y1,x2,y2,c,w,a,dash){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=w;ctx.shadowColor=c;ctx.shadowBlur=8;if(dash)ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore()}
+const clipP=()=>{ctx.beginPath();ctx.rect(P.x0,P.y0,P.x1-P.x0,P.y1-P.y0);ctx.clip()};
+
+const stars=[...Array(140)].map(()=>({x:rnd()*LW,y:rnd()*LH,z:.2+rnd()*.8,p:rnd()*6}));
+function bg(tt){
+ const g=ctx.createLinearGradient(0,0,0,LH);g.addColorStop(0,'#02040a');g.addColorStop(.55,'#061226');g.addColorStop(1,'#02050b');
+ ctx.fillStyle=g;ctx.fillRect(0,0,LW,LH);
+ const hz=ctx.createRadialGradient(640,560,10,640,560,700);hz.addColorStop(0,'rgba(56,232,255,.13)');hz.addColorStop(1,'rgba(56,232,255,0)');ctx.fillStyle=hz;ctx.fillRect(0,0,LW,LH);
+ for(const s of stars){const tw=.35+.65*Math.abs(Math.sin(tt*1.3+s.p));ctx.fillStyle=`rgba(180,240,255,${.5*s.z*tw})`;const x=(s.x+tt*8*s.z)%LW;ctx.fillRect(x,s.y,1.6*s.z,1.6*s.z)}
+ const hy=470;ctx.save();ctx.beginPath();ctx.rect(0,hy,LW,LH-hy);ctx.clip();ctx.strokeStyle='rgba(56,232,255,.16)';ctx.lineWidth=1;
+ for(let i=-24;i<=24;i++){ctx.beginPath();ctx.moveTo(640+i*14,hy);ctx.lineTo(640+i*150,LH);ctx.stroke()}
+ const off=(tt*0.35)%1;for(let k=0;k<14;k++){const z=(k+off)/14;const y=hy+Math.pow(z,2.2)*(LH-hy);ctx.globalAlpha=z;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(LW,y);ctx.stroke()}
+ ctx.restore();
+}
+function frameBox(a){ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(8,18,34,.72)';ctx.fillRect(P.x0-60,P.y0-40,P.x1-P.x0+90,P.y1-P.y0+95);ctx.restore();corners(P.x0-60,P.y0-40,P.x1-P.x0+90,P.y1-P.y0+95,22,'#38e8ff',a)}
+function axesMain(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let x=40;x<=140;x+=10){ctx.beginPath();ctx.moveTo(px(x),P.y0);ctx.lineTo(px(x),P.y1);ctx.stroke()}
+ for(let y=0;y<=11;y++){ctx.beginPath();ctx.moveTo(P.x0,py(y));ctx.lineTo(P.x1,py(y));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ for(let x=40;x<=140;x+=20)txt(String(x),px(x),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let y=0;y<=10;y+=2)txt(String(y),P.x0-12,py(y)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.x,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-48,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.y,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function axesRes(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let f=Math.ceil(FMIN);f<=FMAX;f++){ctx.beginPath();ctx.moveTo(rx(f),P.y0);ctx.lineTo(rx(f),P.y1);ctx.stroke()}
+ for(let e=-EM;e<=EM+1e-9;e+=.5){ctx.beginPath();ctx.moveTo(P.x0,ry(e));ctx.lineTo(P.x1,ry(e));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ seg(P.x0,ry(0),P.x1,ry(0),'#ffc24a',2,a,[8,6]);
+ for(let f=Math.ceil(FMIN);f<=FMAX;f++)txt(String(f),rx(f),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let e=-EM;e<=EM+1e-9;e+=1)txt((e>0?'+':'')+e.toFixed(1),P.x0-12,ry(e)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.rxl,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-48,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.ryl,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function beam(a,tt){if(a<=0)return;ctx.save();clipP();const xa=px(XMIN),ya=py(yhat(XMIN)),xb=px(XMAX),yb=py(yhat(XMAX));ctx.lineCap='round';
+ ctx.strokeStyle='#38e8ff';ctx.globalAlpha=a*.18;ctx.lineWidth=14;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ ctx.globalAlpha=a;ctx.shadowColor='#38e8ff';ctx.shadowBlur=18;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ ctx.shadowBlur=0;ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ const f=(tt*.45)%1;orb(xa+(xb-xa)*f,ya+(yb-ya)*f,4,'#38e8ff',a);ctx.restore()}
+function band(fn,a,c,grow){if(a<=0)return;ctx.save();clipP();ctx.globalAlpha=a;ctx.beginPath();const st=60;
+ for(let i=0;i<=st;i++){const x=XMIN+(XMAX-XMIN)*i/st;const y=py(yhat(x)+fn(x)*grow);i?ctx.lineTo(px(x),y):ctx.moveTo(px(x),y)}
+ for(let i=st;i>=0;i--){const x=XMIN+(XMAX-XMIN)*i/st;ctx.lineTo(px(x),py(yhat(x)-fn(x)*grow))}
+ ctx.closePath();const g=ctx.createLinearGradient(0,P.y0,0,P.y1);g.addColorStop(0,c+'40');g.addColorStop(1,c+'18');ctx.fillStyle=g;ctx.fill();ctx.strokeStyle=c+'aa';ctx.lineWidth=1;ctx.stroke();ctx.restore()}
+function wrap(s,maxw,font){ctx.save();ctx.font=font;const out=[];let line='';for(const wd of s.split(' ')){const tst=line?line+' '+wd:wd;if(ctx.measureText(tst).width>maxw&&line){out.push(line);line=wd}else line=tst}out.push(line);ctx.restore();return out}
+
+/* ---------- 오른쪽 패널 ---------- */
+function panel(tt,k,L){
+ const x=930,w=310,ix=x+20,iw=w-40;
+ ctx.save();ctx.fillStyle='rgba(8,18,34,.72)';ctx.fillRect(x,80,w,575);ctx.restore();corners(x,80,w,575,16,'#38e8ff',1);
+ txt(`SCENE ${String(k+1).padStart(2,'0')} / 07`,ix,112,{f:F_.d,sz:12,c:'#ffc24a',w:'700'});
+ wrap(L.scenes[k],iw,`700 20px ${F_.b}`).slice(0,2).forEach((ln,i)=>txt(ln,ix,144+i*27,{f:F_.b,sz:20,w:'700',c:'#eafcff',glow:6}));
+ const p=prog(k,tt),fa=clamp(p*4);
+ const kv=(lab,val,y,c='#38e8ff',a=1,big=18)=>{txt(lab,ix,y,{f:F_.b,sz:13,c:'#6f8ea8',a});txt(val,ix+iw,y,{sz:big,c,al:'right',a,glow:6})};
+ if(k<=1){
+  txt(level==='mid'?'모형':'MODEL',ix,226,{f:F_.d,sz:11,c:'#6f8ea8',a:fa});
+  wrap(L.model,iw,`700 17px ${F_.b}`).forEach((ln,i)=>txt(ln,ix,256+i*24,{f:F_.b,sz:17,w:'700',c:'#eafcff',a:fa,glow:8}));
+  const la=k===1?clamp((p-.55)*4):0;
+  kv(L.b0,B0.toFixed(3),340,'#38e8ff',la,20);kv(L.b1,B1.toFixed(4),376,'#38e8ff',la,20);
+  if(level==='uni')txt('b₁ = Sxy / Sxx,  b₀ = ȳ − b₁x̄',ix,416,{sz:13,c:'#9fdcef',a:la});
+  else txt(`1㎡ 넓어지면 약 ${Math.round(B1*10000)}만 원 ↑`,ix,416,{f:F_.b,sz:14,c:'#9fdcef',a:la});
+  kv('n',String(N),470,'#ffc24a',fa,18);
+  if(level==='uni')kv('r',rr.toFixed(3),502,'#ffc24a',la,18);
+ }else if(k===2){
+  const bars=[[L.sst,SST,'#e9fbff'],[L.ssr,SSR,'#38e8ff'],[L.sse,SSE,'#ff3fa4']];
+  bars.forEach(([lab,v,c],i)=>{const y=228+i*68,g=ease(clamp(p*2.2-i*.35));txt(lab,ix,y,{f:F_.b,sz:14,c:'#9fdcef',a:fa});txt(v.toFixed(2),ix+iw,y,{sz:16,c,al:'right',a:g});
+   ctx.save();ctx.fillStyle='rgba(56,232,255,.08)';ctx.fillRect(ix,y+10,iw,12);ctx.fillStyle=c;ctx.shadowColor=c;ctx.shadowBlur=10;ctx.fillRect(ix,y+10,iw*(v/SST)*g,12);ctx.restore()});
+  txt(level==='mid'?'전체 = 맞힌 부분 + 못 맞힌 부분':'SST = SSR + SSE',ix,436,{f:F_.b,sz:14,c:'#ffc24a',a:clamp(p*2-1)});
+  const ra=ease(clamp(p*2-1.1)),cx=ix+40,cy=520;
+  ctx.save();ctx.lineWidth=7;ctx.strokeStyle='rgba(56,232,255,.12)';ctx.beginPath();ctx.arc(cx,cy,36,0,7);ctx.stroke();
+  if(ra>0){ctx.strokeStyle='#38e8ff';ctx.shadowColor='#38e8ff';ctx.shadowBlur=14;ctx.beginPath();ctx.arc(cx,cy,36,-Math.PI/2,-Math.PI/2+Math.PI*2*R2*ra);ctx.stroke()}ctx.restore();
+  txt(ra>0?L.r2v(R2*ra):'—',cx,cy+6,{sz:15,w:'700',c:'#fff',al:'center'});
+  txt(L.r2,ix+96,512,{f:F_.b,sz:15,c:'#eafcff',w:'700'});
+  txt(level==='mid'?'선이 설명한 비율':`= SSR / SST = r²`,ix+96,536,{f:F_.b,sz:13,c:'#6f8ea8'});
+ }else if(k===3){
+  const gx=ix,gy=210,gw=iw,gh=140,TR=4.5,tx=v=>gx+(v+TR)/(2*TR)*gw,ty=v=>gy+gh-v/tpdf(0)*(gh-14);
+  ctx.save();ctx.globalAlpha=fa;ctx.strokeStyle='rgba(56,232,255,.25)';ctx.strokeRect(gx,gy,gw,gh);
+  ctx.beginPath();for(let v=-TR;v<=TR;v+=.05){const X1=tx(v),Y1=ty(tpdf(v));v===-TR?ctx.moveTo(X1,Y1):ctx.lineTo(X1,Y1)}ctx.strokeStyle='#e9fbff';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='rgba(255,63,164,.35)';[[-TR,-TCR],[TCR,TR]].forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(tx(a),ty(0));for(let v=a;v<=b;v+=.05)ctx.lineTo(tx(v),ty(tpdf(v)));ctx.lineTo(tx(b),ty(0));ctx.fill()});
+  ctx.restore();
+  txt('0',tx(0),gy+gh+16,{sz:11,c:'#6f8ea8',al:'center',a:fa});
+  txt(`±${TCR.toFixed(3)}`,tx(TCR),gy+gh+16,{sz:11,c:'#ff3fa4',al:'center',a:fa});
+  const ma=clamp(p*3-1);
+  if(ma>0){const mx=T1>TR?gx+gw-6:tx(T1);seg(mx,gy+6,mx,gy+gh,'#ffc24a',2.5,ma);txt(`t = ${T1.toFixed(1)}${T1>TR?' →':''}`,mx-6,gy+24,{sz:14,w:'700',c:'#ffc24a',al:'right',a:ma,glow:8})}
+  const va=clamp(p*3-1.3);
+  kv(L.se,SEb1.toFixed(4),402,'#38e8ff',va);kv(L.t,T1.toFixed(2),434,'#ffc24a',va,20);kv(L.p,fmtp(P1),466,'#ff3fa4',va,20);
+  kv(L.ci,`[${ci[0].toFixed(4)}, ${ci[1].toFixed(4)}]`,498,'#38e8ff',va,14);
+  const da=clamp(p*3-2);txt(level==='mid'?'→ 우연이 아니다!':'→ H₀ 기각 (α = .05)',ix,548,{f:F_.b,sz:18,w:'700',c:'#ffc24a',a:da,glow:10});
+  txt(level==='mid'?`분홍 영역 = 우연으로 보기 어려운 범위`:`분홍 영역: 기각역, df = ${DF}`,ix,580,{f:F_.b,sz:12,c:'#6f8ea8',a:fa});
+ }else if(k===4){
+  kv(level==='mid'?'F값':'F = MSR / MSE',F.toFixed(1),236,'#ffc24a',fa,24);
+  kv(level==='mid'?'우연일 확률':'p',fmtp(pval(T1)),276,'#ff3fa4',fa,18);
+  kv(level==='mid'?'예측의 평균 오차':'s = √MSE',Sres.toFixed(3)+(level==='mid'?'억':''),316,'#38e8ff',fa,18);
+  const sa=clamp(p*2-.8);
+  txt(level==='mid'?'F가 클수록 선이 쓸모 있음':'단순회귀: F = t²',ix,376,{f:F_.b,sz:15,c:'#eafcff',w:'700',a:sa});
+  if(level==='uni')txt(`${F.toFixed(1)} = ${T1.toFixed(2)}²`,ix,404,{sz:14,c:'#9fdcef',a:sa});
+ }else if(k===5){
+  L.chk.forEach((c,i)=>{const a=clamp(p*4-1-i*.5);txt('✓',ix,240+i*44,{sz:18,c:'#38e8ff',w:'700',a,glow:10});txt(c,ix+26,240+i*44,{f:F_.b,sz:15,c:'#eafcff',a})});
+  const ma=Math.max(...E.map(Math.abs));kv(level==='mid'?'가장 큰 오차':'max|eᵢ|',ma.toFixed(2),440,'#ff3fa4',clamp(p*3-1.5));
+  txt(level==='mid'?'모양이 생기면 직선이 맞지 않는 것':'곡선·깔때기 패턴 → 모형 재검토',ix,490,{f:F_.b,sz:13,c:'#6f8ea8',a:clamp(p*3-1.5)});
+ }else{
+  txt(level==='mid'?'최종 결과':'REPORT',ix,222,{f:F_.d,sz:11,c:'#6f8ea8',a:fa});
+  L.rep.forEach(([a,b],i)=>{const al=clamp(p*5-i*.35);const y=252+i*(level==='mid'?40:36);txt(a,ix,y,{f:F_.b,sz:14,c:'#9fdcef',a:al});txt(b,ix+iw,y,{sz:15,c:i===L.rep.length-1||i===L.rep.length-2?'#ffc24a':'#eafcff',al:'right',a:al,glow:4});
+   ctx.save();ctx.globalAlpha=al*.4;ctx.fillStyle='#18324d';ctx.fillRect(ix,y+11,iw,1);ctx.restore()});
+ }
+}
+
+/* ---------- 분산분석표 ---------- */
+function anova(a,L,tt){if(a<=0)return;
+ const x0=P.x0+10,y0=P.y0+50,w=P.x1-P.x0-20,rh=62,cols=[0,.2,.4,.55,.74,.88];
+ ctx.save();ctx.globalAlpha=a*.92;ctx.fillStyle='rgba(3,8,16,.92)';ctx.fillRect(x0,y0-20,w,rh*4+40);ctx.restore();corners(x0,y0-20,w,rh*4+40,18,'#ffc24a',a);
+ txt(level==='mid'?'분산분석표 · 선의 성적표':'ANOVA TABLE',x0+20,y0+6,{f:level==='mid'?F_.b:F_.d,sz:14,c:'#ffc24a',w:'700',a});
+ const data=[[L.rows[0],SSR,1,SSR,F,P1],[L.rows[1],SSE,DF,MSE,null,null],[L.rows[2],SST,N-1,null,null,null]];
+ L.anova.forEach((h,j)=>txt(h,x0+20+cols[j]*(w-40),y0+rh*.8,{f:F_.b,sz:15,c:'#6f8ea8',w:'700',a}));
+ seg(x0+20,y0+rh*.8+14,x0+w-20,y0+rh*.8+14,'#38e8ff',1,a*.6);
+ data.forEach((r,i)=>{const ra=a*clamp((tt-S[4])*1.2-i*.6);const y=y0+rh*(1.7+i);
+  r.forEach((v,j)=>{if(v===null)return;const s=j===0?v:j===2?String(v):j===5?fmtp(v):j===4?v.toFixed(1):v.toFixed(3);
+   txt(s,x0+20+cols[j]*(w-40),y,{f:j===0?F_.b:F_.m,sz:j===4?22:17,c:j===4?'#ffc24a':j===5?'#ff3fa4':i===2?'#9fdcef':'#eafcff',w:j>=4?'700':'400',a:ra,glow:j>=4?10:0})})});
+}
+
+/* ---------- 프레임 ---------- */
+function frame(){
+ const tt=t,L=TXT[level],k=sceneIdx(tt),p=prog(k,tt);
+ ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);
+ bg(tt);
+ txt('REGRESSION // ANALYSIS',40,46,{f:F_.d,sz:16,w:'900',c:'#38e8ff',glow:10});
+ txt('AI 부동산 통계 · 단순회귀분석',318,46,{f:F_.b,sz:14,c:'#6f8ea8'});
+ const m=Math.floor(tt/60),s=(tt%60).toFixed(1).padStart(4,'0');
+ txt(`T+${String(m).padStart(2,'0')}:${s}`,1240,46,{sz:14,c:'#9fdcef',al:'right'});
+ if(Math.floor(tt*2)%2===0)orb(1120,41,4,'#ff3fa4',1);txt('LIVE',1132,46,{f:F_.d,sz:12,c:'#ff3fa4',w:'700'});
+
+ const fa=clamp((tt-.6)/1.8);
+ frameBox(fa);
+ if(k===0){const tl='SIMPLE LINEAR REGRESSION';const nch=Math.floor(clamp(tt/2.4)*tl.length);
+  txt(tl.slice(0,nch)+(Math.floor(tt*4)%2?'_':''),(P.x0+P.x1)/2,340,{f:F_.d,sz:26,c:'#38e8ff',al:'center',glow:14,a:fa});
+  const ma=clamp((tt-2.4)/1);
+  txt(level==='mid'?'원인 1개 → 결과 1개':'Y = β₀ + β₁X + ε',(P.x0+P.x1)/2,390,{f:level==='mid'?F_.b:F_.m,sz:22,c:'#eafcff',al:'center',a:ma,glow:8});
+  txt(level==='mid'?'면적(원인)으로 가격(결과)을 설명':'독립변수 1개 · 종속변수 1개',(P.x0+P.x1)/2,426,{f:F_.b,sz:15,c:'#6f8ea8',al:'center',a:ma});
+  panel(tt,k,L);return}
+
+ /* 잔차 그래프 전환 비율 */
+ const mix=k===5?ease(clamp((tt-S[5])/2)):k===6?1-ease(clamp((tt-S[6])/1.5)):0;
+ axesMain(1-mix,L);axesRes(mix,L);
+
+ /* 평균선과 변동 분해 */
+ if(k===2){const a=clamp(p*4);seg(P.x0,py(ym),P.x1,py(ym),'#ffc24a',2,a,[8,6]);txt(L.mean+` ${ym.toFixed(2)}`,P.x1-8,py(ym)-10,{f:F_.b,sz:13,c:'#ffc24a',al:'right',a});
+  const ga=clamp(p*3-.6);
+  for(let i=0;i<N;i++){if(i===IS)continue;const xp=px(X[i]);seg(xp-2,py(ym),xp-2,py(YH[i]),'#38e8ff',2,ga*.35);seg(xp+2,py(YH[i]),xp+2,py(Y[i]),'#ff3fa4',2,ga*.35)}
+  const xp=px(X[IS]),ha=clamp(p*3-.3);
+  seg(xp-12,py(ym),xp-12,py(Y[IS]),'#ffffff',3,ha);
+  seg(xp,py(ym),xp,py(YH[IS]),'#38e8ff',4,ha);seg(xp,py(YH[IS]),xp,py(Y[IS]),'#ff3fa4',4,ha);
+  const lx=xp+(xp>600?-24:18),al=xp>600?'right':'left';
+  txt(L.tot,xp-20,(py(ym)+py(Y[IS]))/2,{f:F_.b,sz:14,c:'#ffffff',al:'right',a:ha});
+  txt(L.exp,lx+(xp>600?0:0),(py(ym)+py(YH[IS]))/2+5,{f:F_.b,sz:14,c:'#38e8ff',al,a:ha,glow:6});
+  txt(L.res,lx,(py(YH[IS])+py(Y[IS]))/2+5,{f:F_.b,sz:14,c:'#ff3fa4',al,a:ha,glow:6});
+ }
+
+ /* 신뢰대 */
+ const ba=k===3?clamp(p*2):k===4?.6:k===5?.6*(1-mix):k===6?clamp((tt-S[6]-1)/1.5)*.7:0;
+ if(ba>0)band(bandCI,ba,'#38e8ff',k===3?ease(clamp(p*1.6)):1);
+ if(k===3){const a=clamp(p*2-.6);txt(L.band,P.x0+16,P.y0+24,{f:F_.b,sz:14,c:'#9fdcef',a})}
+ if(k===6){const a=clamp((tt-S[6]-2.5)/1.5);band(bandPI,a*.5,'#ffc24a',1);
+  txt(level==='mid'?'■ 하늘색: 평균 가격 범위   ■ 노란색: 개별 집 가격 범위':'■ 95% 신뢰대 E(Y|x)   ■ 95% 예측대 Y|x',P.x0+16,P.y0+24,{f:F_.b,sz:13,c:'#9fdcef',a})}
+
+ /* 회귀선 */
+ const la=k===1?clamp((p-.55)*4):1-mix;
+ beam(la,tt);
+
+ /* 점: 산점도 ↔ 잔차도 */
+ for(let i=0;i<N;i++){let a=1,yoff=0;
+  if(k===1){const d=S[1]+i*.12,q=clamp((tt-d)/.6);a=q;yoff=(1-ease(q))*240;
+   const lp=clamp((tt-d-.6)/.5);if(lp>0&&lp<1){ctx.save();ctx.globalAlpha=1-lp;ctx.strokeStyle='#38e8ff';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(px(X[i]),py(Y[i]),6+lp*20,0,7);ctx.stroke();ctx.restore()}}
+  const x1=px(X[i]),y1=py(Y[i])-yoff,x2=rx(YH[i]),y2=ry(E[i]);
+  const xx=x1+(x2-x1)*mix,yy=y1+(y2-y1)*mix;
+  if(k===5&&mix>.98){seg(xx,ry(0),xx,yy,E[i]>=0?'#38e8ff':'#ff3fa4',1.5,.5*clamp(p*3-1),[3,3])}
+  const hl=k===2&&i===IS;orb(xx,yy,hl?7:5,hl?'#ffffff':(k===5&&mix>.5?(E[i]>=0?'#38e8ff':'#ff3fa4'):'#38e8ff'),a)}
+
+ /* 회귀식 */
+ if(k>=1&&k!==5){const a=k===1?clamp((p-.65)*4):1;txt(L.eq(B0,B1),(P.x0+P.x1)/2-15,P.y0-56,{f:level==='uni'?F_.m:F_.b,sz:24,w:'700',c:'#eafcff',al:'center',glow:16,a})}
+ if(k===5)txt(level==='mid'?'오차만 따로 모아 보기':'Residuals vs Fitted',(P.x0+P.x1)/2-15,P.y0-56,{f:level==='uni'?F_.d:F_.b,sz:22,w:'700',c:'#eafcff',al:'center',glow:14,a:mix});
+
+ /* 분산분석표 */
+ if(k===4)anova(ease(clamp(p*3)),L,tt);
+
+ /* 예측 */
+ if(k===6){const q=clamp((tt-S[6]-3.5)/2);if(q>0){const X0=px(84),Y0=py(PRED);
+  seg(X0,P.y1,X0,P.y1+(Y0-P.y1)*ease(clamp(q*2)),'#ffc24a',1.5,1,[6,5]);
+  if(q>.5)seg(X0,Y0,X0+(P.x0-X0)*ease(clamp(q*2-1)),Y0,'#ffc24a',1.5,1,[6,5]);
+  if(q>.8){seg(X0,py(PI84[0]),X0,py(PI84[1]),'#ffc24a',4,clamp((q-.8)*5));
+   [PI84[0],PI84[1]].forEach(v=>seg(X0-10,py(v),X0+10,py(v),'#ffc24a',3,clamp((q-.8)*5)));
+   orb(X0,Y0,7*(1+.25*Math.sin(tt*5)),'#ffc24a',1);
+   const bw=level==='mid'?300:390,bx=X0+26,by=Y0-70;ctx.save();ctx.fillStyle='rgba(20,14,2,.88)';ctx.strokeStyle='#ffc24a';ctx.fillRect(bx,by,bw,40);ctx.strokeRect(bx,by,bw,40);ctx.restore();
+   txt(L.pred,bx+14,by+26,{f:level==='uni'?F_.m:F_.b,sz:level==='uni'?14:15,w:'700',c:'#ffe1a1'})}}}
+
+ panel(tt,k,L);
+ for(let j=1;j<S.length-1;j++){const d=tt-S[j];if(d>=0&&d<.35){const a=1-d/.35;ctx.save();ctx.globalAlpha=a*.5;for(let r=0;r<6;r++){const yy=rnd()*LH;ctx.fillStyle=r%2?'#38e8ff':'#ff3fa4';ctx.fillRect(0,yy,LW,1+rnd()*3)}ctx.restore()}}
+}
+
+/* ---------- 시나리오 ---------- */
+const SHORT=['개념','예측선','설명력 R²','t검정','분산분석표','잔차 진단','결과·예측'];
+const won=Math.round(B1*10000);
+const SCRIPT={
+ mid:[
+  {s:'지난 시간에는 점들 사이를 가장 잘 지나가는 직선을 찾았어요. 오늘은 한 걸음 더 나아가서 "이 직선을 믿어도 될까?"를 확인합니다. 원인 하나(면적)로 결과 하나(가격)를 설명하는 분석을 "단순회귀분석"이라고 불러요. "단순"은 원인이 딱 하나라는 뜻입니다.',tip:'원인이 여러 개면 "다중회귀"라는 것도 살짝 예고해 두면 좋습니다.'},
+  {s:`아파트 24채의 면적과 가격을 점으로 찍고, 오차가 가장 작은 선을 그었습니다. 기울기 ${B1.toFixed(3)}은 면적이 1㎡ 넓어질 때 가격이 약 ${won}만 원 오른다는 뜻이에요. 이제 이 선이 얼마나 쓸모 있는지 하나씩 따져 봅시다.`,tip:'오른쪽 패널의 "1㎡ 넓어지면 약 ○○만 원" 문장을 가리키며 기울기의 뜻을 강조하세요.'},
+  {s:`노란 점선은 모든 집 가격의 평균이에요. 직선이 없다면 우리는 "평균 가격쯤 되겠지" 하고 찍을 수밖에 없죠. 흰 점 하나를 보면, 평균에서 실제 가격까지의 차이(흰색) 중 하늘색은 직선이 맞힌 부분, 분홍색은 못 맞힌 부분입니다. 모든 집의 맞힌 부분을 모아 전체와 비교한 비율이 설명력, ${Math.round(R2*100)}%예요.`,tip:'"평균으로 찍기"와 "직선으로 예측하기"를 비교하는 장면이라고 설명하면 쉽습니다.'},
+  {s:`그런데 혹시 우연히 이런 기울기가 나왔을 수도 있지 않을까요? 그걸 확인하는 과정이 "검정"입니다. t값은 기울기가 흔들림(표준오차)보다 몇 배나 큰지를 보여 줘요. 이번 t값은 ${T1.toFixed(1)}로, 분홍색 경계(약 2)보다 훨씬 커요. 우연일 확률(p값)이 거의 0이므로 "면적은 정말로 가격에 영향을 준다"고 말할 수 있습니다. 선 주변의 빛나는 띠는 진짜 선이 있을 만한 범위예요.`,tip:'t값이 그래프 밖으로 나갈 만큼 크다는 점이 이 장면의 포인트입니다.'},
+  {s:`분산분석표는 지금까지 계산한 내용을 한 장으로 정리한 "성적표"예요. 직선이 설명한 양을, 설명하지 못한 양과 비교한 값이 F값입니다. 이번 F값은 ${F.toFixed(1)}로 매우 커서, 이 직선은 쓸모 있는 예측 도구라고 할 수 있어요.`,tip:'표의 숫자를 모두 외울 필요는 없고 F값과 p값만 보면 된다고 안내하세요.'},
+  {s:'마지막으로 오차들만 따로 모아서 점검합니다. 가로는 선이 예측한 가격, 세로는 오차예요. 점들이 0 선 위아래로 고르게 흩어져 있고 특별한 모양이 없으면 좋은 신호입니다. 만약 휘어지거나 한쪽으로 갈수록 넓게 퍼지는 깔때기 모양이면, 직선이 아닌 다른 방법을 생각해야 해요.',tip:'점들이 화면에서 옮겨 가는 순간 "오차만 뽑아서 다시 그린다"고 말해 주세요.'},
+  {s:`정리하면, 면적은 아파트 가격을 잘 설명하는 변수이고 이 결과는 우연이 아닙니다. 84㎡ 아파트의 예상 가격은 약 ${PRED.toFixed(1)}억 원이에요. 다만 집마다 차이가 있어서 실제 가격은 대략 ${PI84[0].toFixed(1)}억에서 ${PI84[1].toFixed(1)}억 원 사이에 있을 가능성이 높습니다. 예측에는 항상 이런 "범위"가 함께 따라온다는 것, 꼭 기억하세요.`,tip:'노란 세로 막대(예측 범위)를 가리키며 마무리하세요. 가상 데이터라는 점도 한 번 언급해 주세요.'}
+ ],
+ uni:[
+  {s:'단순회귀분석은 하나의 독립변수 X로 종속변수 Y를 설명하는 모형 Y = β₀ + β₁X + ε를 추정하고 추론하는 절차입니다. 오차항 ε는 서로 독립이며 평균 0, 분산 σ²인 정규분포를 따른다고 가정합니다. 이번 시간에는 추정 이후의 적합도 평가, 유의성 검정, 가정 진단까지 다룹니다.',tip:'모수(β)와 추정량(b)의 표기 차이를 이 장면에서 정리해 두세요.'},
+  {s:`최소제곱법(OLS)으로 b₁ = Sxy/Sxx = ${B1.toFixed(4)}, b₀ = ȳ − b₁x̄ = ${B0.toFixed(3)}을 얻었습니다. 표본 크기 n = ${N}, 상관계수 r = ${rr.toFixed(3)}입니다. 추정된 회귀식은 ŷ = ${B0.toFixed(3)} + ${B1.toFixed(4)}x 입니다.`,tip:'절편 b₀는 x = 0(면적 0㎡)에서의 값이라 실질적 해석이 어렵다는 점을 짚을 수 있습니다.'},
+  {s:`총변동 SST = Σ(yᵢ − ȳ)² = ${SST.toFixed(2)}는 회귀로 설명되는 SSR = Σ(ŷᵢ − ȳ)² = ${SSR.toFixed(2)}와 설명되지 않는 SSE = Σ(yᵢ − ŷᵢ)² = ${SSE.toFixed(2)}로 분해됩니다. 결정계수 R² = SSR/SST = ${R2.toFixed(3)}이며, 단순회귀에서는 상관계수의 제곱 r²과 같습니다.`,tip:'흰 점 하나의 편차가 두 성분으로 나뉘는 모습을 먼저 보여 주고, 패널의 막대로 확장하세요.'},
+  {s:`가설은 H₀: β₁ = 0, H₁: β₁ ≠ 0입니다. 검정통계량 t = b₁/SE(b₁) = ${B1.toFixed(4)}/${SEb1.toFixed(4)} = ${T1.toFixed(2)}이며, 자유도 n − 2 = ${DF}인 t분포를 따릅니다. 임계값 ±${TCR.toFixed(3)}을 크게 넘어 p ${fmtp(P1)}이므로 유의수준 5%에서 H₀를 기각합니다. β₁의 95% 신뢰구간은 [${ci[0].toFixed(4)}, ${ci[1].toFixed(4)}]로 0을 포함하지 않습니다. 회귀선 주변 띠는 평균 반응 E(Y|x)의 95% 신뢰대입니다.`,tip:'신뢰대가 x̄ 근처에서 가장 좁고 양 끝으로 갈수록 넓어지는 이유를 질문해 보세요.'},
+  {s:`분산분석표에서 F = MSR/MSE = ${F.toFixed(1)}이고 자유도는 (1, ${DF})입니다. 단순회귀에서는 F = t²(${T1.toFixed(2)}² ≈ ${F.toFixed(1)})이 성립하여 두 검정은 같은 결론을 줍니다. MSE = ${MSE.toFixed(4)}는 σ²의 불편추정량이며, 추정의 표준오차 s = √MSE = ${Sres.toFixed(3)}억원입니다.`,tip:'JAMOVI의 Model Fit / ANOVA 출력과 같은 항목이라는 것을 연결해 주세요.'},
+  {s:'잔차 대 적합값(Residuals vs Fitted) 산점도로 모형 가정을 진단합니다. 체계적인 패턴이 없으면 선형성을, 퍼짐이 일정하면 등분산성을 만족한다고 판단합니다. OLS 잔차의 합은 항상 0입니다. 실무에서는 Q-Q plot으로 정규성, Durbin-Watson 통계량으로 독립성도 함께 확인합니다.',tip:'곡선 패턴(비선형)과 깔때기 패턴(이분산) 예시를 말로 덧붙이면 좋습니다.'},
+  {s:`보고 예시: 전용면적은 매매가를 유의하게 예측하였다(b = ${B1.toFixed(4)}, t(${DF}) = ${T1.toFixed(2)}, p ${fmtp(P1)}, R² = ${R2.toFixed(3)}). x = 84에서 점추정값은 ŷ = ${PRED.toFixed(2)}억원이고, 95% 예측구간은 [${PI84[0].toFixed(2)}, ${PI84[1].toFixed(2)}]억원입니다. 개별 관측치를 예측하는 예측구간은 평균 반응의 신뢰구간보다 항상 넓습니다.`,tip:'하늘색 신뢰대와 노란 예측대의 폭 차이를 비교하며 마무리하세요.'}
+ ]
+};
+
+/* ---------- 루프 & 컨트롤 ---------- */
+const scrub=document.getElementById('scrub'),tc=document.getElementById('tc'),playB=document.getElementById('play');
+scrub.max=END;
+let last=performance.now(),autoStop=true,passK=-1,uiK=-1,uiLv='';
+function loop(now){const dt=Math.min(.1,(now-last)/1000);last=now;
+ if(playing){const k0=sceneIdx(t);t+=dt*speed;if(t>=END){t=END;setPlay(false)}
+  const k1=sceneIdx(t);if(autoStop&&k1>k0&&k1!==passK){t=S[k1]-.02;setPlay(false);passK=k1}}
+ frame();updUI();scrub.value=t;tc.textContent=`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+ requestAnimationFrame(loop)}
+function setPlay(v){playing=v;playB.textContent=v?'❚❚ 일시정지':'▶ 재생'}
+playB.onclick=()=>{if(t>=END)t=0;setPlay(!playing)};
+document.getElementById('restart').onclick=()=>{t=0;passK=-1;setPlay(true)};
+const jump=d=>{const k=sceneIdx(t);const nk=clamp(k+d,0,S.length-2);t=S[nk]+.01;passK=-1};
+document.getElementById('prev').onclick=()=>jump(t-S[sceneIdx(t)]>1?0:-1);
+document.getElementById('next').onclick=()=>jump(1);
+scrub.oninput=()=>{t=+scrub.value;passK=-1};
+const mid=document.getElementById('lvMid'),uni=document.getElementById('lvUni');
+function setLv(l){level=l;mid.setAttribute('aria-pressed',l==='mid');uni.setAttribute('aria-pressed',l==='uni')}
+mid.onclick=()=>setLv('mid');uni.onclick=()=>setLv('uni');
+const sqB=document.getElementById('sq');if(sqB)sqB.remove();
+const spB=document.getElementById('spd');const sps=[1,.75,.5,1.5];let si=0;spB.onclick=()=>{si=(si+1)%sps.length;speed=sps[si];spB.textContent=`속도 ${speed}×`};
+document.getElementById('fs').onclick=()=>{const r=stage.requestFullscreen&&stage.requestFullscreen();if(r&&r.catch)r.catch(()=>{});setTimeout(resize,200)};
+document.addEventListener('fullscreenchange',()=>setTimeout(resize,100));
+document.getElementById('rec').onclick=()=>document.body.classList.toggle('rec');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.key!==' ')return;
+ if(e.key===' '){e.preventDefault();playB.click()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H')document.body.classList.toggle('rec')});
+
+const scBox=document.getElementById('scenes');scBox.style.gridTemplateColumns='repeat(auto-fit,minmax(110px,1fr))';
+const scBtns=SHORT.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">SCENE 0${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);scBox.appendChild(b);return b});
+function goScene(i){t=S[i]+.01;passK=-1;setPlay(true)}
+const sTag=document.getElementById('sTag'),sTitle=document.getElementById('sTitle'),sNow=document.getElementById('sNow'),sTip=document.getElementById('sTip'),sAll=document.getElementById('sAll');
+function buildAll(){sAll.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TXT[level].scenes[i]}</b><br>${o.s}`;li.onclick=()=>goScene(i);sAll.appendChild(li)})}
+function updUI(){const k=sceneIdx(t);if(k===uiK&&level===uiLv)return;if(level!==uiLv)buildAll();uiK=k;uiLv=level;
+ scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...sAll.children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];sTag.textContent=`SCENE 0${k+1} · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;sTitle.textContent=TXT[level].scenes[k];sNow.textContent=o.s;sTip.textContent='강의 팁 · '+o.tip}
+const autoB=document.getElementById('auto');autoB.onclick=()=>{autoStop=!autoStop;autoB.setAttribute('aria-pressed',autoStop)};
+document.getElementById('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TXT[level].scenes[i]}\n${o.s}\n(팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;btn.parentNode.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(()=>{btn.textContent='복사됨'},()=>{fb();btn.textContent='복사됨'})}else{fb();btn.textContent='복사됨'}
+ setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+requestAnimationFrame(loop);
+})();
+</script>

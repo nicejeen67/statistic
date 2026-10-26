@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로렌츠 곡선과 지니계수가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 왼쪽 정사각형(막대 → 계단 → 로렌츠 곡선) / 오른쪽 계산 패널 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6; --lo:#eef3f9;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:640px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 21 · 분포</div>
+    <h1>로렌츠 곡선과 지니계수가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="서울 25개 구 거래금액 막대를 작은 순으로 정렬하고 누적해 로렌츠 곡선과 지니계수를 만드는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 곡선 위에 마우스를 올리거나(휴대폰은 누르기) 하면 "하위 몇 %가 전체의 몇 %를 차지하는지"가 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><span>자료</span><select id="dSel" aria-label="자료 선택"><option value="0" selected>25개 구 거래금액</option><option value="1">5개 권역으로 합침</option><option value="2">가상: 한 구에 몰림(같은 지니)</option><option value="3">가상: 모든 구 똑같음</option></select></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="26" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>지니계수 읽는 법</h2>
+      <p class="note" id="gNote"></p>
+      <div class="tbl"><table><thead><tr><th>지니계수</th><th>뜻</th><th>로렌츠 곡선 모양</th></tr></thead><tbody id="gBody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>로렌츠 곡선 · 지니계수 점검표</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">로렌츠 곡선 · 지니계수를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 구별 거래금액(조원)과 권역 구분은 설명용 예시 값이며 실제 통계가 아닙니다(트리맵·경계지도 페이지와 같은 값). "한 구에 몰림"과 "모든 구 똑같음"은 비교용 가상 자료입니다. 지니계수와 누적 비율은 이 값들로 직접 계산했습니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const RAW=[['강남',31,0],['서초',24,0],['송파',22,0],['강동',9,0],['용산',12,1],['종로',2,1],['중구',2,1],['성동',10,2],['광진',5,2],['노원',5,2],['성북',4,2],['동대문',3,2],['중랑',2,2],['강북',1.5,2],['도봉',1.5,2],['마포',9,3],['서대문',4,3],['은평',4,3],['영등포',8,4],['양천',7,4],['동작',6,4],['강서',6,4],['구로',4,4],['관악',3,4],['금천',2,4]];
+const REG=['동남권','도심권','동북권','서북권','서남권'];
+function mkSet(name,items){const s=[...items].sort((a,b)=>a[1]-b[1]),n=s.length,T=s.reduce((a,d)=>a+d[1],0);let c=0;const P=[[0,0]];s.forEach(d=>{c+=d[1];P.push([P.length/n,c/T])});
+  let B=0;for(let i=1;i<P.length;i++)B+=(P[i][0]-P[i-1][0])*(P[i][1]+P[i-1][1])/2;return{name,s,n,T,P,B,g:1-2*B}}
+const D0=mkSet('25개 구',RAW.map(r=>[r[0],r[1]]));
+const D1=mkSet('5개 권역',REG.map((n,r)=>[n,RAW.filter(x=>x[2]===r).reduce((a,x)=>a+x[1],0)]));
+// 같은 지니계수가 되도록: 24개 구는 1, 한 구는 b (G=24(b−1)/(25(24+b)) 를 풀어 b 계산)
+const bTop=(D0.g*25*24+24)/(24-D0.g*25);
+const D2=mkSet('한 구에 몰림',[...Array.from({length:24},(_,i)=>['가상'+(i+1),1]),['가상 25',bTop]]);
+const D3=mkSet('모든 구 똑같음',RAW.map(r=>[r[0],D0.T/25]));
+const SETS=[D0,D1,D2,D3];
+const sample=(P,x)=>{for(let i=1;i<P.length;i++)if(x<=P[i][0]+1e-9){const[a,b]=[P[i-1],P[i]];return b[1]+(a[1]-b[1])*(b[0]-x)/((b[0]-a[0])||1)}return 1};
+const XS=Array.from({length:101},(_,i)=>i/100);
+const TOTAL=26,T2=2.8,T3=5.4,T4=8.4,T5=11.6,T6=13.8,T7=17.0,T8=23.0;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',dUser=0,ptr=null,curY=XS.map(x=>sample(D0.P,x)),snap=true;
+try{const v=localStorage.getItem('lorenzLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640;const S=narrow?Math.min(W-62,H-330):Math.min(H-116,W*.54),ox=narrow?46:72,oy=narrow?72:56;
+  L={W,H,narrow,S,ox,oy,px:narrow?16:ox+S+56,py:narrow?oy+S+46:oy+4,pw:narrow?W-32:W-(ox+S+56)-20}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4')};
+  const{W,H,narrow,S,ox,oy,px,py,pw}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const X=x=>ox+x*S,Y=y=>oy+S-y*S;
+  const fin=t>=T8,DS=fin?SETS[dUser]:D0;
+  const a0=clamp(t/.5);
+  const pRise=clamp(t/2),pSort=ease(clamp((t-T2)/1.6)),pStack=ease(clamp((t-T3)/2)),pDot=fin?1:clamp((t-T4)/1.2),pLine=fin?1:clamp((t-T4-1.2)/1),
+        pDiag=fin?1:clamp((t-T5)/1),pArea=fin?1:clamp((t-T6)/1.2),pNum=fin?1:clamp((t-T6-1.2)/.6);
+  // 축(누적 비율) — 2단계까지는 조원 축
+  const pPct=pStack;
+  for(let k=0;k<=4;k++){const v=k/4;ln(X(0),Y(v),X(1),Y(v),C.line,1,null,a0);ln(X(v),Y(0),X(v),Y(1),C.line,1,null,a0*pPct);
+    txt(`${k*25}%`,X(0)-8,Y(v)+4,C.muted,`11px ${MONO}`,'right',a0*pPct);txt(`${k*25}%`,X(v),Y(0)+16,C.muted,`11px ${MONO}`,'center',a0*pPct);
+    txt(`${Math.round(32*v)}`,X(0)-8,Y(v)+4,C.muted,`11px ${MONO}`,'right',a0*(1-pPct))}
+  txt(pPct<.5?'거래금액(조원)':'거래금액 누적 비율',X(0)-(narrow?40:62),oy-12,C.muted,`11px ${SANS}`,'left',a0);
+  txt(pPct<.5?(pSort>.5?'작은 구부터 큰 구 순서':'25개 구'):`구 누적 비율 (${fin&&dUser===1?'권역':'구'}, 작은 순)`,X(1),Y(0)+34,C.muted,`11px ${SANS}`,'right',a0);
+  // 막대 → 계단
+  const ord0=RAW.map(r=>r[0]),ordS=D0.s.map(d=>d[0]);
+  const pBarsA=fin?0:1-.75*clamp((t-T4-1.2)/1);
+  if(!fin){const n=25,bw=S/n;let cum={};let c=0;D0.s.forEach(d=>{cum[d[0]]=c;c+=d[1]});
+    RAW.forEach(([nm,v,r])=>{const i0=ord0.indexOf(nm),i1=ordS.indexOf(nm),xi=lerp(i0,i1,pSort);const h0=v/32*S*pRise,h1=v/D0.T*S,b1=cum[nm]/D0.T*S;
+      const bot=lerp(0,b1,pStack),hh=lerp(h0,h1,pStack),xx=lerp(X(0)+xi*bw+1,X(0)+xi*bw,pStack),ww=lerp(bw-2,bw,pStack);
+      ctx.globalAlpha=pBarsA*(pStack>0?.75:.9);ctx.fillStyle=C.c1;ctx.fillRect(xx,Y(0)-bot-hh,ww,hh);ctx.globalAlpha=1;
+      if(pStack<.3&&v>=8)txt(nm,xx+ww/2,Y(0)-bot-hh-4,C.ink,`${narrow?8:9.5}px ${SANS}`,'center',(1-pStack/.3)*clamp((t-1.6)/.4))})}
+  // 평등선
+  if(pDiag>0){ln(X(0),Y(0),lerp(X(0),X(1),pDiag),lerp(Y(0),Y(1),pDiag),C.muted,1.6,[6,4],1);
+    const a=clamp((t-T5-.8)/.4)||(fin?1:0);ctx.save();ctx.translate(X(.55),Y(.55));ctx.rotate(-Math.PI/4);txt('완전 평등선(모든 구가 똑같을 때)',0,-8,C.muted,`700 ${narrow?10:11.5}px ${SANS}`,'center',fin?1:a);ctx.restore()}
+  // 곡선(최종은 부드럽게 전환)
+  const P=DS.P,yc=fin?curY:XS.map(x=>sample(P,x));
+  if(pArea>0){ctx.beginPath();ctx.moveTo(X(0),Y(0));XS.forEach((x,i)=>ctx.lineTo(X(x),Y(yc[i])));ctx.lineTo(X(1),Y(1));ctx.closePath();ctx.globalAlpha=.28*pArea;ctx.fillStyle=C.c4;ctx.fill();
+    ctx.beginPath();ctx.moveTo(X(0),Y(0));XS.forEach((x,i)=>ctx.lineTo(X(x),Y(yc[i])));ctx.lineTo(X(1),Y(0));ctx.closePath();ctx.globalAlpha=.16*pArea;ctx.fillStyle=C.c1;ctx.fill();ctx.globalAlpha=1;
+    const pa=fin?1:clamp((t-T6-.6)/.6);txt('A',X(.62),Y(.47),C.c4,`700 ${narrow?16:20}px ${SANS}`,'center',pa*(DS.g>.05?1:0));txt('B',X(.8),Y(.2),C.c1,`700 ${narrow?16:20}px ${SANS}`,'center',pa)}
+  if(pLine>0){ctx.beginPath();const nn=Math.round(100*pLine);for(let i=0;i<=nn;i++){const x=X(XS[i]),y=Y(yc[i]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.strokeStyle=C.c1;ctx.lineWidth=2.6;ctx.stroke();ctx.lineWidth=1}
+  if(pDot>0&&DS.n<=30)P.forEach(([x,y],i)=>{if(!i)return;const a=fin?1:clamp((t-T4-(i/P.length)*1)/.2);ctx.globalAlpha=a;ctx.fillStyle=C.paper;ctx.beginPath();ctx.arc(X(x),Y(fin?yc[Math.round(x*100)]:y),narrow?2.4:3.2,0,7);ctx.fill();ctx.strokeStyle=C.c1;ctx.lineWidth=1.6;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1});
+  // 7단계 비교 곡선
+  let cmp=null;if(!fin&&t>=T7)cmp=t<T7+3?D2:D1;
+  if(cmp){const pc=clamp((t-(t<T7+3?T7:T7+3))/.8);ctx.beginPath();cmp.P.forEach(([x,y],i)=>{i?ctx.lineTo(X(x),Y(y)):ctx.moveTo(X(x),Y(y))});ctx.globalAlpha=pc;ctx.strokeStyle=C.c3;ctx.lineWidth=2.6;ctx.setLineDash([7,4]);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1;
+    if(cmp.n<=5)cmp.P.forEach(([x,y],i)=>{if(i){ctx.globalAlpha=pc;ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(X(x),Y(y),4,0,7);ctx.fill();ctx.globalAlpha=1}})}
+  // 4단계: 읽기 예시 (하위 52%)
+  const rd=(fin?0:clamp((t-T4-2.2)/.5)*(1-clamp((t-T5-.2)/.4)));
+  if(rd>0){const q=D0.P[13];ln(X(q[0]),Y(0),X(q[0]),Y(q[1]),C.c3,1.6,[3,3],rd);ln(X(0),Y(q[1]),X(q[0]),Y(q[1]),C.c3,1.6,[3,3],rd);
+    const lb=narrow?`하위 13개 구(${Math.round(q[0]*100)}%) → ${Math.round(q[1]*100)}%`:`하위 13개 구(${Math.round(q[0]*100)}%) → 거래금액의 ${Math.round(q[1]*100)}%`,fx=narrow?X(0)+4:X(q[0])+8,fy=Y(q[1])-10;ctx.font=`700 ${narrow?11:12.5}px ${SANS}`;const tw=ctx.measureText(lb).width;ctx.globalAlpha=rd*.92;ctx.fillStyle=C.paper;ctx.fillRect(fx-3,fy-13,tw+6,18);ctx.globalAlpha=1;
+    txt(lb,fx,fy,C.c3,`700 ${narrow?11:12.5}px ${SANS}`,'left',rd)}
+  // 오른쪽 패널
+  const G1=(d)=>d.g.toFixed(2);
+  let yy=py;const line_=(s,c,f,a=1)=>{txt(s,px,yy,c,f,'left',a);yy+=narrow?17:20};
+  if(t<T3&&!fin){const a=a0;line_('25개 구 거래금액',C.ink,`700 13px ${SANS}`,a);line_(`합계 ${D0.T}조원 · 평균 ${(D0.T/25).toFixed(1)}조원`,C.muted,`12px ${SANS}`,a);
+    line_(pSort>.5?'가장 작은 구부터 큰 구 순서로 줄 세움':'아직 순서 없이 놓여 있음',C.muted,`12px ${SANS}`,a)}
+  else if(t<T6&&!fin){line_('누적하면 계단이 됩니다',C.ink,`700 13px ${SANS}`);line_('막대를 차례로 위에 쌓아 올림',C.muted,`12px ${SANS}`);
+    [[5,'하위 20%(5개 구)'],[13,'하위 52%(13개 구)'],[20,'하위 80%(20개 구)']].forEach(([k,lb])=>line_(`${lb} → ${Math.round(D0.P[k][1]*100)}%`,C.c1,`12px ${MONO}`,clamp((t-T4-1)/.6)));
+    line_(`상위 20%(5개 구) → ${Math.round((1-D0.P[20][1])*100)}%`,C.c4,`700 12px ${MONO}`,clamp((t-T4-1.6)/.6))}
+  else{const d=fin?DS:D0;const pa=fin?1:pNum;
+    line_('지니계수 = A ÷ (A + B)',C.ink,`700 13px ${SANS}`,pa);
+    line_('= 1 − 2 × B',C.muted,`12px ${MONO}`,pa);
+    txt(G1(d),px,yy+(narrow?22:30),C.c4,`700 ${narrow?30:40}px ${MONO}`,'left',pa);yy+=narrow?34:46;
+    // 게이지
+    const gw=Math.min(pw-10,260);ctx.globalAlpha=pa;ctx.fillStyle=C.soft;ctx.fillRect(px,yy,gw,10);ctx.fillStyle=C.c4;ctx.fillRect(px,yy,gw*d.g,10);ctx.globalAlpha=1;
+    txt('0 평등',px,yy+24,C.muted,`10px ${SANS}`,'left',pa);txt('1 한 곳 독점',px+gw,yy+24,C.muted,`10px ${SANS}`,'right',pa);yy+=narrow?40:46;
+    line_(`B 넓이 ${d.B.toFixed(3)} · 삼각형 0.5`,C.muted,`11px ${MONO}`,pa);
+    if(!fin&&t>=T7){yy+=4;line_('같은 지니, 다른 모양?',C.ink,`700 13px ${SANS}`);line_(`실선 25개 구: ${G1(D0)}`,C.c1,`12px ${MONO}`);
+      line_(`점선 한 구에 몰림: ${G1(D2)}`,C.c3,`12px ${MONO}`,clamp((t-T7)/.6));line_(`점선 5개 권역: ${G1(D1)}`,C.c3,`12px ${MONO}`,clamp((t-T7-3)/.6))}
+    if(fin){yy+=4;line_(`자료: ${DS.name} (${DS.n}개)`,C.ink,`700 12px ${SANS}`);if(DS.n>1&&dUser!==3){const top=DS.s[DS.n-1];line_(`가장 큰 ${dUser===2?'곳':DS===D1?'권역':'구'}: ${top[0]} ${(top[1]/DS.T*100).toFixed(0)}%`,C.muted,`12px ${SANS}`)}}}
+  // 단계 안내
+  if(!fin&&t>=T7){const m=t<T7+3?['점선: 24개 구는 똑같고 한 구에 약 절반이 몰림','→ 지니계수가 같음']:['점선: 구를 5개 권역으로 합치면','→ 지니계수가 작아짐'];if(narrow)m.forEach((l,k)=>txt(l,8,20+k*15,C.c3,`700 11.5px ${SANS}`,'left',1));else txt(m.join(' '),X(0),oy-34,C.c3,`700 12.5px ${SANS}`,'left',1)}
+  // 가리키기
+  if(fin&&ptr&&ptr.x>=X(0)-6&&ptr.x<=X(1)+6&&ptr.y>=Y(1)-10&&ptr.y<=Y(0)+10){let bi=1,bd=1e9;P.forEach(([x],i)=>{if(i&&Math.abs(X(x)-ptr.x)<bd){bd=Math.abs(X(x)-ptr.x);bi=i}});const[x,y]=P[bi],nm=DS.s[bi-1][0];
+    ln(X(x),Y(0),X(x),Y(y),C.ink,1,[3,3]);ln(X(0),Y(y),X(x),Y(y),C.ink,1,[3,3]);ctx.fillStyle=C.ink;ctx.beginPath();ctx.arc(X(x),Y(y),5,0,7);ctx.fill();
+    const unit=dUser===1?'권역':'구';const lines=[[`하위 ${bi}개 ${unit} (${(x*100).toFixed(0)}%)`,`700 13px ${SANS}`,C.ink],[`→ 거래금액의 ${(y*100).toFixed(1)}%`,`700 12px ${SANS}`,C.c1],[`${bi}번째로 작은 ${unit}: ${nm}`,`12px ${SANS}`,C.muted],[`상위 ${DS.n-bi}개 ${unit} → ${((1-y)*100).toFixed(1)}%`,`12px ${SANS}`,C.c4]];
+    const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=X(x)+14,y0=Y(y)-bh2-10;if(x0+bw2>W-6)x0=X(x)-14-bw2;if(y0<4)y0=Y(y)+14;
+    ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c],k)=>txt(s0,x0+10,y0+20+k*18,c,f,'left',1))}}
+
+const STEPS=[
+ {t:0,n:'원자료',s:'25개 구 거래금액',e:'서울 25개 구의 아파트 거래금액(조원)을 막대로 세웁니다. 강남·서초·송파처럼 큰 구도 있고, 1~2조원인 작은 구도 있습니다. "얼마나 한쪽에 쏠려 있나"를 숫자 하나로 나타내 보겠습니다.',u:'양수 값을 갖는 n=25 관측치(자치구별 거래금액)입니다. 분포의 집중도·불평등을 요약하는 것이 목표입니다.'},
+ {t:T2,n:'작은 순서로 줄 세우기',s:'오름차순 정렬',e:'가장 작은 구부터 가장 큰 구까지 차례로 줄을 세웁니다. 왼쪽은 작은 구, 오른쪽 끝은 강남입니다.',u:'관측치를 오름차순 정렬합니다(순서통계량 x₍₁₎ ≤ … ≤ x₍ₙ₎). 로렌츠 곡선은 하위 계층부터 누적합니다.'},
+ {t:T3,n:'차례로 쌓기',s:'누적 → 계단',e:'막대를 왼쪽부터 하나씩 앞 막대 위에 쌓아 올립니다. 그러면 계단 모양이 되고, 맨 오른쪽 꼭대기가 전체 합계(100%)입니다. 가로축도 "몇 번째 구까지"를 비율(%)로 바꿉니다.',u:'가로축은 누적 인구(단위) 비율 F=i/n, 세로축은 누적 몫 L(F)=Σx₍ⱼ₎/Σx 입니다. 막대의 높이가 몫(share)이 됩니다.'},
+ {t:T4,n:'로렌츠 곡선',s:'계단 끝점 잇기',e:'계단 끝점을 이으면 로렌츠 곡선이 됩니다. 노란 점선처럼 읽습니다: 하위 13개 구(52%)가 거래금액을 모두 합쳐도 20%밖에 안 됩니다.',u:'점 (i/n, L_i)을 선형 연결한 경험적 로렌츠 곡선입니다. 볼록(convex)하며 (0,0)과 (1,1)을 지납니다. 분위 점 읽기: L(0.52)=0.20.'},
+ {t:T5,n:'완전 평등선',s:'모두 똑같다면',e:'모든 구의 거래금액이 똑같다면 하위 50%는 정확히 50%를 차지하므로 곡선이 대각선이 됩니다. 실제 곡선이 대각선에서 아래로 멀리 휠수록 불평등합니다.',u:'완전 평등이면 L(F)=F(45° 선)입니다. 로렌츠 곡선과 평등선의 괴리가 집중도를 나타냅니다.'},
+ {t:T6,n:'지니계수 계산',s:'A ÷ (A+B)',e:'평등선과 곡선 사이(분홍 A)가 넓을수록 불평등합니다. 지니계수 = A ÷ (A+B)로, 0이면 완전 평등, 1이면 한 구가 전부 차지한 것입니다. 여기서는 0.47입니다.',u:'G = A/(A+B) = 1 − 2B, B=∫₀¹L(F)dF(사다리꼴 적분). 평균 절대 차이로는 G = ΣΣ|xᵢ−xⱼ|/(2n²μ)와 같습니다. 여기서 G=0.47입니다.'},
+ {t:T7,n:'지니계수의 함정',s:'같은 숫자 · 단위 바꾸기',e:'① 노란 점선은 24개 구가 모두 똑같고 한 구에 약 절반이 몰린 가상 자료인데, 지니계수가 똑같이 0.47입니다. 숫자는 같아도 불평등의 모양은 전혀 다릅니다. ② 구를 5개 권역으로 합쳐서 계산하면 지니계수가 0.34로 작아집니다.',u:'① 지니계수는 로렌츠 곡선을 하나의 스칼라로 요약하므로 서로 교차하는 곡선이 같은 G를 가질 수 있습니다(곡선 형태 함께 보고). ② 집계 단위가 커지면 단위 내부 불평등이 사라져 G가 감소합니다(집계 수준 의존성, MAUP와 연결).'},
+ {t:T8,n:'완성',s:'25개 구 로렌츠 곡선',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 위의 "자료"를 바꿔 보세요. "모든 구 똑같음"은 곡선이 대각선과 겹치고 지니계수가 0, "한 구에 몰림"은 숫자는 같은데 모양이 다릅니다. 곡선에 마우스를 올리면 하위 몇 %가 몇 %를 차지하는지 나옵니다.':'완성입니다. 자료를 바꿔 집계 단위 효과(구 0.47 → 권역 0.34)와 같은 G·다른 곡선 사례를 비교하세요. 보고 시 단위·변수·n을 명시하고, 지니계수와 함께 분위 몫(상위 20% 비중 등)이나 곡선을 제시합니다.'}
+const LEDE={e:'로렌츠 곡선은 작은 것부터 차례로 쌓아 "하위 몇 %가 전체의 몇 %를 차지하나"를 그린 곡선이고, 지니계수는 그 쏠림을 0~1 숫자 하나로 나타낸 값입니다. 서울 25개 구의 거래금액 막대를 정렬하고 쌓아 곡선과 지니계수를 만드는 과정을 보여줍니다.',u:'로렌츠 곡선은 누적 단위 비율 대비 누적 몫을 나타낸 집중곡선이며, 지니계수는 평등선과 곡선 사이 면적의 비율로 정의되는 불평등 지표입니다. 정렬·누적·정규화·면적 적분과 지니계수의 요약 한계, 집계 단위 의존성을 단계별로 보여줍니다.'};
+const GT=[['0',{e:'모든 구가 똑같음 (완전 평등)',u:'완전 평등'},{e:'대각선과 겹침',u:'L(F)=F'}],['0.2 ~ 0.3',{e:'조금 차이 있음',u:'낮은 집중'},{e:'대각선 가까이 살짝 휨',u:'완만한 볼록'}],['0.4 ~ 0.5',{e:'꽤 쏠려 있음 (이 예시 0.47)',u:'상당한 집중'},{e:'아래로 많이 휨',u:'뚜렷한 볼록'}],['0.6 이상',{e:'몇 곳이 대부분을 차지',u:'높은 집중'},{e:'바닥에 붙어 가다 끝에서 급상승',u:'강한 볼록, 끝단 급증'}],['1',{e:'한 곳이 전부 차지',u:'완전 집중(n→∞ 극한)'},{e:'바닥을 따라가다 끝에서 수직',u:'L(F)=0 (F<1)'}]];
+const CHK={e:['값이 모두 0 이상인가요? (음수가 있으면 쓸 수 없음)','어떤 단위(구, 동, 권역)로 계산했는지 적었나요?','지니계수 숫자만 쓰지 않고 곡선이나 "상위 20%의 몫"도 함께 보여줬나요?','개수(n)가 너무 적지 않나요? (몇 개뿐이면 지니계수가 불안정)','총액(거래금액)인지, 1인당·1세대당 값인지 적었나요?'],
+ u:['비음(非陰) 변수인가(음수 포함 시 G 정의 문제)','집계 단위와 n을 명시했는가(집계 수준 의존성)','G와 함께 로렌츠 곡선·분위 몫(팔마 비율 등)을 제시했는가','소표본 편의(유한표본 보정 n/(n−1))를 고려했는가','총량 vs 1인당 정규화 값 중 무엇의 불평등인지 정의했는가']};
+const PC={
+ pro:[
+  {t:'쏠림을 숫자 하나로 비교한다',e:'"강남 쪽으로 거래가 쏠렸다"를 0.47처럼 숫자 하나로 말할 수 있어서, 해마다 또는 도시끼리 비교하기 좋습니다.',u:'단위·척도와 무관한 0~1 지표로 시점 간·지역 간 집중도 비교가 가능합니다.',x:'연도별 구간 <b>거래금액 지니계수</b> 추이.'},
+  {t:'곡선으로 어디서 불평등한지 본다',e:'곡선을 보면 "하위 절반이 20%", "상위 20%가 53%"처럼 어느 구간에서 차이가 큰지 읽을 수 있습니다.',u:'로렌츠 곡선은 전 분위에 걸친 몫을 보여주므로 하위·상위 꼬리의 집중 구조를 해석할 수 있습니다.',x:'<b>상위 5개 구 = 53%</b>, 하위 13개 구 = 20%.'},
+  {t:'단위를 바꿔도 결과가 같다',e:'조원을 억원으로 바꾸거나 모든 값을 2배로 해도 지니계수는 그대로입니다.',u:'척도 불변성(scale invariance)과 이전 원리(Pigou-Dalton)를 만족하는 표준 불평등 지표입니다.',x:'금액 단위 <b>조원 ↔ 억원</b> 무관.'},
+  {t:'부동산·경제 분야에서 널리 쓴다',e:'소득 불평등, 주택 자산 불평등, 상권 매출 쏠림 등 여러 곳에서 쓰는 익숙한 지표입니다.',u:'소득·자산 분배, 주택 소유 집중, 상권 매출 집중(입지 분석) 등에 표준적으로 활용됩니다.',x:'점포 매출 <b>상위 업소 집중도</b> 분석.'}],
+ con:[
+  {t:'같은 숫자, 다른 모양',e:'지니계수가 똑같아도 "한 곳에 몰린 경우"와 "골고루 조금씩 차이 나는 경우"가 있을 수 있습니다.',u:'로렌츠 곡선이 교차하면 G가 같아도 분배 구조가 다릅니다. 단일 지표로 순위를 매기면 정보가 손실됩니다.',x:'7단계 <b>실선 vs 점선</b> 모두 G=0.47.'},
+  {t:'계산 단위에 따라 값이 바뀐다',e:'25개 구로 계산하면 0.47, 5개 권역으로 합치면 0.34처럼 단위를 바꾸면 숫자가 달라집니다.',u:'집계 수준이 높을수록 단위 내부 변동이 사라져 G가 과소평가됩니다(집계 수준 의존성).',x:'<b>구 0.47 → 권역 0.34</b>.'},
+  {t:'총액은 규모 차이를 섞는다',e:'거래금액 총액은 세대가 많은 구가 당연히 큽니다. "가격"의 불평등을 보려면 세대당이나 평당 값을 써야 합니다.',u:'총량 변수의 G는 단위 규모(인구·면적) 차이를 포함합니다. 목적에 맞게 1인당·면적당 등으로 정규화합니다.',x:'<b>거래금액</b> vs <b>평당가</b>의 지니계수.'},
+  {t:'개수가 적으면 불안정하다',e:'5개처럼 개수가 적으면 하나만 바뀌어도 지니계수가 크게 변하고, 최댓값도 1에 닿지 못합니다.',u:'소표본에서 G는 하향 편의가 있고(최댓값 (n−1)/n), 표본 변동이 큽니다. 보정식이나 신뢰구간(부트스트랩)을 고려합니다.',x:'권역 5개면 최대 <b>0.8</b>.'}],
+ tip:{e:'<b>정리:</b> 작은 것부터 쌓은 곡선이 로렌츠 곡선, 대각선과의 차이를 0~1로 나타낸 것이 지니계수입니다. 숫자만 보지 말고 곡선과 계산 단위도 함께 보세요.',
+      u:'<b>권장 사용법:</b> ① 비음 변수 확인 ② 집계 단위·n 명시 ③ G와 로렌츠 곡선·분위 몫 병기 ④ 총량은 정규화 여부 정의 ⑤ 소표본은 보정·부트스트랩 신뢰구간 ⑥ 시점·지역 비교 시 같은 단위로 계산.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('gNote').textContent=lv==='e'?'지니계수가 커질수록 곡선이 대각선에서 아래로 더 멀리 휩니다.':'G 수준별 해석과 곡선 형태입니다(구간 해석은 관례적 기준).';
+  $('gBody').innerHTML=GT.map(([n,a,b])=>`<tr><td><b>${n}</b></td><td>${a[lv]}</td><td>${b[lv]}</td></tr>`).join('');
+  $('chkNote').textContent=lv==='e'?'로렌츠 곡선과 지니계수를 쓸 때 다섯 가지를 확인하세요.':'작성·해석 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  const tg=XS.map(x=>sample((t>=T8?SETS[dUser]:D0).P,x)),k=snap?1:Math.min(1,dt*4);snap=false;curY=curY.map((y,i)=>lerp(y,tg[i],k));
+  draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.6;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;snap=true});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1;snap=true};
+$('speed').onchange=e=>speed=+e.target.value;
+$('dSel').onchange=e=>{dUser=+e.target.value;toEnd()};
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1;snap=true};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('lorenzLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('lorenzLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

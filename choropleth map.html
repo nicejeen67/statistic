@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>단계구분도가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 왼쪽 서울 타일맵 / 아래 수직선(등급 나누기) / 오른쪽 범례 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6; --lo:#eef3f9;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:640px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 18 · 공간</div>
+    <h1>단계구분도가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="서울 25개 구 타일맵에 값을 등급으로 나눠 색칠하는 단계구분도 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 칸에 마우스를 올리거나(휴대폰은 누르기) 하면 그 구의 값과 등급이 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><span>칠할 값</span><select id="vSel" aria-label="칠할 값"><option value="0" selected>평당 매매가</option><option value="1">거래 건수(절대값)</option><option value="2">1천 세대당 거래(비율)</option></select></div>
+    <div class="grp"><span>등급 방법</span><select id="mSel" aria-label="등급 나누는 방법"><option value="0">등간격</option><option value="1">분위수(같은 개수)</option><option value="2" selected>자연구분</option></select></div>
+    <div class="grp"><span>등급 수</span><select id="kSel" aria-label="등급 수"><option value="3">3</option><option value="5" selected>5</option><option value="7">7</option></select></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="25" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>등급을 나누는 세 가지 방법</h2>
+      <p class="note" id="mNote"></p>
+      <div class="tbl"><table><thead><tr><th>방법</th><th>나누는 원리</th><th>잘 맞는 경우</th></tr></thead><tbody id="mBody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>단계구분도 점검표</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">단계구분도(타일맵)를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 평당가·거래 건수·세대수는 설명용으로 만든 예시 값이며 실제 통계가 아닙니다. 타일 배치는 실제 위치를 단순화한 것입니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+// [이름, 열, 행, 평당가(천만원), 세대수(천), 1천세대당 거래]
+const G=[['도봉',3,0,2.2,130,16],['노원',4,0,2.6,220,21],['은평',1,1,2.9,200,14],['강북',2,1,2.3,140,12],['성북',3,1,3.1,190,15],['중랑',4,1,2.4,170,13],
+ ['서대문',1,2,3.5,130,15],['종로',2,2,4.0,65,9],['동대문',3,2,3.3,150,14],['광진',4,2,4.4,150,17],['강서',0,3,3.4,260,18],['마포',1,3,4.6,170,21],['중구',2,3,4.1,60,10],['성동',3,3,5.0,130,22],['강동',5,3,4.2,200,18],
+ ['양천',0,4,4.4,190,17],['영등포',1,4,4.0,180,18],['용산',2,4,6.2,100,14],['서초',3,4,7.4,170,16],['강남',4,4,7.8,230,17],['송파',5,4,6.0,280,19],['구로',0,5,2.8,180,16],['금천',1,5,2.4,110,13],['동작',2,5,4.1,170,17],['관악',3,5,2.9,240,11]];
+const VARS=[{n:'평당 매매가',u:'천만원',f:v=>v.toFixed(1),get:g=>g[3]},{n:'거래 건수',u:'건',f:v=>Math.round(v).toLocaleString(),get:g=>g[4]*g[5]},{n:'1천 세대당 거래',u:'건',f:v=>v.toFixed(0),get:g=>g[5]}];
+const TOTAL=25,T2=1.8,T3=4.4,T4=8.0,T5=10.0,T6=11.6,T7=14.2,T8=22.6;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+// 등급 경계
+function breaks(vals,k,m){const s=[...vals].sort((a,b)=>a-b),mn=s[0],mx=s[s.length-1];
+  if(m===0)return Array.from({length:k-1},(_,i)=>mn+(mx-mn)*(i+1)/k);
+  if(m===1)return Array.from({length:k-1},(_,i)=>{const p=(i+1)/k*(s.length),lo=Math.floor(p)-1;return (s[Math.max(0,lo)]+s[Math.min(s.length-1,lo+1)])/2});
+  // 자연구분(Jenks): 동적계획법
+  const n=s.length,LC=Array.from({length:n+1},()=>Array(k+1).fill(0)),VC=Array.from({length:n+1},()=>Array(k+1).fill(Infinity));
+  for(let j=1;j<=k;j++){LC[1][j]=1;VC[1][j]=0}
+  for(let l=2;l<=n;l++){let s1=0,s2=0,w=0;for(let m2=1;m2<=l;m2++){const i3=l-m2+1,v=s[i3-1];s2+=v*v;s1+=v;w++;const vv=s2-s1*s1/w,i4=i3-1;if(i4)for(let j=2;j<=k;j++)if(VC[l][j]>=vv+VC[i4][j-1]){LC[l][j]=i3;VC[l][j]=vv+VC[i4][j-1]}}LC[l][1]=1;VC[l][1]=s2-s1*s1/w}
+  const out=[];let kk=n;for(let j=k;j>=2;j--){const id=LC[kk][j]-2;out.unshift((s[id]+s[id+1])/2);kk=LC[kk][j]-1}return out}
+const classOf=(v,b)=>{let c=0;while(c<b.length&&v>b[c])c++;return c};
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',vUser=0,mUser=2,kUser=5,ptr=null;
+let colCur=G.map(()=>0); // 현재 표시 색 단계(부드럽게)
+try{const v=localStorage.getItem('choroLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640;const ts=narrow?Math.min((W-32)/6,58):Math.min((W*.62-40)/6,(H-210)/6,70),gap=narrow?3:4;
+  const mx=narrow?(W-6*ts)/2:30,my=60;const nlY=my+6*ts+(narrow?44:52);
+  L={W,H,narrow,ts,gap,mx,my,nlY,nlX0:narrow?20:30,nlX1:narrow?W-20:mx+6*ts,lgX:narrow?20:mx+6*ts+40}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function hx(s){s=s.replace('#','');if(s.length===3)s=s.split('').map(c=>c+c).join('');const n=parseInt(s,16);return[n>>16&255,n>>8&255,n&255]}
+function ramp(f){const a=hx(col('--lo')),b=hx(col('--c1'));return a.map((v,i)=>Math.round(lerp(v,b[i],f)))}
+const rgb=a=>`rgb(${a[0]},${a[1]},${a[2]})`,lum=a=>(.299*a[0]+.587*a[1]+.114*a[2])/255;
+
+// 시간표 상태(시연용 변수·방법)
+function sched(){if(t<T7)return{v:0,m:2,k:5};if(t<T7+2.4)return{v:0,m:0,k:5};if(t<T7+4.6)return{v:0,m:1,k:5};if(t<T7+6.2)return{v:1,m:2,k:5};if(t<T8)return{v:2,m:2,k:5};return{v:vUser,m:mUser,k:kUser}}
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c3:col('--c3'),c4:col('--c4'),c2:col('--c2')};
+  const{W,H,narrow,ts,gap,mx,my,nlY,nlX0,nlX1,lgX}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  const S=sched(),V=VARS[S.v],vals=G.map(V.get),mn=Math.min(...vals),mx2=Math.max(...vals),B=breaks(vals,S.k,S.m),cls=vals.map(v=>classOf(v,B));
+  const pMap=t<T2?0:ease(clamp((t-T2)/1.6));     // 표 → 타일 위치
+  const pNL=clamp((t-T3)/.6);                     // 수직선
+  const pB=clamp((t-T3-1.6)/.8);                  // 경계선
+  const pC=t<T4?0:clamp((t-T4)/1.2);             // 색칠
+  const pL=clamp((t-T5)/.6);                      // 범례
+  // 색 단계 목표
+  const target=cls.map(c=>S.k>1?c/(S.k-1):0);
+  txt(t<T2?'원자료: 서울 25개 구의 평당 매매가 (단위: 천만원)':`서울 25개 구 · ${V.n}${S.v===2?' (비율)':S.v===1?' (절대값)':''}`,narrow?16:30,22,C.muted,`500 12px ${SANS}`,'left',a0);
+  // 수직선
+  if(pNL>0){const X=v=>nlX0+(v-mn)/(mx2-mn||1)*(nlX1-nlX0);ln(nlX0,nlY,nlX1,nlY,C.muted,1.5,null,pNL);
+    txt(`${V.f(mn)}`,nlX0,nlY+18,C.muted,`10px ${MONO}`,'center',pNL);txt(`${V.f(mx2)}`,nlX1,nlY+18,C.muted,`10px ${MONO}`,'center',pNL);txt(`${V.n}(${V.u})`,nlX1,nlY+32,C.muted,`10px ${SANS}`,'right',pNL);
+    if(pB>0)B.forEach(b=>{ln(X(b),nlY-16,X(b),nlY+8,C.c4,2,[3,2],pB);txt(V.f(b),X(b),nlY-20,C.c4,`700 10px ${MONO}`,'center',pB)});
+    G.forEach((g,i)=>{const x=X(vals[i]),jit=((i*7)%5-2)*3.2;const cc=ramp(colCur[i]);ctx.globalAlpha=pNL;ctx.fillStyle=pB>0?rgb(cc):C.ink;ctx.beginPath();ctx.arc(x,nlY-4+jit*.4,4.2,0,7);ctx.fill();ctx.strokeStyle=C.ink;ctx.lineWidth=.6;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1});
+    txt(['등간격','분위수','자연구분'][S.m]+` · ${S.k}등급`,nlX0+40,nlY+18,C.c4,`700 12px ${SANS}`,'left',pB)}
+  // 타일
+  const hits=[];
+  G.forEach((g,i)=>{const[n,c,r]=g;const tx=mx+c*ts,ty=my+r*ts;
+    const cols=narrow?5:5,lx=(narrow?16:30)+(i%cols)*((narrow?W-32:W-60)/cols),ly=my+Math.floor(i/cols)*34;
+    const x=lerp(lx,tx,pMap),y=lerp(ly,ty,pMap),w=lerp((narrow?W-32:W-60)/cols-8,ts-gap,pMap),h=lerp(28,ts-gap,pMap);
+    const cc=ramp(colCur[i]);
+    ctx.globalAlpha=a0;ctx.fillStyle=pC>0?rgb(ramp(colCur[i]*pC)):C.soft;ctx.fillRect(x,y,w,h);ctx.strokeStyle=C.line;ctx.strokeRect(x+.5,y+.5,w-1,h-1);ctx.globalAlpha=1;
+    const dark=pC>0&&lum(ramp(colCur[i]*pC))<.5,tc=dark?'#fff':C.ink;
+    if(pMap<1){txt(`${n}  ${V.f(vals[i])}`,x+w/2,y+h/2+4,C.ink,`${narrow?11:12}px ${SANS}`,'center',a0)}
+    else{txt(n,x+w/2,y+h/2-(ts>52?4:0),tc,`700 ${ts>52?12:10}px ${SANS}`,'center',1);if(ts>52)txt(V.f(vals[i]),x+w/2,y+h/2+12,tc,`10.5px ${MONO}`,'center',clamp((t-T2-1.6)/.4))}
+    if(pMap>=1)hits.push({i,x,y,w,h})});
+  // 범례
+  if(pL>0){const lx=narrow?20:lgX,ly=narrow?nlY+48:my+4,bw2=narrow?(W-40)/S.k:26,bh2=narrow?14:Math.min(36,(6*ts-40)/S.k);
+    txt(`${V.n} (${V.u})`,lx,ly-6+(narrow?0:6),C.ink,`700 12px ${SANS}`,'left',pL);
+    for(let c=0;c<S.k;c++){const cc=ramp(S.k>1?c/(S.k-1):0),lo=c===0?mn:B[c-1],hi=c===S.k-1?mx2:B[c],cnt=cls.filter(x=>x===c).length;
+      if(narrow){ctx.globalAlpha=pL;ctx.fillStyle=rgb(cc);ctx.fillRect(lx+c*bw2,ly+4,bw2-2,bh2);ctx.globalAlpha=1;txt(V.f(lo),lx+c*bw2,ly+bh2+16,C.muted,`9px ${MONO}`,'left',pL)}
+      else{const yy=ly+16+(S.k-1-c)*(bh2+4);ctx.globalAlpha=pL;ctx.fillStyle=rgb(cc);ctx.fillRect(lx,yy,bw2,bh2);ctx.strokeStyle=C.line;ctx.strokeRect(lx+.5,yy+.5,bw2-1,bh2-1);ctx.globalAlpha=1;
+        txt(`${V.f(lo)} ~ ${V.f(hi)}`,lx+bw2+10,yy+bh2/2+4,C.ink,`12px ${MONO}`,'left',pL);txt(`${cnt}곳`,lx+bw2+150,yy+bh2/2+4,C.muted,`11px ${SANS}`,'left',pL)}}}
+  // 6단계: 군집 강조
+  const p6=(t>=T6&&t<T7)?clamp((t-T6)/.6)*(1-clamp((t-T7+.4)/.4)):0;
+  if(p6>0){const grp=['용산','서초','강남','송파'];grp.forEach(n=>{const g=G.find(x=>x[0]===n);ctx.globalAlpha=p6;ctx.strokeStyle=C.c3;ctx.lineWidth=3.5;ctx.strokeRect(mx+g[1]*ts+1,my+g[2]*ts+1,ts-gap-2,ts-gap-2);ctx.lineWidth=1;ctx.globalAlpha=1});
+    txt('비싼 구가 한강 남동쪽에 모여 있음',mx+3*ts,my+6*ts+18,C.c3,`700 13px ${SANS}`,'center',p6)}
+  // 7단계 안내
+  if(t>=T7&&t<T8){const msg=t<T7+4.6?`같은 값, 등급 방법만 바꿈 → ${['등간격','분위수','자연구분'][S.m]}`:S.v===1?'절대값(거래 건수): 세대가 많은 큰 구가 진해짐':'비율(1천 세대당): 규모 효과를 없앤 진짜 활발도';
+    const a=1;txt(msg,narrow?16:mx,my-14,S.v===1?C.c4:C.c2,`700 13px ${SANS}`,'left',a)}
+  // 가리키기
+  if(t>=T8&&ptr){const h=hits.find(q=>ptr.x>=q.x&&ptr.x<q.x+q.w&&ptr.y>=q.y&&ptr.y<q.y+q.h);
+    if(h){const g=G[h.i];ctx.strokeStyle=C.ink;ctx.lineWidth=3;ctx.strokeRect(h.x+1.5,h.y+1.5,h.w-3,h.h-3);ctx.lineWidth=1;
+      const lines=[[`${g[0]}구`,`700 13px ${SANS}`,C.ink],[`${V.n}: ${V.f(vals[h.i])}${V.u}`,`12px ${SANS}`,C.ink],[`${S.k}등급 중 ${cls[h.i]+1}등급`,`700 12px ${SANS}`,C.c4],[`세대수 ${g[4]}천 · 평당가 ${g[3].toFixed(1)}천만원`,`11px ${SANS}`,C.muted]];
+      ctx.font=`700 13px ${SANS}`;const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=ptr.x+14,y0=ptr.y+14;if(x0+bw2>W-6)x0=ptr.x-14-bw2;if(y0+bh2>H-6)y0=ptr.y-14-bh2;
+      ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c],k)=>txt(s0,x0+10,y0+20+k*18,c,f,'left',1))}}
+  return target}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'25개 구의 값',e:'서울 25개 구의 평당 매매가입니다. 숫자 목록만 봐서는 비싼 구가 서울의 어느 쪽에 모여 있는지 알 수 없습니다.',u:'공간 단위(자치구)별로 집계된 연속형 속성값입니다. 단계구분도는 이러한 면(area) 단위 자료의 공간 분포를 표현합니다.'},
+ {t:T2,n:'지도 위에 놓기',s:'같은 크기 칸으로',e:'각 구를 실제 위치와 비슷한 자리의 같은 크기 네모 칸으로 옮깁니다. 실제 지도는 구마다 넓이가 달라서 넓은 구가 더 눈에 띄는데, 같은 크기 칸으로 만들면 그런 착시가 없습니다.',u:'행정구역을 동일 면적 격자로 추상화한 타일 그리드맵(tile grid map)입니다. 실제 면적 차이로 인한 시각적 가중을 제거하는 대신 정확한 형태·인접성 일부를 포기합니다.'},
+ {t:T3,n:'값을 등급으로 나누기',s:'수직선 위에 경계 긋기',e:'값을 수직선 위에 점으로 찍고, 빨간 경계선으로 5개 구간(등급)을 나눕니다. 같은 구간에 들어간 구는 같은 색이 됩니다.',u:'연속값을 k개 계급으로 분류(classification)합니다. 여기서는 자연구분(Jenks)으로 계급 내 분산을 최소화하는 경계를 정했습니다.'},
+ {t:T4,n:'색칠하기',s:'높을수록 진하게',e:'등급이 높을수록 진한 파랑으로 칸을 칠합니다. 한 가지 색의 진하기만 바꾸는 것이 원칙입니다.',u:'순차형(sequential) 단색 명도 척도를 적용합니다. 높고 낮음만 있는 변수에는 무지개색 대신 단일 색상의 명도 단계를 씁니다.'},
+ {t:T5,n:'범례 붙이기',s:'색 = 어느 구간',e:'오른쪽에 범례를 붙입니다. 각 색이 어느 값 구간인지, 그 구간에 몇 개 구가 있는지 적었습니다.',u:'계급 구간과 빈도를 범례로 명시합니다. 경계값 표기는 지도의 해석 가능성을 결정하는 필수 요소입니다.'},
+ {t:T6,n:'공간 패턴 읽기',s:'어디에 모여 있나',e:'진한 칸이 용산·서초·강남·송파처럼 한강 남동쪽에 모여 있습니다. 숫자 표로는 안 보이던 "어디가 비싼가"가 지도에서 바로 보입니다.',u:'고가 지역의 공간적 군집(spatial clustering)이 드러납니다. 이 패턴의 통계적 유의성은 Moran\'s I 같은 공간자기상관 지표로 검정할 수 있습니다(QGIS에서도 계산 가능).'},
+ {t:T7,n:'단계구분도의 함정',s:'등급 방법, 절대값 vs 비율',e:'① 같은 값인데 등급 나누는 방법(등간격, 분위수)만 바꿔도 지도 색이 달라집니다. ② "거래 건수"를 그대로 칠하면 세대가 많은 큰 구가 진해집니다. "1천 세대당 거래"처럼 비율로 바꿔야 진짜 거래가 활발한 곳이 보입니다.',u:'① 분류 방법·계급 수에 따라 동일 자료의 지도 인상이 달라집니다. ② 절대값(총량)은 모집단 크기에 비례하므로 단계구분도에는 비율·밀도로 정규화한 값을 써야 합니다(정규화 원칙).'},
+ {t:T8,n:'완성',s:'평당가 단계구분도',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 위의 "칠할 값", "등급 방법", "등급 수"를 바꿔 같은 서울이 얼마나 다르게 보이는지 직접 확인해 보세요. 특히 "거래 건수"와 "1천 세대당 거래"를 번갈아 보면 차이가 큽니다.':'완성된 타일 단계구분도입니다. 보고 시 분류 방법·계급 수·경계값을 명시하고, 총량 변수는 정규화한 비율로 표현합니다. 실제 경계 기반 지도와 비교하려면 다음 페이지의 경계지도를 참고하세요.'}
+const LEDE={e:'단계구분도는 지역마다 값의 크기에 따라 색의 진하기를 달리 칠한 지도입니다. 서울 25개 구를 같은 크기 칸으로 놓고, 값을 몇 개 등급으로 나눠 색칠하는 과정과, 등급 나누는 방법·칠하는 값에 따라 지도가 달라지는 함정을 보여줍니다.',u:'단계구분도(choropleth map)는 면 단위 속성값을 계급으로 분류해 명도 척도로 부호화한 주제도입니다. 타일 그리드 추상화, 분류(등간격·분위수·자연구분), 순차형 색상, 범례, 공간 패턴 판독, 분류 민감성과 정규화 원칙을 단계별로 보여줍니다.'};
+const METH=[['등간격',{e:'가장 작은 값부터 큰 값까지를 똑같은 폭으로 자름',u:'(최댓값 − 최솟값)/k 간격'},{e:'값이 고르게 퍼져 있을 때',u:'균등분포에 가까운 자료, 구간 의미 전달이 중요할 때'}],['분위수',{e:'각 등급에 들어가는 구의 개수를 똑같이 맞춤',u:'각 계급의 관측치 수 = n/k'},{e:'순위(상위 20% 등)를 보여줄 때',u:'순위 비교, 치우친 분포에서 색 다양성 확보(경계값 차이는 왜곡 가능)'}],['자연구분',{e:'값이 뭉친 덩어리 사이의 빈틈에서 자름',u:'Jenks: 계급 내 분산 최소·계급 간 분산 최대'},{e:'값에 자연스러운 무리가 있을 때',u:'군집 구조가 있는 자료, QGIS 기본 분류 중 하나'}]];
+const CHK={e:['총 건수가 아니라 비율(세대당, 면적당)을 칠했나요?','등급 나누는 방법과 등급 수를 적었나요?','범례에 각 색의 값 구간이 있나요?','높고 낮음만 있는 값에 한 가지 색의 진하기를 썼나요? (무지개색 X)','등급은 5개 안팎인가요? (너무 많으면 색 구분 어려움)'],
+ u:['총량 변수를 비율·밀도로 정규화했는가','분류 방법과 계급 수를 명시했는가','범례에 계급 경계값을 표기했는가','순차형(단색 명도) 또는 발산형(기준값 중심) 색상을 목적에 맞게 썼는가','계급 수가 인지 한계(약 5~7) 이내인가']};
+const PC={
+ pro:[
+  {t:'"어디가 높은가"가 한눈에 보인다',e:'숫자 표로는 알기 어려운 "비싼 구가 서울의 어느 쪽에 모여 있나"가 지도에서 바로 보입니다.',u:'속성값의 공간 분포와 군집·경향을 직관적으로 드러냅니다. 입지 분석의 탐색 단계에 필수적입니다.',x:'<b>한강 남동쪽 고가 지역</b> 군집.'},
+  {t:'같은 크기 칸이라 면적 착시가 없다',e:'실제 지도에서는 강서구·노원구처럼 넓은 구가 크게 보이지만, 같은 크기 칸으로 만들면 모든 구가 공평하게 보입니다.',u:'타일맵은 면적 차이에 따른 시각적 가중(큰 구가 과대 강조되는 문제)을 제거합니다.',x:'작은 <b>중구·종로</b>도 다른 구와 같은 크기로.'},
+  {t:'누구나 쉽게 읽는다',e:'"진할수록 높다"만 알면 되므로 일반인 대상 보고서에도 쓰기 좋습니다.',u:'명도 척도는 직관적 서열 부호화로 학습 부담이 낮아 정책 보고서·언론에 널리 쓰입니다.',x:'구청별 <b>정책 대상 지역</b> 안내 지도.'},
+  {t:'QGIS 등에서 바로 만들 수 있다',e:'QGIS 같은 지도 프로그램의 기본 기능이라 실습하기 쉽습니다.',u:'GIS 소프트웨어의 기본 심볼로지(단계 구분)로 분류 방법 선택과 범례 생성을 지원합니다.',x:'QGIS <b>레이어 속성 → 심볼 → 단계 구분</b>.'}],
+ con:[
+  {t:'등급 나누는 방법에 따라 지도가 달라진다',e:'같은 자료인데 등간격, 분위수, 자연구분 중 무엇을 고르느냐에 따라 진한 구가 달라집니다.',u:'분류 방법·계급 수·경계값 선택이 지도의 메시지를 바꿀 수 있습니다(분류 민감성). 방법 명시와 민감도 확인이 필요합니다.',x:'7단계처럼 <b>등간격 ↔ 분위수</b>로 색이 바뀜.'},
+  {t:'총 건수를 칠하면 속는다',e:'거래 건수, 인구 수 같은 "총합"을 칠하면 사람이 많이 사는 큰 구가 항상 진하게 나옵니다.',u:'총량은 모집단 크기에 비례하므로 단계구분도에는 비율·밀도로 정규화한 값을 써야 합니다. 총량은 비례 기호도(원 크기)로 표현합니다.',x:'<b>거래 건수 vs 1천 세대당 거래</b> 비교.'},
+  {t:'구 안의 차이는 보이지 않는다',e:'한 구를 한 가지 색으로 칠하기 때문에, 같은 구 안에서도 비싼 동과 싼 동이 섞여 있다는 것은 보이지 않습니다.',u:'집계 단위 내부의 이질성이 사라지며, 집계 단위를 바꾸면 결과가 달라지는 공간 단위 문제(MAUP)가 있습니다.',x:'<b>강남구</b> 안의 압구정동과 수서동 차이.'},
+  {t:'타일맵은 실제 모양과 이웃이 다르다',e:'네모 칸으로 단순화했기 때문에 실제로 붙어 있는 구가 떨어져 보이거나, 실제 모양을 알기 어렵습니다.',u:'타일 그리드는 위상(인접 관계)을 근사할 뿐 정확히 보존하지 못합니다. 정밀한 공간 분석에는 실제 경계 지도를 사용합니다.',x:'다음 페이지의 <b>실제 경계지도</b>와 비교.'},
+  {t:'색 판단은 정확하지 않다',e:'비슷한 진하기의 색은 구분하기 어렵고, 주변 색에 따라 같은 색도 다르게 보입니다.',u:'명도 판독은 정밀도가 낮고 동시 대비(simultaneous contrast)의 영향을 받습니다. 정확한 값은 라벨·툴팁·표로 보완합니다.',x:'칸 안의 <b>숫자와 가리키기 상자</b>로 보완.'}],
+ tip:{e:'<b>정리:</b> 단계구분도는 "어디가 높은가"를 보여주는 지도입니다. 꼭 비율로 칠하고, 등급 나누는 방법과 범례를 적고, 방법을 바꿔도 같은 결론이 나오는지 확인하세요.',
+      u:'<b>권장 사용법:</b> ① 총량은 정규화(비율·밀도) ② 분류 방법·계급 수·경계 명시 ③ 순차형 단색 명도 ④ 계급 5개 안팎 ⑤ 분류 방법 바꿔 민감도 확인 ⑥ 공간 군집은 Moran\'s I로 검정 ⑦ 정밀 분석은 실제 경계 지도로.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('mNote').textContent=lv==='e'?'위의 "등급 방법"을 바꾸면 지도가 어떻게 달라지는지 직접 확인할 수 있습니다.':'분류 방법별 원리와 적합 상황입니다.';
+  $('mBody').innerHTML=METH.map(([n,a,b])=>`<tr><td><b>${n}</b></td><td>${a[lv]}</td><td>${b[lv]}</td></tr>`).join('');
+  $('chkNote').textContent=lv==='e'?'지도를 만들거나 읽을 때 다섯 가지를 확인하세요.':'단계구분도 작성·판독 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now(),first=true;
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  const target=draw();const k=(playing||t>=T8)&&!first?.1:1;first=false;colCur=colCur.map((c,i)=>Math.abs(c-target[i])<.003?target[i]:lerp(c,target[i],k));ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.6;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('vSel').onchange=e=>{vUser=+e.target.value;toEnd()};$('mSel').onchange=e=>{mUser=+e.target.value;toEnd()};$('kSel').onchange=e=>{kUser=+e.target.value;toEnd()};
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1;first=true};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('choroLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('choroLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

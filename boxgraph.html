@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상자그림이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕, 제목 → 캔버스 무대(정렬 줄 + 수직선/상자) → 조작부 → 단계 버튼 → 요약 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:baseline}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+canvas{display:block;width:100%;height:480px}
+@media (max-width:600px){canvas{height:500px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:62px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p,.panel ul{margin:0}
+.panel ul{padding-left:20px;display:grid;gap:4px;margin-top:4px}
+.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:8px}
+@media (max-width:420px){.sum{grid-template-columns:repeat(2,1fr)}}
+.sum div{background:var(--paper);padding:8px 10px;display:grid}
+.sum span{font-size:11.5px;color:var(--muted)}
+.sum strong{font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+.sum .q strong{color:var(--c1)}.sum .md strong{color:var(--c2)}.sum .o strong{color:var(--c4)}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 02</div>
+    <h1>상자그림이 <span>만들어지는 과정</span></h1>
+    <p class="lede">실거래 25건의 매매가를 크기순으로 세우고, 순위로 중앙값과 사분위수를 찾은 뒤, 상자와 수염을 그려 이상치를 가려내는 과정을 순서대로 보여줍니다. 상자그림은 결국 "정렬한 자료에서 다섯 개의 위치를 뽑아 그린 그림"입니다.</p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="legend"><span><i style="background:var(--c2)"></i>중앙값</span><span><i style="background:var(--c1)"></i>사분위수(Q1·Q3)</span><span><i style="background:var(--c4)"></i>이상치</span><span><i style="background:var(--c3)"></i>이동 중</span></div></div>
+    <canvas id="cv" role="img" aria-label="거래가 자료를 정렬해 상자그림을 그리는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><button id="resample" type="button">새 표본 뽑기</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="20" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>다섯 수치 요약과 이상치 기준</h2>
+      <p class="note">현재 표본 25건 기준 (단위: 억원)</p>
+      <div class="sum" id="sum"></div>
+    </div>
+    <div class="panel">
+      <h2>수업에서 이렇게 써 보세요</h2>
+      <ul>
+        <li>3~4단계에서 멈추고 "평균은 계산하지만, 중앙값과 사분위수는 <b>순위로 찾는다</b>"는 점을 강조하세요.</li>
+        <li>6단계에서 상자 안에 거래의 절반(가운데 50%)이 들어 있다는 점을 점의 개수로 확인시켜 보세요.</li>
+        <li><b>새 표본 뽑기</b>로 이상치가 0개, 1개, 2개인 경우를 비교하면 1.5×IQR 규칙이 잘 이해됩니다.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">※ 사분위수는 jamovi·엑셀 QUARTILE.INC와 같은 선형보간 방식으로 계산했습니다. n = 25이면 Q1은 정확히 7번째, Q3는 19번째 값이 됩니다. 거래가는 설명용 예시 값입니다.</p>
+</div>
+
+<script>
+(function(){
+const N=25,XMAX=40,TOTAL=20;
+const T2=1.6,T3=4.4,T4=7.2,T5=10.2,T6=12.6,T7=14.8,T8=17.6;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1);
+
+let seed=2510,vals=[],rank=[],sorted=[],jit=[],S={},t=0,playing=true,speed=1,L={},lastPhase=-1;
+function sample(){const R=rng(seed),nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+  vals=Array.from({length:N},()=>Math.round(clamp(Math.exp(Math.log(9)+.4*nrm()),2,24)*10)/10);
+  // 초고가 거래 1건 섞기(실제 자료에서 흔한 상황)
+  const k=Math.floor(R()*N);vals[k]=Math.round((28+R()*9)*10)/10;
+  jit=Array.from({length:N},()=>R()*2-1);
+  const idx=vals.map((v,i)=>i).sort((a,b)=>vals[a]-vals[b]||a-b);rank=[];idx.forEach((i,r)=>rank[i]=r);sorted=idx.map(i=>vals[i]);
+  const q=p=>{const i=(N-1)*p,lo=Math.floor(i);return sorted[lo]+(sorted[Math.ceil(i)]-sorted[lo])*(i-lo)};
+  const Q1=q(.25),Q2=q(.5),Q3=q(.75),IQR=Q3-Q1,lf=Q1-1.5*IQR,uf=Q3+1.5*IQR;
+  const inside=sorted.filter(v=>v>=lf&&v<=uf);S={Q1,Q2,Q3,IQR,lf,uf,wl:inside[0],wh:inside[inside.length-1],min:sorted[0],max:sorted[N-1],out:sorted.filter(v=>v<lf||v>uf),mean:vals.reduce((a,b)=>a+b,0)/N};
+  $('sum').innerHTML=[['최솟값',S.min],['Q1 (7번째)',S.Q1,'q'],['중앙값 (13번째)',S.Q2,'md'],['Q3 (19번째)',S.Q3,'q'],['최댓값',S.max],['IQR',S.IQR],['아래 울타리',S.lf],['위 울타리',S.uf],['아래 수염 끝',S.wl],['위 수염 끝',S.wh],['평균',S.mean],['이상치',null,'o']].map(([k,v,c=''])=>`<div class="${c}"><span>${k}</span><strong>${v===null?(S.out.length?S.out.map(f1).join(', '):'없음'):f1(v)}</strong></div>`).join('')}
+
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,l=W<600?20:40,rr=W<600?20:40,plotW=W-l-rr,narrow=W<600;
+  const perRow=narrow?13:25,cw=plotW/perRow,rowH=narrow?46:0,sortY=narrow?62:72;
+  const gcols=5,gw=Math.min(78,plotW/5),gx0=W/2-gw*2.5,gy0=44,gh=narrow?30:24;
+  const boxY=narrow?330:300,boxH=54,axisY=narrow?430:410;
+  L={W,H,l,rr,plotW,narrow,perRow,cw,rowH,sortY,gcols,gw,gx0,gy0,gh,boxY,boxH,axisY,X:v=>l+v/XMAX*plotW,fs:narrow?10:11.5}}
+const cellPos=r=>({x:L.l+(r%L.perRow+.5)*L.cw,y:L.sortY+Math.floor(r/L.perRow)*L.rowH});
+const gridPos=i=>({x:L.gx0+(i%L.gcols+.5)*L.gw,y:L.gy0+Math.floor(i/L.gcols)*L.gh+10});
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper'),soft:col('--soft')};
+  const{W,H,l,X,boxY,boxH,axisY,fs}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const line=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.6);
+  const r13=12,r7=6,r19=18;
+  const p3=clamp((t-T3)/.6),p4=clamp((t-T4)/.6),p5=clamp((t-T5)/.5);
+  // ── 머리글
+  txt(t<T2?'원자료: 실거래 25건 (입력 순서, 단위: 억원)':'크기순으로 정렬한 자료 (아래 숫자 = 순위)',l,22,C.muted,`500 12px ${SANS}`,'left',a0);
+  // ── 정렬 줄의 순위 번호
+  const pr=clamp((t-T2-1)/.6);
+  if(pr>0)for(let r=0;r<N;r++){const c=cellPos(r);txt(r+1,c.x,c.y+17,C.muted,`10px ${MONO}`,'center',pr*(r===r13||r===r7||r===r19?1:.7))}
+  // ── 3단계: 중앙값 괄호(12개 | 중앙 | 12개)
+  if(p3>0&&!L.narrow){const c0=cellPos(0),c11=cellPos(11),c13=cellPos(13),c24=cellPos(24),y=c0.y+28,a=p3*(1-clamp((t-T5)/.6));
+    [[c0.x-L.cw*.4,c11.x+L.cw*.4],[c13.x-L.cw*.4,c24.x+L.cw*.4]].forEach(([x1,x2])=>{line(x1,y,x2,y,C.muted,1,null,a);line(x1,y-4,x1,y,C.muted,1,null,a);line(x2,y-4,x2,y,C.muted,1,null,a);txt('12개',(x1+x2)/2,y+14,C.muted,`11px ${SANS}`,'center',a)});
+    txt('13번째',cellPos(r13).x,y+14,C.c2,`500 11px ${SANS}`,'center',a)}
+  // ── 4단계: 25% · 50% · 75% 위치 표시
+  if(p4>0){const a=p4*(1-clamp((t-T5)/.6));[[r7,'Q1 · 25%',C.c1],[r13,'중앙값 · 50%',C.c2],[r19,'Q3 · 75%',C.c1]].forEach(([r,s,cl])=>{const c=cellPos(r);txt(s,c.x,c.y-16,cl,`500 11px ${SANS}`,'center',a)});
+    txt('위치 = (n − 1) × p + 1 → Q1: 24×0.25+1 = 7번째, Q3: 24×0.75+1 = 19번째',W/2,L.narrow?cellPos(24).y+44:cellPos(0).y+64,C.ink,`12px ${SANS}`,'center',a)}
+  // ── 수직선(축)
+  const ax=clamp((t-T5+.4)/.6);
+  if(ax>0){line(l,axisY,X(XMAX),axisY,C.muted,1,null,ax);for(let v=0;v<=XMAX;v+=5){line(X(v),axisY,X(v),axisY+5,C.muted,1,null,ax);txt(v,X(v),axisY+18,C.muted,`10px ${MONO}`,'center',ax)}
+    txt('매매가(억원)',X(XMAX),axisY+34,C.muted,`10px ${MONO}`,'right',ax)}
+  // ── 7단계: 울타리
+  const p7=clamp((t-T7)/.8),pw=clamp((t-T7-1)/.8),po=clamp((t-T7-1.8)/.6),p8=clamp((t-T8)/1);
+  if(p7>0){const top=boxY-boxH/2-30,bot=axisY;[[S.lf,'Q1 − 1.5×IQR'],[S.uf,'Q3 + 1.5×IQR']].forEach(([v,s],i)=>{const x=X(clamp(v,0,XMAX));line(x,bot,x,lerp(bot,top,ease(p7)),C.c4,1.2,[4,4],.8*(1-.5*p8));
+      txt(`${s} = ${f1(v)}`+(v<0?' (0 미만)':''),x+(i?-4:4),top-4,C.c4,`11px ${SANS}`,i?'right':'left',p7*(1-.4*p8))})}
+  // ── 6단계: 상자
+  const p6=clamp((t-T6)/1);
+  const yT=boxY-boxH/2,yB=boxY+boxH/2;
+  if(p6>0){const e=ease(p6),x1=lerp(X(S.Q2),X(S.Q1),e),x2=lerp(X(S.Q2),X(S.Q3),e);
+    ctx.globalAlpha=.16;ctx.fillStyle=C.c1;ctx.fillRect(x1,yT,x2-x1,boxH);ctx.globalAlpha=1;ctx.strokeStyle=C.c1;ctx.lineWidth=2;ctx.strokeRect(x1,yT,x2-x1,boxH);ctx.lineWidth=1;
+    line(X(S.Q2),yT,X(S.Q2),yB,C.c2,3.5,null,1);
+    const pi=clamp((t-T6-1)/.6),yb=yT-12;
+    if(pi>0){line(X(S.Q1),yb,X(S.Q3),yb,C.c1,1,null,pi*(1-.6*p7)*(1-p8));line(X(S.Q1),yb-4,X(S.Q1),yb+4,C.c1,1,null,pi*(1-.6*p7));line(X(S.Q3),yb-4,X(S.Q3),yb+4,C.c1,1,null,pi*(1-.6*p7)*(1-p8));
+      txt(`IQR = ${f1(S.Q3)} − ${f1(S.Q1)} = ${f1(S.IQR)}`,(X(S.Q1)+X(S.Q3))/2,yb-6,C.c1,`500 11px ${SANS}`,'center',pi*(1-.6*p7)*(1-p8))}}
+  // ── 수염
+  if(pw>0){const e=ease(pw);line(X(S.Q1),boxY,lerp(X(S.Q1),X(S.wl),e),boxY,C.ink,1.6);line(X(S.Q3),boxY,lerp(X(S.Q3),X(S.wh),e),boxY,C.ink,1.6);
+    if(pw>.95){line(X(S.wl),boxY-12,X(S.wl),boxY+12,C.ink,1.6);line(X(S.wh),boxY-12,X(S.wh),boxY+12,C.ink,1.6)}}
+  // ── 거래 25건 (숫자 → 정렬 → 점)
+  for(let i=0;i<N;i++){const v=vals[i],r=rank[i];const g=gridPos(i),c=cellPos(r),dx=X(v),dy=boxY+jit[i]*(boxH/2-6);
+    const ts=T2+r*.035,tsE=ts+1.0,td=T5+r*.05,tdE=td+.7;
+    const isQ=r===r7||r===r19,isM=r===r13,isOut=v<S.lf||v>S.uf;const dy2=isOut?boxY:dy;
+    let hl=C.ink,w=400;
+    if(t>=T3&&isM){hl=C.c2;w=700}if(t>=T4&&isQ){hl=C.c1;w=700}
+    const fnt=`${w} ${fs}px ${MONO}`;
+    // 강조 칸 배경
+    const emph=(isM&&t>=T3)||(isQ&&t>=T4);
+    if(t<ts){txt(f1(v),g.x,g.y,C.ink,`${fs+1.5}px ${MONO}`,'center',a0);continue}
+    if(t<tsE){const p=ease((t-ts)/1),x=lerp(g.x,c.x,p),y=lerp(g.y,c.y,p);txt(f1(v),x,y+4,C.c3,`500 ${lerp(fs+1.5,fs,p)}px ${MONO}`);continue}
+    // 정렬 줄에 남는 숫자(점으로 이동 후엔 흐리게)
+    const ghost=t>=td?lerp(1,.28,clamp((t-td)/.5)):1;
+    if(emph){ctx.globalAlpha=.16*ghost;ctx.fillStyle=hl;ctx.fillRect(c.x-L.cw/2+1,c.y-11,L.cw-2,18);ctx.globalAlpha=1;
+      // 펄스 테두리
+      const pulse=isM?clamp((t-T3)/.5)*(1-clamp((t-T3-1.5)/.5)):clamp((t-T4)/.5)*(1-clamp((t-T4-1.5)/.5));if(pulse>0){ctx.globalAlpha=pulse;ctx.strokeStyle=hl;ctx.lineWidth=2;ctx.strokeRect(c.x-L.cw/2+1,c.y-11,L.cw-2,18);ctx.lineWidth=1;ctx.globalAlpha=1}}
+    txt(f1(v),c.x,c.y+4,hl,fnt,'center',ghost);
+    if(t<td)continue;
+    // 점으로 떨어지기
+    const dotCol=isOut&&po>0?C.c4:isM?C.c2:isQ?C.c1:C.c1;
+    const p=ease(clamp((t-td)/.7));const x=lerp(c.x,dx,p),y=lerp(c.y+4,dy2,p);
+    const fade=isOut?1:lerp(1,.25,p8);
+    ctx.globalAlpha=(p<1?1:.85)*fade;ctx.fillStyle=t<tdE?C.c3:dotCol;ctx.beginPath();ctx.arc(x,y,(emph?5:4),0,7);ctx.fill();ctx.globalAlpha=1;
+    if(isOut&&po>0){ctx.globalAlpha=po;ctx.strokeStyle=C.c4;ctx.lineWidth=2;ctx.beginPath();ctx.arc(dx,boxY,lerp(18,8,po),0,7);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      txt(`이상치 ${f1(v)}`,dx,boxY-boxH/2-8,C.c4,`500 11px ${SANS}`,'center',po)}
+    // Q·중앙값 점에서 축으로 내리는 안내선
+    if(emph&&t>=tdE&&p6<1){const a=clamp((t-tdE)/.4)*(1-p6);line(dx,dy2,dx,axisY,isM?C.c2:C.c1,1,[2,3],a)}
+  }
+  // ── 8단계: 다섯 수치 라벨
+  if(p8>0){const F=`500 11.5px ${SANS}`;
+    txt(`중앙값 ${f1(S.Q2)}`,X(S.Q2),yT-8,C.c2,F,'center',p8);
+    txt(`Q1 ${f1(S.Q1)}`,X(S.Q1)-4,yB+18,C.c1,F,'right',p8);
+    txt(`Q3 ${f1(S.Q3)}`,X(S.Q3)+4,yB+18,C.c1,F,'left',p8);
+    txt(`아래 수염 끝 ${f1(S.wl)}`,X(S.wl),yB+38,C.ink,F,'center',p8);
+    txt(`위 수염 끝 ${f1(S.wh)}`,X(S.wh),yB+38,C.ink,F,'center',p8)}
+}
+
+const STEPS=[
+ {t:0, n:'원자료 준비',s:'입력 순서대로 놓인 25건',c:()=>'실거래 25건의 매매가(억원)가 입력된 순서대로 놓여 있습니다. 이 상태로는 가운데 값이 무엇인지 알 수 없습니다.'},
+ {t:T2,n:'크기순 정렬',s:'작은 값부터 순위를 매깁니다',c:()=>'모든 값을 작은 것부터 큰 것 순으로 한 줄로 세웁니다. 상자그림의 다섯 수치는 모두 이 순위에서 나옵니다.'},
+ {t:T3,n:'중앙값 찾기',s:'정확히 가운데 = 13번째',c:()=>`25개의 정가운데는 13번째 값입니다. 왼쪽에 12개, 오른쪽에 12개가 있습니다. 중앙값 = ${f1(S.Q2)}억.`},
+ {t:T4,n:'사분위수 찾기',s:'25% 지점 = Q1, 75% 지점 = Q3',c:()=>`Q1은 25% 지점(7번째 = ${f1(S.Q1)}억), Q3는 75% 지점(19번째 = ${f1(S.Q3)}억)입니다. 위치 공식 (n−1)×p+1은 jamovi·엑셀과 같은 방식입니다.`},
+ {t:T5,n:'수직선에 점 찍기',s:'정렬한 값을 가격 위치로',c:()=>'정렬한 값들을 가격 수직선 위의 점으로 옮깁니다. 중앙값(초록)과 Q1·Q3(파랑) 점에서 축까지 안내선이 내려옵니다.'},
+ {t:T6,n:'상자 그리기',s:'Q1~Q3 = 가운데 50%',c:()=>`Q1에서 Q3까지 상자를 그리고 안에 중앙값 선을 긋습니다. 상자 폭이 사분위범위(IQR = ${f1(S.IQR)}억)이며, 거래의 가운데 50%가 이 안에 있습니다.`},
+ {t:T7,n:'울타리와 수염',s:'1.5×IQR 밖은 이상치',c:()=>`Q1−1.5×IQR(${f1(S.lf)})과 Q3+1.5×IQR(${f1(S.uf)})에 울타리를 세웁니다. 수염은 울타리 안에서 가장 먼 실제 값까지만 뻗고, 울타리 밖 값은 이상치로 따로 점을 찍습니다.`},
+ {t:T8,n:'완성과 해석',s:'다섯 수치로 분포 읽기',c:()=>{const L_=S.Q2-S.Q1,R_=S.Q3-S.Q2;return `완성입니다. 중앙값이 상자 안에서 ${R_>L_?'왼쪽(Q1 쪽)에 치우쳐 있고':R_<L_?'오른쪽(Q3 쪽)에 치우쳐 있고':'가운데 있고'} 위 수염${S.out.length?'과 이상치':''}가 더 길게 뻗어 ${R_>=L_?'오른쪽 꼬리가 긴(고가 쪽으로 치우친)':'왼쪽으로 치우친'} 분포입니다. ${S.out.length?`이상치 ${S.out.map(f1).join(', ')}억 때문에 평균(${f1(S.mean)}억)이 중앙값(${f1(S.Q2)}억)보다 큽니다.`:''}`}}];
+
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=STEPS[p].c();
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}draw();ui();requestAnimationFrame(frame)}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('resample').onclick=()=>{seed+=11;sample();t=0;playing=true;lastPhase=-1};
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+sample();layout();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

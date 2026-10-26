@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}</style></head><body>
+<title>일원분산분석 한눈에 보기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: t검정 페이지와 같은 세로 흐름 — 애니메이션 무대 → 대본 → 결과표 → 직접 바꿔보기 → 종류 → 점검 */
+:root{
+  --bg:#f3f5f8; --panel:#ffffff; --ink:#1b2430; --muted:#5d6878; --line:#d5dbe4;
+  --a:#1f6fb2; --b:#c27a12; --c:#7a4fb5; --sig:#c0392b; --ok:#1e8a5a; --chip:#e8edf4;
+  --capbg:#0f151c; --capfg:#f4f7fb;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12161c; --panel:#1a2029; --ink:#e6ebf2; --muted:#9aa6b6; --line:#2e3744;
+  --a:#5ea8e8; --b:#e2a54a; --c:#b393ea; --sig:#ef6b5b; --ok:#4cc38a; --chip:#242c37; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a2029; --ink:#e6ebf2; --muted:#9aa6b6; --line:#2e3744;
+  --a:#5ea8e8; --b:#e2a54a; --c:#b393ea; --sig:#ef6b5b; --ok:#4cc38a; --chip:#242c37; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:900px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+h1{font-size:1.6rem;margin:0;text-wrap:balance;line-height:1.3}
+h2{font-size:1.15rem;margin:0 0 10px;text-wrap:balance}
+h3.tt{font-size:1rem;margin:16px 0 8px}
+.sub{color:var(--muted);margin:4px 0 0}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+.seg{display:inline-flex;background:var(--chip);border-radius:999px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:500;padding:6px 14px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+canvas{display:block;width:100%}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:14px;padding:6px 12px;border-radius:8px;cursor:pointer}
+.btn:hover{border-color:var(--a)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+select{font:inherit;font-size:14px;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+#seek{flex:1 1 160px;min-width:0;accent-color:var(--a)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+.chips button{border:0;background:var(--chip);color:var(--muted);font:inherit;font-size:13px;padding:4px 10px;border-radius:999px;cursor:pointer}
+.chips button.on{background:var(--a);color:#fff}
+.cap{padding:14px 16px;border-top:1px solid var(--line);min-height:5.2em}
+.cap b{color:var(--a)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{color:var(--muted);font-weight:500;border-bottom:2px solid var(--ink)}
+tr.tot td{color:var(--muted)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.yes{color:var(--ok);font-weight:700}
+td.no{color:var(--muted)}
+.note{color:var(--muted);font-size:13px;margin:8px 0 0}
+.sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.sliders label{display:flex;flex-direction:column;gap:4px;font-size:14px}
+.sliders input{accent-color:var(--sig)}
+.sliders .v{font-family:var(--mono);color:var(--ink)}
+.live{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
+.live div{background:var(--chip);border-radius:8px;padding:8px 10px}
+.live small{display:block;color:var(--muted);font-size:12px}
+.live span{font-family:var(--mono);font-size:1.15rem;font-variant-numeric:tabular-nums}
+#verdict{margin-top:12px;padding:10px 12px;border-radius:8px;font-weight:500;border:1px solid var(--line)}
+.types{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.types .card h3{margin:0 0 6px;font-size:1rem}
+.types .card p{margin:0;font-size:14px}
+.types .ex{color:var(--muted);font-size:13px;margin-top:8px!important}
+ul.chk{margin:0;padding-left:1.2em}
+ul.chk li{margin:4px 0}
+html[data-m="easy"] .pro{display:none}
+html[data-m="pro"] .easy{display:none}
+.subs{background:var(--capbg);color:var(--capfg);text-align:center;padding:10px 16px;font-size:1.05rem;font-weight:500;min-height:3.4em;display:flex;align-items:center;justify-content:center;line-height:1.5;text-wrap:balance}
+.vbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 12px 10px}
+.btn.on{background:var(--a);color:#fff;border-color:var(--a)}
+#vNote{color:var(--muted);font-size:12px;flex-basis:100%}
+.stage:fullscreen{overflow:auto;background:var(--panel)}
+table.script{min-width:600px}
+.script td,.script th{white-space:normal;text-align:left!important;vertical-align:top}
+.script td:nth-child(1){white-space:nowrap;font-weight:700}
+.script td:nth-child(2){color:var(--muted);width:24%}
+.why{background:var(--chip);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:14px}
+.foot{color:var(--muted);font-size:12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>일원분산분석 한눈에 보기</h1>
+      <p class="sub easy">세 그룹 이상의 평균이 “진짜 다른지” 한 번에 가려내는 방법</p>
+      <p class="sub pro">일원분산분석(One-way ANOVA): 한 요인의 k개 수준에 따른 모평균 차이 검정</p>
+    </div>
+    <div class="seg" role="group" aria-label="설명 수준">
+      <button id="mEasy" aria-pressed="true">쉬운 설명</button>
+      <button id="mPro" aria-pressed="false">전공 설명</button>
+    </div>
+  </div>
+
+  <section class="stage">
+    <canvas id="cv" aria-label="일원분산분석 단계별 애니메이션"></canvas>
+    <div class="ctrl">
+      <button class="btn" id="play">⏸ 일시정지</button>
+      <button class="btn" id="restart">⟲ 처음부터</button>
+      <select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select>
+      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="재생 위치">
+    </div>
+    <div class="vbar">
+      <button class="btn" id="vBtn">🔇 음성 켜기</button>
+      <select id="vSel" aria-label="목소리"></select>
+      <select id="rate" aria-label="말하기 속도"><option value="0.85">천천히</option><option value="1" selected>보통 속도</option><option value="1.15">빠르게</option></select>
+      <button class="btn" id="fs">⛶ 전체화면</button>
+      <span id="vNote"></span>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="cap" id="cap"></div>
+  </section>
+
+  <section class="card">
+    <div class="top" style="align-items:center"><h2 style="margin:0">영상 시나리오(대본)</h2><button class="btn" id="copyScript">대본 복사</button></div>
+    <p class="note">녹화 순서: ① 🔇 음성 켜기 → ② ⛶ 전체화면 → ③ ⟲ 처음부터 → ④ OBS나 Win+Alt+R로 화면과 소리를 함께 녹화. 내레이션이 끝나야 다음 장면으로 넘어갑니다. 대본은 위 설명 수준(쉬운/전공)과 조절바 숫자에 맞춰 바뀝니다.</p>
+    <div class="tbl"><table class="script"><thead><tr><th>장면</th><th>화면</th><th>내레이션</th></tr></thead><tbody id="scriptBody"></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="easy">결과표 읽기</span><span class="pro">결과표 (JAMOVI 분산분석 형식)</span></h2>
+    <div class="tbl"><table>
+      <thead><tr>
+        <th></th>
+        <th><span class="easy">흩어짐 합계</span><span class="pro">제곱합</span></th>
+        <th><span class="easy">자유도</span><span class="pro">df</span></th>
+        <th><span class="easy">평균 흩어짐</span><span class="pro">평균제곱</span></th>
+        <th><span class="easy">점수(F)</span><span class="pro">F</span></th>
+        <th><span class="easy">우연일 확률</span><span class="pro">p</span></th>
+        <th><span class="easy">설명력</span><span class="pro">η²</span></th>
+      </tr></thead>
+      <tbody>
+        <tr><td><span class="easy">그룹 간 (신호)</span><span class="pro">역 거리 집단</span></td><td class="num" id="r_ssb"></td><td class="num" id="r_df1"></td><td class="num" id="r_msb"></td><td class="num" id="r_f"></td><td class="num" id="r_p"></td><td class="num" id="r_eta"></td></tr>
+        <tr><td><span class="easy">그룹 안 (잡음)</span><span class="pro">잔차</span></td><td class="num" id="r_ssw"></td><td class="num" id="r_df2"></td><td class="num" id="r_msw"></td><td></td><td></td><td></td></tr>
+        <tr class="tot"><td><span class="easy">전체</span><span class="pro">전체</span></td><td class="num" id="r_sst"></td><td class="num" id="r_dft"></td><td></td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table></div>
+    <p class="note easy">읽는 순서: ① 우연일 확률(p)이 0.05보다 작은가? → ② 작으면 “세 그룹 중 어딘가는 다르다” → ③ 아래 사후검정 표에서 어느 그룹끼리 다른지 확인. 설명력(η²)은 0.01 작음, 0.06 보통, 0.14 이상 큼으로 봐요.</p>
+    <p class="note pro">H₀: μ₁ = μ₂ = μ₃, H₁: 적어도 하나의 μ가 다름, α = .05. η² = SS<sub>집단</sub>/SS<sub>전체</sub>, Cohen 기준 .01/.06/.14. JAMOVI ‘ANOVA → 일원분산분석’은 기본값이 Welch's이므로 이 표와 같은 값을 보려면 ‘등분산 가정(Fisher's)’을 선택합니다.</p>
+
+    <h3 class="tt"><span class="easy">어느 그룹끼리 다를까? (사후검정)</span><span class="pro">사후검정 — Tukey HSD</span></h3>
+    <div class="tbl"><table>
+      <thead><tr>
+        <th><span class="easy">비교</span><span class="pro">비교</span></th>
+        <th>평균 차이</th>
+        <th><span class="easy">흔들림</span><span class="pro">SE</span></th>
+        <th><span class="easy">점수(t)</span><span class="pro">t</span></th>
+        <th><span class="easy">우연일 확률</span><span class="pro">p<sub>tukey</sub></span></th>
+        <th><span class="easy">판단</span><span class="pro">판정</span></th>
+      </tr></thead>
+      <tbody id="phBody"></tbody>
+    </table></div>
+    <p class="note easy">세 번 비교하는 만큼 우연을 더 엄격하게 걸러 낸 확률이에요. 0.05보다 작은 짝만 “차이가 있다”고 말해요.</p>
+    <p class="note pro">SE = √(MS<sub>잔차</sub>(1/nᵢ + 1/nⱼ)), t = 평균 차이/SE, p<sub>tukey</sub>는 스튜던트화 범위분포 q = |t|√2 (k = 3, df = 잔차 df)로 계산. 등분산 위반 시 Games-Howell.</p>
+  </section>
+
+  <section class="card">
+    <h2>직접 바꿔보기</h2>
+    <p class="note" style="margin:0 0 12px"><span class="easy">조절바를 움직이면 위 애니메이션, 대본, 결과표가 함께 바뀝니다. “그룹끼리 차이는 같은데 그룹 안 들쭉날쭉만 커지면?”을 꼭 해 보세요.</span><span class="pro">F = MS<sub>집단</sub>/MS<sub>잔차</sub>. 집단 간 거리(분자), 집단 내 변동(분모), 집단별 표본크기(분자의 n과 분모의 df)가 검정력에 주는 영향을 확인하세요. 중간 집단 평균은 먼 집단보다 차이의 40%만큼 높게 설정됩니다.</span></p>
+    <div class="sliders">
+      <label><span><span class="easy">가까운 곳과 먼 곳의 가격 차이 (신호)</span><span class="pro">μ<sub>500m 이내</sub> − μ<sub>1km 초과</sub></span> : <b class="v" id="vDiff"></b> 만원</span><input type="range" id="sDiff" min="0" max="1200" step="10" value="600"></label>
+      <label><span><span class="easy">그룹 안 들쭉날쭉 (잡음)</span><span class="pro">집단 내 표준편차 s</span> : <b class="v" id="vSd"></b> 만원</span><input type="range" id="sSd" min="100" max="900" step="10" value="450"></label>
+      <label><span><span class="easy">그룹별 아파트 수</span><span class="pro">집단별 표본크기 n</span> : <b class="v" id="vN"></b> 곳</span><input type="range" id="sN" min="5" max="30" step="1" value="10"></label>
+    </div>
+    <div style="margin-top:12px"><button class="btn" id="resample">🎲 새 표본 뽑기</button></div>
+    <div class="live">
+      <div><small><span class="easy">신호(그룹 간)</span><span class="pro">MS<sub>집단</sub></span></small><span id="lMsb"></span></div>
+      <div><small><span class="easy">잡음(그룹 안)</span><span class="pro">MS<sub>잔차</sub></span></small><span id="lMsw"></span></div>
+      <div><small><span class="easy">점수 F</span><span class="pro">F(2, df)</span></small><span id="lF"></span></div>
+      <div><small><span class="easy">우연일 확률</span><span class="pro">p</span></small><span id="lP"></span></div>
+    </div>
+    <div id="verdict"></div>
+  </section>
+
+  <section>
+    <h2>분산분석은 이런 것들이 있어요</h2>
+    <div class="types">
+      <div class="card"><h3>① 일원분산분석 <span style="color:var(--a)">← 이 화면</span></h3>
+        <p class="easy">기준 하나로 나눈 세 그룹 이상의 평균을 비교해요.</p>
+        <p class="pro">요인 1개, 수준 k ≥ 3. F = MS<sub>집단</sub>/MS<sub>잔차</sub>, df = (k − 1, N − k).</p>
+        <p class="ex">예: 역 거리(500m 안/500m~1km/1km 밖)별 3.3㎡당 가격</p></div>
+      <div class="card"><h3>② 이원분산분석</h3>
+        <p class="easy">기준 두 개를 함께 봐요. 두 기준이 서로 영향을 주는지도 알 수 있어요.</p>
+        <p class="pro">요인 2개의 주효과와 상호작용효과(A×B)를 동시에 검정.</p>
+        <p class="ex">예: 역 거리 × 단지 규모(소/중/대)별 가격</p></div>
+      <div class="card"><h3>③ 반복측정 분산분석</h3>
+        <p class="easy">같은 곳을 세 번 이상 재서 비교해요.</p>
+        <p class="pro">개체 내 요인. 구형성 가정(Mauchly), 위반 시 Greenhouse-Geisser 보정.</p>
+        <p class="ex">예: 같은 상권의 개통 전·개통 1년·개통 3년 매출</p></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="easy">쓰기 전에 확인할 것</span><span class="pro">가정과 점검</span></h2>
+    <ul class="chk easy">
+      <li>비교하는 값이 숫자(가격, 면적, 매출)인가요?</li>
+      <li>그룹마다 서로 다른 아파트인가요? 같은 곳을 여러 번 쟀다면 반복측정 분산분석을 써요.</li>
+      <li>그룹마다 들쭉날쭉한 정도가 크게 다르지 않나요? 많이 다르면 Welch 방식을 써요.</li>
+      <li>p가 0.05보다 작다는 건 “어딘가 다르다”까지만이에요. 어디가 다른지는 사후검정으로 봐요.</li>
+      <li>“거리에 따라 가격이 다르다”는 “역이 가까워서 비싸다(원인)”와 같은 말이 아니에요.</li>
+    </ul>
+    <ul class="chk pro">
+      <li>측정수준: 종속변수는 등간·비율척도, 독립변수는 범주형(3수준 이상).</li>
+      <li>독립성: 관측치 간 독립, 집단 간 중복 없음(반복측정이면 개체 내 설계).</li>
+      <li>정규성: 잔차의 Shapiro-Wilk, Q-Q 플롯. 위반 시 Kruskal-Wallis 검정. 표본이 크면 완화.</li>
+      <li>등분산성: Levene 검정. 위반 시 Welch's ANOVA + Games-Howell 사후검정.</li>
+      <li>옴니버스 F가 유의하면 사후검정(Tukey 등)으로 쌍별 비교. 사전에 정한 비교만 볼 때는 계획비교(대비).</li>
+      <li>효과크기 η²(또는 ω²)를 함께 보고. 관측자료이므로 인과 해석 금지(단지 연식·면적 등 교란변수).</li>
+    </ul>
+    <div class="why"><b>왜 t검정을 세 번 하면 안 될까요?</b> <span class="easy">한 번 비교할 때 “우연을 진짜로 착각할 확률”이 5%라면, 세 번 비교하면 그 확률이 약 14%로 커져요. 그래서 한 번에 비교하는 분산분석을 먼저 써요.</span><span class="pro">검정 3회의 가족오류율 = 1 − (1 − .05)³ ≈ .143. 분산분석은 하나의 옴니버스 검정으로 α = .05를 유지합니다.</span></div>
+  </section>
+
+  <p class="foot">예시 데이터는 설명을 위해 만든 가상의 수치이며 실제 시세가 아닙니다. 단위: 3.3㎡당 만원.</p>
+</div>
+
+<script>
+(()=>{
+// ---------- 통계 함수 ----------
+function lgamma(x){const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5)return Math.log(Math.PI/Math.sin(Math.PI*x))-lgamma(1-x);x-=1;let a=c[0];const t=x+7.5;for(let i=1;i<9;i++)a+=c[i]/(x+i);return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);}
+function betacf(x,a,b){let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;if(Math.abs(d)<1e-30)d=1e-30;d=1/d;let h=d;
+  for(let m=1;m<=200;m++){const m2=2*m;let aa=m*(b-m)*x/((qam+m2)*(a+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c;
+  aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<3e-12)break;}return h;}
+function ibeta(x,a,b){if(x<=0)return 0;if(x>=1)return 1;const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2)?bt*betacf(x,a,b)/a:1-bt*betacf(1-x,b,a)/b;}
+// F분포 오른쪽 꼬리 확률, 밀도, 임계값
+const pF=(f,d1,d2)=>f<=0?1:ibeta(d2/(d2+d1*f),d2/2,d1/2);
+const fpdf=(x,d1,d2)=>x<=0?(d1===2?1:0):Math.exp(lgamma((d1+d2)/2)-lgamma(d1/2)-lgamma(d2/2)+(d1/2)*Math.log(d1/d2)+(d1/2-1)*Math.log(x)-((d1+d2)/2)*Math.log(1+d1*x/d2));
+function fcrit(d1,d2){let lo=0,hi=60;for(let i=0;i<60;i++){const m=(lo+hi)/2;pF(m,d1,d2)>0.05?lo=m:hi=m;}return (lo+hi)/2;}
+// Tukey HSD: 스튜던트화 범위분포 오른쪽 꼬리 확률 (수치적분)
+function erfc(x){const z=Math.abs(x),t=1/(1+0.5*z);const r=t*Math.exp(-z*z-1.26551223+t*(1.00002368+t*(0.37409196+t*(0.09678418+t*(-0.18628806+t*(0.27886807+t*(-1.13520398+t*(1.48851587+t*(-0.82215223+t*0.17087277)))))))));return x>=0?r:2-r;}
+const Phi=x=>0.5*erfc(-x/Math.SQRT2);
+function rangeCdf(w,k){if(w<=0)return 0;const a=-8,N=400,h=16/N;let s=0;for(let i=0;i<=N;i++){const z=a+i*h;const f=Math.exp(-z*z/2)/Math.sqrt(2*Math.PI)*Math.pow(Phi(z)-Phi(z-w),k-1);s+=f*(i===0||i===N?1:i%2?4:2);}return Math.min(1,k*s*h/3);}
+function ptukey(q,k,nu){const c=(nu/2)*Math.log(nu)-lgamma(nu/2)-(nu/2-1)*Math.LN2,sd=1/Math.sqrt(2*nu);
+  const lo=Math.max(1e-6,1-10*sd),hi=1+12*sd,N=240,h=(hi-lo)/N;let s=0;
+  for(let i=0;i<=N;i++){const x=lo+i*h;const f=Math.exp(c+(nu-1)*Math.log(x)-nu*x*x/2)*rangeCdf(q*x,k);s+=f*(i===0||i===N?1:i%2?4:2);}
+  return Math.max(0,Math.min(1,1-s*h/3));}
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function zs(n,seed){const r=rng(seed),z=[];for(let i=0;i<n;i++){z.push(Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(2*Math.PI*r()));}
+  const m=z.reduce((a,b)=>a+b)/n,s=Math.sqrt(z.reduce((a,b)=>a+(b-m)**2,0)/(n-1));return z.map(v=>(v-m)/s);}
+const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const sd=a=>{const m=mean(a);return Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/(a.length-1));};
+const fmt=v=>Math.round(v).toLocaleString('ko-KR');
+const sp=v=>String(Math.round(v));const pp=p=>p<0.001?'0.1퍼센트 미만':(p*100).toFixed(1)+'퍼센트';const pr=p=>p<0.001?'0.001 미만':p.toFixed(3);
+const fp=p=>p<0.001?'< .001':p.toFixed(3).replace(/^0/,'');
+const sgn=v=>(v>0?'+':v<0?'−':'')+fmt(Math.abs(v));
+
+// ---------- 그룹 이름 ----------
+const GN={easy:['역 500m 안','역 500m~1km','역 1km 밖'],pro:['500m 이내 (집단 1)','500m~1km (집단 2)','1km 초과 (집단 3)']};
+const GS=['500m 안','500m~1km','1km 밖'];                 // 짧은 이름(표·패널)
+const GV=['500미터 안','500미터에서 1킬로미터','1킬로미터 밖']; // 읽어 주는 이름
+const GVa=['과','와','과'];                                // 와/과 조사
+const COL=['a','b','c'];
+
+// ---------- 데이터 ----------
+let seed=7, P={diff:600,sd:450,n:10}, D;
+function build(){
+  const n=P.n,k=3,base=3000,offs=[P.diff,P.diff*0.4,0];
+  const G=offs.map((o,g)=>zs(n,seed*(101+g*877)+n*13+g).map(z=>Math.round((base+o+P.sd*z)/10)*10));
+  const m=G.map(mean),s=G.map(sd),all=G.flat(),N=all.length,gm=mean(all);
+  const ssb=m.reduce((a,v)=>a+n*(v-gm)**2,0),ssw=G.reduce((a,arr,g)=>a+arr.reduce((b,x)=>b+(x-m[g])**2,0),0),sst=ssb+ssw;
+  const df1=k-1,df2=N-k,msb=ssb/df1,msw=ssw/df2,F=msb/msw,p=pF(F,df1,df2);
+  const ph=[[0,1],[0,2],[1,2]].map(([i,j])=>{const md=m[i]-m[j],se=Math.sqrt(msw*(2/n)),t=md/se;return{i,j,md,se,t,p:ptukey(Math.abs(t)*Math.SQRT2,k,df2)};});
+  const mn=Math.min(...all),mx=Math.max(...all);
+  D={G,m,s,gm,ssb,ssw,sst,df1,df2,msb,msw,F,p,eta:ssb/sst,fc:fcrit(df1,df2),ph,lo:Math.floor((mn-150)/500)*500,hi:Math.ceil((mx+150)/500)*500};
+  updatePanels();layout();renderScript();
+}
+
+// ---------- 모드 ----------
+let mode='easy';
+const L=(e,p)=>mode==='easy'?e:p;
+const gname=g=>GN[mode][g];
+function setMode(m){mode=m;document.documentElement.dataset.m=m;
+  document.getElementById('mEasy').setAttribute('aria-pressed',m==='easy');document.getElementById('mPro').setAttribute('aria-pressed',m==='pro');
+  stopSpeech();renderChips();updatePanels();}
+document.getElementById('mEasy').onclick=()=>setMode('easy');
+document.getElementById('mPro').onclick=()=>setMode('pro');
+
+// ---------- 단계 ----------
+const phEasy=()=>D.ph.map(r=>`${GV[r.i]}${GVa[r.i]} ${GV[r.j]}는 ${r.p<0.05?'차이가 있어요':'차이가 있다고 말하기 어려워요'}.`).join(' ');
+const phPro=()=>D.ph.map(r=>`${GV[r.i]}${GVa[r.i]} ${GV[r.j]}의 평균 차이는 ${sp(r.md)}만 원, 피 값은 ${pr(r.p)}입니다.`).join(' ');
+const ST=[
+ {scr:'세 그룹의 점이 위에서 떨어져 줄을 섬',
+  ne:()=>`안녕하세요. 지난 시간에는 두 그룹을 비교하는 티 검정을 배웠어요. 오늘은 그룹이 세 개 이상일 때 쓰는 일원분산분석이에요. 역에서 500미터 안, 500미터에서 1킬로미터, 1킬로미터 밖, 이렇게 세 곳의 아파트를 ${P.n}곳씩 골라 3.3제곱미터당 가격을 점으로 찍었어요. 궁금한 건 하나예요. 역과의 거리에 따라 가격이 정말 다를까요?`,
+  np:()=>`이번 시간에는 일원분산분석, 원웨이 아노바를 다룹니다. 역과의 거리를 세 수준으로 나눈 집단마다 아파트 ${P.n}곳씩, 3.3제곱미터당 매매가를 배치했습니다. 귀무가설은 세 집단의 모평균이 모두 같다는 것입니다. 티 검정을 세 번 반복하면 1종 오류가 약 14퍼센트까지 커지므로, 한 번의 검정으로 판단합니다.`,
+  d:4,e:'데이터 찍기',p:'자료 배치',
+  ce:()=>`역에서 <b>500m 안 / 500m~1km / 1km 밖</b> 아파트를 ${P.n}곳씩 골라 3.3㎡당 가격을 점으로 찍었어요. 궁금한 건 하나예요. <b>거리에 따라 가격이 정말 다를까?</b>`,
+  cp:()=>`요인: 역 거리(3수준), 집단별 n = ${P.n}, N = ${3*P.n}. H₀: μ₁ = μ₂ = μ₃. t검정 3회 반복 시 가족오류율 ≈ 1 − .95³ = .143이므로 단일 옴니버스 F검정 사용.`},
+ {scr:'세 줄을 가로지르는 전체 평균 점선',
+  ne:()=>`먼저 세 그룹을 모두 합친 전체 평균을 구해요. ${sp(D.gm)}만 원이에요. 이 점선이 비교의 기준이 돼요.`,
+  np:()=>`먼저 모든 관측치의 총평균을 구합니다. ${sp(D.gm)}만 원입니다. 분산분석은 각 값이 총평균에서 벗어난 정도, 즉 전체 변동을 두 부분으로 나누는 방법입니다.`,
+  d:3,e:'전체 평균',p:'총평균',
+  ce:()=>`세 그룹을 모두 합친 <b>전체 평균</b> ${fmt(D.gm)}만원에 점선을 그어요. 이 선이 비교의 기준이에요.`,
+  cp:()=>`총평균 x̄.. = ${fmt(D.gm)}. 전체 변동 SS<sub>전체</sub> = Σ(xᵢⱼ − x̄..)² = ${fmt(D.sst)}을 집단 간과 집단 내로 분해.`},
+ {scr:'그룹마다 평균선이 나타남',
+  ne:()=>`이제 그룹마다 평균을 구해요. 500미터 안은 ${sp(D.m[0])}만 원, 500미터에서 1킬로미터는 ${sp(D.m[1])}만 원, 1킬로미터 밖은 ${sp(D.m[2])}만 원이에요.`,
+  np:()=>`각 집단의 표본평균을 구합니다. 500미터 이내 ${sp(D.m[0])}만 원, 500미터에서 1킬로미터 ${sp(D.m[1])}만 원, 1킬로미터 초과 ${sp(D.m[2])}만 원입니다.`,
+  d:3,e:'그룹 평균',p:'집단평균',
+  ce:()=>`그룹마다 <b>평균</b>에 선을 그어요. ${GS.map((g,i)=>`${g} ${fmt(D.m[i])}`).join(', ')}만원이에요.`,
+  cp:()=>`집단평균 x̄₁ = ${fmt(D.m[0])}, x̄₂ = ${fmt(D.m[1])}, x̄₃ = ${fmt(D.m[2])}.`},
+ {scr:'전체 평균에서 그룹 평균까지 빨간 화살표',
+  ne:()=>`그룹 평균이 전체 평균에서 얼마나 떨어져 있는지 빨간 화살표로 표시했어요. 화살표가 길수록 그룹끼리 가격이 많이 달라요. 이것을 신호라고 불러요.`,
+  np:()=>`집단평균과 총평균의 편차를 제곱하고 표본크기를 곱해 더하면 집단 간 제곱합 ${sp(D.ssb)}이 됩니다. 이를 자유도 ${D.df1}로 나눈 집단 간 평균제곱은 ${sp(D.msb)}입니다.`,
+  d:3.5,e:'그룹 간 차이 = 신호',p:'집단 간 변동',
+  ce:()=>`그룹 평균이 전체 평균에서 떨어진 거리(<b>빨간 화살표</b>)가 “신호”예요. 화살표가 길수록 그룹끼리 많이 달라요.`,
+  cp:()=>`SS<sub>집단</sub> = Σ nⱼ(x̄ⱼ − x̄..)² = ${fmt(D.ssb)}, df = k − 1 = ${D.df1}, MS<sub>집단</sub> = ${fmt(D.msb)}.`},
+ {scr:'점마다 자기 그룹 평균까지 가는 선',
+  ne:()=>`그런데 같은 그룹 안에서도 가격이 들쭉날쭉해요. 점마다 자기 그룹 평균까지 그은 가는 선이 그 흔들림이에요. 이 흔들림이 크면 그룹 평균끼리의 차이도 우연히 생길 수 있어요. 이것이 잡음이에요.`,
+  np:()=>`집단 내 변동은 각 관측치와 자기 집단평균의 편차 제곱합으로, 집단 내 제곱합은 ${sp(D.ssw)}입니다. 자유도 ${D.df2}로 나눈 집단 내 평균제곱은 ${sp(D.msw)}이며, 이것이 오차분산의 추정값입니다.`,
+  d:3.5,e:'그룹 안 흔들림 = 잡음',p:'집단 내 변동',
+  ce:()=>`같은 그룹 안에서도 가격이 <b>들쭉날쭉</b>해요(점에서 그룹 평균까지의 가는 선). 이 흔들림이 “잡음”이에요.`,
+  cp:()=>`SS<sub>잔차</sub> = ΣΣ(xᵢⱼ − x̄ⱼ)² = ${fmt(D.ssw)}, df = N − k = ${D.df2}, MS<sub>잔차</sub> = ${fmt(D.msw)} (오차분산 σ²의 추정량).`},
+ {scr:'가운데에 ‘신호 ÷ 잡음 = F’ 계산식',
+  ne:()=>`그래서 신호를 잡음으로 나눠 점수를 만들어요. 이 점수가 에프 값이에요. 그룹끼리 벌어진 정도가 그룹 안 흔들림의 몇 배인지를 나타내요. 지금 에프 값은 ${D.F.toFixed(2)}예요. 원래 차이가 없다면 에프는 1 근처에 나와요.`,
+  np:()=>`에프 통계량은 집단 간 평균제곱을 집단 내 평균제곱으로 나눈 값으로 ${D.F.toFixed(2)}입니다. 귀무가설이 참이면 두 평균제곱이 모두 같은 오차분산을 추정하므로 에프 값은 1 근처에 나타납니다.`,
+  d:4,e:'점수 = 신호 ÷ 잡음',p:'F 통계량',
+  ce:()=>`<b>F값 = 신호 ÷ 잡음</b>이에요. 둘 다 “흩어짐 합계 ÷ 자유도”로 평균을 낸 값이라 숫자가 커요. 차이가 없다면 F는 <b>1 근처</b>예요.`,
+  cp:()=>`F = MS<sub>집단</sub>/MS<sub>잔차</sub> = ${fmt(D.msb)} / ${fmt(D.msw)} = ${D.F.toFixed(2)}. H₀ 하에서 E[F] ≈ 1.`},
+ {scr:'F분포 곡선, 우리 F값 막대, 빨간 오른쪽 꼬리',
+  ne:()=>`원래 차이가 없다고 하면 에프 점수는 대부분 0과 1 근처에 몰려요. 우리 점수 ${D.F.toFixed(2)}가 오른쪽 꼬리 쪽에 있을수록 우연이기 어려워요. 빨간 꼬리의 넓이가 우연일 확률, 피 값이에요. 지금은 ${pp(D.p)}예요.`,
+  np:()=>`귀무가설 하에서 에프 값은 자유도 ${D.df1}, ${D.df2}인 에프 분포를 따릅니다. 에프 검정은 오른쪽 꼬리만 보며, 피 값은 ${pr(D.p)}입니다. 점선은 유의수준 5퍼센트의 임계값 ${D.fc.toFixed(2)}입니다.`,
+  d:4.5,e:'우연일 확률',p:'F분포와 p값',
+  ce:()=>`“원래 차이가 없다”고 가정하면 점수는 대부분 <b>0~1 근처</b>에 몰려요. 우리 점수 ${D.F.toFixed(2)}의 오른쪽 넓이가 <b>우연일 확률</b> ${(D.p*100).toFixed(1)}%예요.`,
+  cp:()=>`H₀ 하에서 F ~ F(${D.df1}, ${D.df2}). p = P(F ≥ ${D.F.toFixed(2)}) = ${fp(D.p)} (오른쪽 꼬리). 임계값 F<sub>.05</sub> = ${D.fc.toFixed(2)}.`},
+ {scr:'판정 배지 표시',
+  ne:()=>D.p<0.05?`우연일 확률이 5퍼센트보다 작아요. 그래서 역과의 거리에 따라 가격이 다르다고 판단해요. 그런데 에프 검정은 세 그룹 중 어딘가가 다르다는 것만 알려 줘요. 어느 그룹끼리 다른지는 다음 단계에서 확인해요.`:`우연일 확률이 5퍼센트 이상이에요. 그래서 거리에 따라 가격이 다르다고 말하기 어려워요. 차이가 없다는 뜻은 아니에요.`,
+  np:()=>D.p<0.05?`피 값 ${pr(D.p)}는 유의수준 0.05보다 작으므로 귀무가설을 기각합니다. 적어도 한 집단의 모평균이 다르다는 뜻입니다. 에타 제곱은 ${D.eta.toFixed(2)}로, 전체 변동의 ${(D.eta*100).toFixed(0)}퍼센트를 거리 집단이 설명합니다. 어느 집단 간에 차이가 있는지는 사후검정으로 확인합니다.`:`피 값 ${pr(D.p)}는 유의수준 0.05 이상이므로 귀무가설을 기각하지 못합니다. 이 경우 일반적으로 사후검정은 진행하지 않으며, 표본크기와 검정력을 함께 검토합니다.`,
+  d:4,e:'판단하기',p:'결론',
+  ce:()=>D.p<0.05?`우연일 확률이 <b>5%보다 작아요</b>. “거리에 따라 가격이 <b>다르다</b>.” 하지만 <b>어디가</b> 다른지는 아직 몰라요.`:`우연일 확률이 <b>5% 이상</b>이에요. “거리에 따라 다르다고 <b>말하기 어렵다</b>.” 차이가 없다는 뜻은 아니에요.`,
+  cp:()=>D.p<0.05?`F(${D.df1}, ${D.df2}) = ${D.F.toFixed(2)}, p = ${fp(D.p)} < .05 → H₀ 기각. η² = ${D.eta.toFixed(2)}. 옴니버스 검정이므로 쌍별 차이는 사후검정 필요.`:`F(${D.df1}, ${D.df2}) = ${D.F.toFixed(2)}, p = ${fp(D.p)} ≥ .05 → H₀ 기각 실패(차이가 0임을 입증한 것은 아님).`},
+ {scr:'두 그룹씩 짝지은 비교 결과판',
+  ne:()=>`이제 두 그룹씩 짝지어 비교해요. 여러 번 비교하는 만큼 기준을 더 엄격하게 잡아요. ${phEasy()}${D.p<0.05?'':' 다만 전체 검정에서 차이가 없었으니 참고로만 봐요.'} 정리하면, 분산분석은 그룹끼리 벌어진 정도를 그룹 안 흔들림으로 나눈 점수로, 세 그룹 이상을 한 번에 비교하는 방법이에요.`,
+  np:()=>`사후검정으로 투키 에이치에스디를 사용합니다. ${phPro()} 투키 방법은 모든 쌍을 비교하면서 가족오류율을 5퍼센트로 유지합니다.${D.p<0.05?'':' 전체 검정이 유의하지 않았으므로 이 결과는 참고용입니다.'} 보고할 때는 에프 값, 두 자유도, 피 값, 에타 제곱, 그리고 사후검정 결과를 함께 적습니다.`,
+  d:4.5,e:'어디가 다를까?',p:'사후검정',
+  ce:()=>`두 그룹씩 짝지어 비교해요. 세 번 비교하니 우연을 <b>더 엄격하게</b> 걸러요. ✔ 표시된 짝만 “차이가 있다”고 말해요.`,
+  cp:()=>`Tukey HSD: 모든 쌍 비교에서 FWER = .05 유지. ${D.ph.map(r=>`${GS[r.i]}−${GS[r.j]} p = ${fp(r.p)}`).join(', ')}.`},
+];
+let starts=[],slots=[],TOTAL=0;
+const narr=k=>mode==='easy'?ST[k].ne():ST[k].np();
+const sents=x=>x.split(/(?<=[.?!])\s+/).filter(Boolean);
+function layout(){const r=+document.getElementById('rate').value||1;const k=starts.length?cur(time):0,off=starts.length?time-starts[k]:0;
+  starts=[];slots=[];let acc=0;ST.forEach((st,i)=>{const sl=Math.max(st.d+0.8,narr(i).length*0.15/r+0.6);starts.push(acc);slots.push(sl);acc+=sl;});TOTAL=acc;
+  time=Math.min(starts[k]+Math.min(off,slots[k]),TOTAL);}
+function renderScript(){if(!D)return;document.getElementById('scriptBody').innerHTML=ST.map((st,i)=>`<tr><td>${i+1}. ${L(st.e,st.p)}</td><td>${st.scr}</td><td>${narr(i)}</td></tr>`).join('');}
+function prog(k,t){return Math.max(0,Math.min(1,(t-starts[k])/ST[k].d));}
+function cur(t){let k=0;for(let i=0;i<starts.length;i++)if(t>=starts[i])k=i;return k;}
+
+const chipsEl=document.getElementById('chips');
+function renderChips(){chipsEl.innerHTML='';ST.forEach((s,i)=>{const b=document.createElement('button');b.textContent=(i+1)+'. '+L(s.e,s.p);b.onclick=()=>{stopSpeech();time=starts[i];playing=true;syncPlay();};chipsEl.appendChild(b);});lastK=-1;}
+
+// ---------- 캔버스 ----------
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');let W=600,H=440,C={};
+function readColors(){const s=getComputedStyle(document.documentElement);['bg','panel','ink','muted','line','a','b','c','sig','ok','chip'].forEach(k=>C[k]=s.getPropertyValue('--'+k).trim());}
+function resize(){const w=cv.parentElement.clientWidth;W=w;H=Math.round(Math.max(460,Math.min(580,w*0.72)));const r=window.devicePixelRatio||1;cv.width=W*r;cv.height=H*r;cv.style.height=H+'px';ctx.setTransform(r,0,0,r,0,0);}
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const cl=x=>Math.max(0,Math.min(1,x));
+function txt(s,x,y,col,size,align='left',weight=500,font='sans'){ctx.fillStyle=col;ctx.textAlign=align;ctx.textBaseline='middle';ctx.font=`${weight} ${size}px ${font==='mono'?'"IBM Plex Mono",monospace':'"IBM Plex Sans KR","Malgun Gothic",sans-serif'}`;ctx.fillText(s,x,y);}
+function fitFont(s,size,maxW){ctx.font=`700 ${size}px "IBM Plex Sans KR",sans-serif`;while(ctx.measureText(s).width>maxW&&size>10){size--;ctx.font=`700 ${size}px "IBM Plex Sans KR",sans-serif`;}return size;}
+function arrow(x0,x1,y,col,w=2.5){ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();
+  if(Math.abs(x1-x0)>6){const dir=Math.sign(x1-x0);ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x1-7*dir,y-4.5);ctx.lineTo(x1-7*dir,y+4.5);ctx.fill();}}
+
+function draw(t){
+  const fs=W<520?11:13, pl=18, pr=18, small=W<520;
+  ctx.fillStyle=C.panel;ctx.fillRect(0,0,W,H);
+  const X=v=>pl+(v-D.lo)/(D.hi-D.lo)*(W-pl-pr);
+  const yG=[H*0.11,H*0.215,H*0.32],yAx=H*0.395,yF=H*0.47,yV=H*0.54,yBase=H*0.92,hT=H*0.25;
+  const jit=i=>((i*7)%5-2)*3.6;
+  // 축
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pl,yAx);ctx.lineTo(W-pr,yAx);ctx.stroke();
+  const step=(D.hi-D.lo)>4000?1000:500;
+  for(let v=D.lo;v<=D.hi;v+=step){ctx.beginPath();ctx.moveTo(X(v),yAx);ctx.lineTo(X(v),yAx+4);ctx.stroke();txt(v.toLocaleString('ko-KR'),Math.max(pl+14,Math.min(W-pr-14,X(v))),yAx+12,C.muted,fs-1,'center',400,'mono');}
+  txt(L('3.3㎡당 가격(만원)','3.3㎡당 매매가(만원)'),W-pr,yAx-9,C.muted,fs-1,'right',400);
+  // 그룹 이름
+  yG.forEach((y,g)=>txt(gname(g),pl,y-22,C[COL[g]],fs,'left',700));
+  // 5단계: 점 → 그룹 평균 선분(잡음)
+  const p5=ease(prog(4,t));
+  if(p5>0){D.G.forEach((arr,g)=>{ctx.strokeStyle=C[COL[g]];ctx.lineWidth=1.2;ctx.globalAlpha=.55;arr.forEach((v,i)=>{const y=yG[g]+jit(i),xm=X(D.m[g]);ctx.beginPath();ctx.moveTo(X(v),y);ctx.lineTo(X(v)+(xm-X(v))*p5,y);ctx.stroke();});ctx.globalAlpha=1;});
+    if(p5>.8){ctx.globalAlpha=(p5-.8)*5;const g=0,xr=Math.max(...D.G[g].map(X));txt(L('그룹 안 흔들림(잡음)','집단 내 편차'),Math.min(xr+8,W-pr-90),yG[g]+1,C.muted,fs-1,'left',500);ctx.globalAlpha=1;}}
+  // 1단계 점
+  const p1=prog(0,t),n=P.n;
+  D.G.forEach((arr,g)=>{arr.forEach((v,i)=>{const delay=(i+g*n)/(3*n)*0.6,q=ease(cl((p1-delay)/0.4));if(q<=0)return;
+    const y=yG[g]+jit(i),yy=-10+(y+10)*q;ctx.globalAlpha=Math.min(1,q*1.5);ctx.fillStyle=C[COL[g]];ctx.beginPath();ctx.arc(X(v),yy,small?3.6:4.6,0,7);ctx.fill();ctx.globalAlpha=1;});});
+  // 2단계 전체 평균 점선
+  const p2=ease(prog(1,t));
+  if(p2>0){const xg=X(D.gm),y0=yG[0]-14,y1=yG[2]+14;ctx.setLineDash([5,4]);ctx.strokeStyle=C.ink;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(xg,y0);ctx.lineTo(xg,y0+(y1-y0)*p2);ctx.stroke();ctx.setLineDash([]);
+    ctx.globalAlpha=p2;txt(L('전체 평균 ','x̄.. = ')+fmt(D.gm),Math.max(pl+50,Math.min(W-pr-50,xg)),yG[0]-38,C.ink,fs,'center',700);ctx.globalAlpha=1;}
+  // 3단계 그룹 평균선
+  const p3=ease(prog(2,t));
+  if(p3>0){D.m.forEach((m,g)=>{const y=yG[g],c=C[COL[g]];ctx.strokeStyle=c;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(X(m),y-13*p3);ctx.lineTo(X(m),y+13*p3);ctx.stroke();
+    ctx.globalAlpha=p3;const lab=L('평균 ','x̄'+'₁₂₃'[g]+' = ')+fmt(m);const right=X(m)<W*0.7;txt(lab,right?X(m)+7:X(m)-7,y-14,c,fs-1,right?'left':'right',700);ctx.globalAlpha=1;});}
+  // 4단계 신호 화살표(전체 평균 → 그룹 평균)
+  const p4=ease(prog(3,t));
+  if(p4>0){const xg=X(D.gm);D.m.forEach((m,g)=>{const y=yG[g]+15;arrow(xg,xg+(X(m)-xg)*p4,y,C.sig,2.5);});
+    if(p4>.7){ctx.globalAlpha=(p4-.7)/.3;const g=2,xe=X(D.m[g]),xg2=X(D.gm);const lab=L('그룹 간 차이(신호)','집단 간 편차');const left=Math.min(xe,xg2)-8;
+      if(left>120)txt(lab,left,yG[g]+15,C.sig,fs-1,'right',700);else txt(lab,Math.max(xe,xg2)+8,yG[g]+15,C.sig,fs-1,'left',700);ctx.globalAlpha=1;}}
+  // 6단계 공식
+  const p6=prog(5,t);
+  if(p6>0){ctx.globalAlpha=Math.min(1,p6*2);const kk=Math.min(1,p6*1.4),fv=D.F*kk;
+    const s=L(`신호 ${fmt(D.msb)} ÷ 잡음 ${fmt(D.msw)} = 점수 F ${fv.toFixed(2)}`,`F = MS집단 / MS잔차 = ${fmt(D.msb)} / ${fmt(D.msw)} = ${fv.toFixed(2)}`);
+    const size=fitFont(s,small?14:18,W-40);const w=ctx.measureText(s).width+24;ctx.fillStyle=C.chip;ctx.beginPath();ctx.roundRect(W/2-w/2,yF-size*0.9,w,size*1.8,8);ctx.fill();txt(s,W/2,yF,C.ink,size,'center',700);ctx.globalAlpha=1;}
+  // 7단계 F분포 (9단계에서 흐려짐)
+  const p7=prog(6,t),p9=ease(prog(8,t));
+  if(p7>0){ctx.globalAlpha=1-0.88*p9;
+    const fmax=Math.max(6,Math.min(16,Math.ceil(D.F+2))),X2=v=>pl+v/fmax*(W-pl-pr);
+    let pk=0;for(let v=0.02;v<=fmax;v+=0.05)pk=Math.max(pk,fpdf(v,D.df1,D.df2));pk=Math.max(pk,fpdf(0,D.df1,D.df2));
+    const Y2=v=>yBase-fpdf(Math.max(v,0.001),D.df1,D.df2)/pk*hT;
+    ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pl,yBase);ctx.lineTo(W-pr,yBase);ctx.stroke();
+    const tick=fmax>10?4:2;for(let v=0;v<=fmax;v+=tick)txt(String(v),Math.max(pl+6,X2(v)),yBase+11,C.muted,fs-1,'center',400,'mono');
+    const q1=Math.min(1,p7/0.4),xe=fmax*q1;
+    ctx.strokeStyle=C.ink;ctx.lineWidth=2;ctx.beginPath();for(let v=0.001;v<=xe;v+=0.04){const x=X2(v),y=Y2(v);v===0.001?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();
+    if(q1>=1){txt(L('차이가 없다면 나올 점수들','H₀ 하의 F('+D.df1+', '+D.df2+') 분포'),X2(fmax*0.35),yBase-hT*0.55,C.muted,fs-1,'left',400);
+      if(D.fc<fmax){ctx.setLineDash([4,4]);ctx.strokeStyle=C.muted;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(X2(D.fc),yBase);ctx.lineTo(X2(D.fc),yBase-hT*0.32);ctx.stroke();ctx.setLineDash([]);
+        txt(L('5% 기준선','F.05 = '+D.fc.toFixed(2)),X2(D.fc)+4,yBase-hT*0.34,C.muted,fs-1,'left',400);}}
+    const q2=ease(cl((p7-0.45)/0.4));
+    if(q2>0){const af=Math.min(fmax-0.1,D.F),fm=af*q2;const ga=ctx.globalAlpha;
+      ctx.globalAlpha=ga*.55*q2;ctx.fillStyle=C.sig;ctx.beginPath();ctx.moveTo(X2(af),yBase);for(let v=af;v<=fmax;v+=0.04)ctx.lineTo(X2(v),Y2(v));ctx.lineTo(X2(fmax),yBase);ctx.closePath();ctx.fill();ctx.globalAlpha=ga;
+      const xm=X2(fm);ctx.strokeStyle=C.sig;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xm,yBase);ctx.lineTo(xm,yBase-hT*0.8);ctx.stroke();
+      txt(L('우리 점수 ','F = ')+(D.F*q2).toFixed(2)+(D.F>af?' →':''),Math.max(pl+44,Math.min(W-pr-44,xm)),yBase-hT*0.8-10,C.sig,fs,'center',700);
+      if(q2>.9){ctx.globalAlpha=ga*(q2-.9)*10;const s=L('우연일 확률 '+(D.p*100).toFixed(1)+'%','p = '+fp(D.p));txt(s,W-pr,yBase-24,C.sig,fs,'right',700);ctx.globalAlpha=ga;}}
+    ctx.globalAlpha=1;}
+  // 8단계 판정
+  const p8=ease(prog(7,t));
+  if(p8>0){const sig=D.p<0.05,col=sig?C.ok:C.muted;const s=sig?L('✔ 거리에 따라 가격이 달라요 → 어디가 다른지는 다음 단계','✔ p < .05 → H₀ 기각 (적어도 한 집단이 다름)'):L('△ 우연일 수도 있어요 → 다르다고 말하기 어려워요','△ p ≥ .05 → H₀ 기각 실패');
+    const size=fitFont(s,small?13:15,W-40);const w=ctx.measureText(s).width+24;ctx.globalAlpha=p8;ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(W/2-w/2,yV-size*0.85,w,size*1.7,999);ctx.stroke();txt(s,W/2,yV,col,size,'center',700);ctx.globalAlpha=1;}
+  // 9단계 사후검정 결과판
+  if(p9>0){const top=H*0.615,rowH=Math.min(46,(H*0.94-top-34)/3);ctx.globalAlpha=p9;
+    txt(L('두 그룹씩 비교 (사후검정)','사후검정 — Tukey HSD'),W/2,top+6,C.ink,fs+1,'center',700);
+    D.ph.forEach((r,i)=>{const q=ease(cl(p9*3-i*0.6));if(q<=0)return;ctx.globalAlpha=q;const y=top+30+i*rowH+rowH/2,ok=r.p<0.05;
+      ctx.fillStyle=C.chip;ctx.beginPath();ctx.roundRect(pl,y-rowH/2+3,W-pl-pr,rowH-6,8);ctx.fill();
+      const x0=pl+12;txt(GS[r.i],x0,y,C[COL[r.i]],fs,'left',700);ctx.font=`700 ${fs}px "IBM Plex Sans KR",sans-serif`;let x=x0+ctx.measureText(GS[r.i]).width;
+      txt(' vs ',x,y,C.muted,fs,'left',400);ctx.font=`400 ${fs}px "IBM Plex Sans KR",sans-serif`;x+=ctx.measureText(' vs ').width;txt(GS[r.j],x,y,C[COL[r.j]],fs,'left',700);
+      const xr=W-pr-12;txt(ok?L('✔ 차이 있음','✔ 유의'):L('△ 말하기 어려움','△ 비유의'),xr,y,ok?C.ok:C.muted,fs,'right',700);
+      if(!small||W>=360){const mid=small?W*0.56:W*0.55;txt(`${L('차이','Δ')} ${sgn(r.md)}  ${L('확률','p')} ${small?(r.p<0.001?'<.001':r.p.toFixed(3).replace(/^0/,'')):fp(r.p)}`,mid,y,C.ink,fs-1,'center',500,'mono');}
+    });ctx.globalAlpha=1;}
+}
+
+// ---------- 패널 ----------
+function setT(id,v){document.getElementById(id).textContent=v;}
+function updatePanels(){if(!D)return;
+  setT('r_ssb',fmt(D.ssb));setT('r_df1',D.df1);setT('r_msb',fmt(D.msb));setT('r_f',D.F.toFixed(2));setT('r_p',fp(D.p));setT('r_eta',D.eta.toFixed(3).replace(/^0/,''));
+  setT('r_ssw',fmt(D.ssw));setT('r_df2',D.df2);setT('r_msw',fmt(D.msw));setT('r_sst',fmt(D.sst));setT('r_dft',D.df1+D.df2);
+  document.getElementById('phBody').innerHTML=D.ph.map(r=>{const ok=r.p<0.05;return `<tr><td>${GS[r.i]} − ${GS[r.j]}</td><td class="num">${sgn(r.md)}</td><td class="num">${r.se.toFixed(1)}</td><td class="num">${r.t.toFixed(2)}</td><td class="num">${fp(r.p)}</td><td class="${ok?'yes':'no'}">${ok?L('✔ 차이 있음','✔ 유의'):L('△ 말하기 어려움','△ 비유의')}</td></tr>`;}).join('');
+  setT('vDiff',P.diff);setT('vSd',P.sd);setT('vN',P.n);
+  setT('lMsb',fmt(D.msb));setT('lMsw',fmt(D.msw));setT('lF',D.F.toFixed(2));setT('lP',mode==='easy'?(D.p*100).toFixed(1)+'%':fp(D.p));
+  const v=document.getElementById('verdict'),sig=D.p<0.05;v.style.color=sig?'var(--ok)':'var(--muted)';
+  v.innerHTML=sig?L('우연일 확률이 5%보다 작아요 → “거리에 따라 가격이 다르다”',`p < .05 → H₀ 기각, F(${D.df1}, ${D.df2}) = ${D.F.toFixed(2)}, η² = ${D.eta.toFixed(2)}`):L('우연일 확률이 5% 이상이에요 → “다르다고 말하기 어렵다”',`p ≥ .05 → H₀ 기각 실패, F(${D.df1}, ${D.df2}) = ${D.F.toFixed(2)}`);
+  lastK=-1;if(starts.length){layout();renderScript();}}
+[['sDiff','diff'],['sSd','sd'],['sN','n']].forEach(([id,k])=>{const el=document.getElementById(id);el.oninput=()=>{P[k]=+el.value;build();};});
+document.getElementById('resample').onclick=()=>{seed++;build();};
+
+// ---------- 재생 ----------
+let time=0,playing=true,speed=1,last=performance.now(),lastK=-1;
+const playBtn=document.getElementById('play'),seek=document.getElementById('seek'),cap=document.getElementById('cap');
+function syncPlay(){playBtn.textContent=playing?'⏸ 일시정지':'▶ 재생';}
+playBtn.onclick=()=>{if(!playing&&time>=TOTAL)time=0;playing=!playing;if(!playing)stopSpeech();else if(voiceOn)speakStage(cur(time));syncPlay();};
+document.getElementById('restart').onclick=()=>{stopSpeech();time=0;playing=true;if(voiceOn)speakStage(0);syncPlay();};
+// ---------- 음성 ----------
+const synth=window.speechSynthesis,vBtn=document.getElementById('vBtn'),vSel=document.getElementById('vSel'),vNote=document.getElementById('vNote'),rateEl=document.getElementById('rate');
+let voiceOn=false,speaking=false,spokenStage=-1,tok=0,voices=[];
+function loadVoices(){if(!synth)return;voices=synth.getVoices().filter(v=>/^ko/i.test(v.lang));
+  vSel.innerHTML=voices.length?voices.map((v,i)=>`<option value="${i}">${v.name.replace(/^(Microsoft|Google)\s*/,'')}</option>`).join(''):'<option>한국어 음성 없음</option>';
+  const best=voices.findIndex(v=>/Natural|Online|Google/i.test(v.name));if(best>=0)vSel.value=best;
+  vNote.textContent=voices.length?'목소리는 브라우저마다 다릅니다. Edge의 “SunHi/InJoon (Natural)” 목소리가 가장 자연스럽습니다.':'이 브라우저에 한국어 음성이 없습니다. Edge나 Chrome에서 내려받은 파일을 열어 주세요.';}
+function stopSpeech(){tok++;speaking=false;spokenStage=-1;try{synth&&synth.cancel();}catch(e){}}
+function speakStage(k){if(!synth||!voiceOn)return;stopSpeech();spokenStage=k;const my=tok,ss=sents(narr(k));let i=0;speaking=true;
+  const next=()=>{if(my!==tok)return;if(i>=ss.length){speaking=false;return;}
+    const u=new SpeechSynthesisUtterance(ss[i]);u.lang='ko-KR';const v=voices[+vSel.value];if(v)u.voice=v;u.rate=+rateEl.value;
+    u.onend=u.onerror=()=>{if(my!==tok)return;i++;next();};synth.speak(u);};next();}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}else{vBtn.disabled=true;vSel.hidden=true;vNote.textContent='이 브라우저는 음성 읽기를 지원하지 않습니다.';}
+vBtn.onclick=()=>{voiceOn=!voiceOn;vBtn.textContent=voiceOn?'🔊 음성 끄기':'🔇 음성 켜기';vBtn.classList.toggle('on',voiceOn);
+  if(!voiceOn)stopSpeech();else if(playing)speakStage(cur(time));};
+vSel.onchange=()=>{if(voiceOn&&playing)speakStage(cur(time));};
+rateEl.onchange=()=>{stopSpeech();layout();};
+document.getElementById('fs').onclick=()=>{const el=document.querySelector('.stage');try{(document.fullscreenElement?document.exitFullscreen():el.requestFullscreen()).catch(()=>{});}catch(e){}};
+document.getElementById('copyScript').onclick=()=>{const t=ST.map((st,i)=>`장면 ${i+1}. ${L(st.e,st.p)}\n[화면] ${st.scr}\n[내레이션] ${narr(i)}`).join('\n\n');
+  const b=document.getElementById('copyScript');const done=()=>{b.textContent='복사됨';setTimeout(()=>b.textContent='대본 복사',1500);};
+  try{navigator.clipboard.writeText(t).then(done,()=>{const r=document.createRange();r.selectNode(document.getElementById('scriptBody'));getSelection().removeAllRanges();getSelection().addRange(r);});}catch(e){}};
+document.getElementById('speed').onchange=e=>speed=+e.target.value;
+seek.oninput=()=>{stopSpeech();time=seek.value/1000*TOTAL;playing=false;syncPlay();};
+function loop(now){const dt=Math.min(0.1,(now-last)/1000);last=now;
+  if(playing){let nt=time+dt*speed;const k0=cur(time),end=starts[k0]+slots[k0];
+    if(voiceOn&&speaking&&nt>=end-0.02)nt=Math.max(time,end-0.02);
+    time=nt;if(time>=TOTAL){time=TOTAL;playing=false;syncPlay();}}
+  {const kk=cur(time);if(voiceOn&&playing&&spokenStage!==kk)speakStage(kk);
+}
+  seek.value=Math.round(time/TOTAL*1000);
+  const k=cur(time);if(k!==lastK){lastK=k;cap.innerHTML=`<strong>${k+1}단계 · ${L(ST[k].e,ST[k].p)}</strong><br>`+(mode==='easy'?ST[k].ce():ST[k].cp());[...chipsEl.children].forEach((b,i)=>b.classList.toggle('on',i===k));}
+  draw(time);requestAnimationFrame(loop);}
+
+const mq=matchMedia('(prefers-color-scheme: dark)');mq.addEventListener?.('change',readColors);
+new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+window.addEventListener('resize',resize);
+document.documentElement.dataset.m='easy';
+readColors();resize();build();renderChips();if(matchMedia('(prefers-reduced-motion: reduce)').matches){time=TOTAL;playing=false;}syncPlay();requestAnimationFrame(loop);
+})();
+</script>
+
+</body></html>

@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>산점도 행렬이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 왼쪽 원자료 표(→ 정보 패널) / 오른쪽 4×4 산점도 행렬 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6; --lo:#eef3f9;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:520px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 24 · 관계</div>
+    <h1>산점도 행렬이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="아파트 단지 자료표의 열이 분포로, 두 열의 짝이 산점도로 바뀌어 4×4 산점도 행렬이 되는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 칸이나 점에 마우스를 올리거나(휴대폰은 누르기) 하면 두 변수의 상관계수, 또는 그 단지의 값이 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><span>위 칸</span><select id="uSel" aria-label="위쪽 삼각형 표시"><option value="0" selected>상관계수 r</option><option value="1">산점도(거울)</option></select></div>
+    <div class="grp"><span>강조</span><select id="bSel" aria-label="강조할 단지"><option value="0">없음</option><option value="1" selected>가장 비싼 5곳</option><option value="2">신축(5년 이하)</option><option value="3">역세권(300m 이내)</option></select></div>
+    <div class="grp"><span>이상치</span><select id="oSel" aria-label="이상치 포함 여부"><option value="1" selected>포함</option><option value="0">제외</option></select></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="26" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>산점도 행렬 읽는 법</h2>
+      <p class="note" id="rNote"></p>
+      <div class="tbl"><table><thead><tr><th>칸 위치</th><th>무엇을 그리나</th><th>읽는 법</th></tr></thead><tbody id="rBody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>산점도 행렬 점검표</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">산점도 행렬을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note" id="foot"></p>
+</div>
+
+<script>
+(function(){
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261022);
+const nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+// 예시 단지 59곳 + 이상치 1곳
+const REC=[];for(let i=0;i<59;i++){const area=Math.round(40+R()*90),age=Math.round(R()*34),dist=Math.round(100+R()*1300);
+  const price=Math.max(1.5,1.0+.11*area-.12*age+7*Math.exp(-dist/300)+nrm()*1.1);REC.push({id:`단지${String(i+1).padStart(2,'0')}`,v:[area,+price.toFixed(1),age,dist],out:false})}
+REC.push({id:'단지60',v:[45,26.0,38,200],out:true}); // 재건축 기대감이 큰 오래된 소형 단지(이상치)
+const VN=['면적','가격','연식','역거리'],VU=['㎡','억','년','m'],K=4;
+const RG=[[30,140],[0,30],[0,40],[0,1500]];
+function corr(rows,a,b){const n=rows.length,ma=rows.reduce((s,r)=>s+r.v[a],0)/n,mb=rows.reduce((s,r)=>s+r.v[b],0)/n;let sab=0,saa=0,sbb=0;rows.forEach(r=>{const da=r.v[a]-ma,db=r.v[b]-mb;sab+=da*db;saa+=da*da;sbb+=db*db});return sab/Math.sqrt(saa*sbb)}
+const RIN=[],ROUT=[];for(let i=0;i<K;i++){RIN[i]=[];ROUT[i]=[];for(let j=0;j<K;j++){RIN[i][j]=corr(REC,i,j);ROUT[i][j]=corr(REC.filter(r=>!r.out),i,j)}}
+const TOP5=new Set([...REC].sort((a,b)=>b.v[1]-a.v[1]).slice(0,5).map(r=>r.id));
+const BR=[()=>false,r=>TOP5.has(r.id),r=>r.v[2]<=5,r=>r.v[3]<=300];
+const TOTAL=26,T2=2.8,T3=5.6,T4=8.6,T5=11.4,T6=14.6,T7=18.6,T8=22.6;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',uUser=0,bUser=1,oUser=1,ptr=null,snap=true,uCur=0,oCur=1,bA=0;
+try{const v=localStorage.getItem('splomLv');if(v==='e'||v==='u')lv=v}catch(e){}
+REC.forEach((r,i)=>{r.d=R()*.6;r.rowI=i});
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640;
+  const tx=narrow?12:16,ty=narrow?10:24,tw=narrow?W-24:Math.min(300,W*.3),nrow=narrow?4:12;
+  const mx0=narrow?34:tx+tw+40,my=narrow?ty+28+nrow*15+34:30,S=narrow?Math.min(W-mx0-10,H-my-30):Math.min(H-my-34,W-mx0-20),mx=narrow?mx0:mx0+Math.max(0,(W-mx0-20-S)/2),gap=narrow?4:8,cs=(S-gap*(K-1))/K;
+  L={W,H,narrow,tx,ty,tw,nrow,mx,my,S,gap,cs,colX:[0,.30,.52,.72].map(f=>tx+8+f*(tw-16)+(narrow?50:60)*0)}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+const cellX=j=>L.mx+j*(L.cs+L.gap),cellY=i=>L.my+i*(L.cs+L.gap);
+const px=(j,v)=>cellX(j)+4+(v-RG[j][0])/(RG[j][1]-RG[j][0])*(L.cs-8),py=(i,v)=>cellY(i)+L.cs-4-(v-RG[i][0])/(RG[i][1]-RG[i][0])*(L.cs-8);
+function target(){if(t>=T8)return{u:uUser,o:oUser,b:bUser};if(t>=T7&&t<T7+1.6)return{u:0,o:1,b:0};if(t>=T7+1.6&&t<T8)return{u:0,o:0,b:0};if(t>=T6+1.6&&t<T7)return{u:0,o:1,b:1};return{u:t>=T5+.6&&t<T5+1.4?1:0,o:1,b:0}}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4')};
+  const{W,H,narrow,tx,ty,tw,nrow,mx,my,S,gap,cs,colX}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const fin=t>=T8,a0=clamp(t/.5);
+  const pTab=a0*(1-clamp((t-T4-1.6)/.6)),pDiag=clamp((t-T2)/2),pPair=clamp((t-T3)/2.2),pAll=clamp((t-T4)/2),pUp=fin?1:clamp((t-T5)/.6),pR=1-uCur;
+  const rows=oCur>.5?REC:REC.filter(r=>!r.out),Rm=oCur>.5?RIN:ROUT;
+  // 셀 틀
+  for(let i=0;i<K;i++)for(let j=0;j<K;j++){const show=i===j?pDiag>0:(i>j?(i===1&&j===0?pPair>0:pAll>0):pUp>0);if(!show&&t<T2)continue;
+    ctx.globalAlpha=a0*(show?1:.35);ctx.fillStyle=C.paper;ctx.fillRect(cellX(j),cellY(i),cs,cs);ctx.strokeStyle=C.line;ctx.strokeRect(cellX(j)+.5,cellY(i)+.5,cs-1,cs-1);ctx.globalAlpha=1}
+  // 바깥 축 이름
+  for(let j=0;j<K;j++){txt(`${VN[j]}(${VU[j]})`,cellX(j)+cs/2,my+S+(narrow?14:18),C.muted,`${narrow?10:11.5}px ${SANS}`,'center',a0);
+    ctx.save();ctx.translate(mx-(narrow?10:12),cellY(j)+cs/2);ctx.rotate(-Math.PI/2);txt(VN[j],0,0,C.muted,`${narrow?10:11.5}px ${SANS}`,'center',a0);ctx.restore()}
+  // 원자료 표
+  const rowY=k=>ty+30+k*15;
+  if(pTab>0){ctx.globalAlpha=pTab;ctx.fillStyle=C.paper;ctx.fillRect(tx,ty,tw,30+nrow*15+20);ctx.strokeStyle=C.line;ctx.strokeRect(tx+.5,ty+.5,tw-1,30+nrow*15+19);ctx.globalAlpha=1;
+    const hx=[tx+8,tx+tw*.36,tx+tw*.55,tx+tw*.74,tx+tw*.92];const hi=t>=T2&&t<T3?Math.min(3,Math.floor((t-T2)/.55)):t>=T3&&t<T4?-2:-1;
+    ['단지','면적','가격','연식','역거리'].forEach((h,c)=>txt(h,hx[c],ty+16,(hi===c-1||(hi===-2&&(c===1||c===2)))?C.c4:C.muted,`700 ${narrow?10:11}px ${SANS}`,c?'right':'left',pTab));
+    for(let k=0;k<nrow;k++){const r=REC[k];txt(r.id,hx[0],rowY(k)+4,C.ink,`${narrow?10:11}px ${MONO}`,'left',pTab);r.v.forEach((v,c)=>txt(String(v),hx[c+1],rowY(k)+4,(hi===c||(hi===-2&&c<2))?C.c4:C.ink,`${narrow?10:11}px ${MONO}`,'right',pTab))}
+    txt(`… 모두 ${REC.length}개 단지 (한 줄 = 단지 하나)`,hx[0],rowY(nrow)+6,C.muted,`${narrow?10:11}px ${SANS}`,'left',pTab);L.hx=hx}
+  const hx=L.hx||[tx,tx,tx,tx,tx];const src=(r,c)=>[hx[c+1]-10,rowY(Math.min(r.rowI,nrow))];
+  // 대각선: 히스토그램
+  const hits=[];
+  for(let j=0;j<K;j++){const pj=clamp((t-T2-j*.55)/1.1);if(pj<=0&&!fin)continue;const nb=8,cnt=Array(nb).fill(0),idx=[];const x0=cellX(j),y0=cellY(j);
+    rows.forEach(r=>{const b=Math.min(nb-1,Math.floor((r.v[j]-RG[j][0])/(RG[j][1]-RG[j][0])*nb));idx.push([r,b,cnt[b]++])});const mxc=Math.max(...cnt),bw=(cs-8)/nb,dh=(cs-26)/Math.max(mxc,1);
+    const pBar=fin?1:clamp((pj-.75)/.25);
+    if(pBar<1)idx.forEach(([r,b,k])=>{const pp=ease(clamp((pj-r.d*.5)/.5));const[sx0,sy0]=src(r,j);const x=lerp(sx0,x0+4+(b+.5)*bw,pp),y=lerp(sy0,y0+cs-4-(k+.5)*dh,pp);ctx.globalAlpha=(1-pBar)*.8;ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(x,y,narrow?1.4:2,0,7);ctx.fill();ctx.globalAlpha=1});
+    cnt.forEach((c,b)=>{ctx.globalAlpha=pBar*.85;ctx.fillStyle=C.c3;ctx.fillRect(x0+4+b*bw+.5,y0+cs-4-c*dh,bw-1,c*dh);ctx.globalAlpha=1});
+    txt(VN[j],x0+6,y0+(narrow?12:15),C.ink,`700 ${narrow?10.5:12.5}px ${SANS}`,'left',Math.max(pj,fin?1:0))}
+  // 점(아래 삼각형, 위 거울)
+  const br=BR[fin?bUser:(bA>.5?1:0)],bAl=fin?(bUser?1:0):bA;
+  for(let i=0;i<K;i++)for(let j=0;j<K;j++){if(i===j)continue;const lower=i>j;
+    let p;if(lower)p=i===1&&j===0?pPair:clamp((pAll-(i+j-1)*.12)/.6);else p=fin?uCur:(t>=T5?uCur:0);
+    if(p<=0)continue;
+    rows.forEach(r=>{const pp=lower?ease(clamp((p-r.d*.4)/.6)):p;const tx2=px(j,r.v[j]),ty2=py(i,r.v[i]);let x=tx2,y=ty2;
+      if(lower&&pp<1){const[s1x,s1y]=src(r,j);x=lerp(s1x,tx2,pp);y=lerp(s1y,ty2,pp)}
+      if(!lower){const fx=px(i,r.v[i]),fy=py(j,r.v[j]);x=lerp(fx,tx2,1);y=ty2;ctx.globalAlpha=p*.6}else ctx.globalAlpha=(lower?Math.min(1,pp*1.5):1)*(bAl>0&&!br(r)?lerp(.7,.18,bAl):.7);
+      const hl=bAl>0&&br(r),out=r.out&&(t>=T7||fin);ctx.fillStyle=hl?C.c4:out?C.c3:C.c1;ctx.beginPath();ctx.arc(x,y,(hl||out?1.5:1)*(narrow?1.6:2.4),0,7);ctx.fill();ctx.globalAlpha=1;
+      if(lower&&p>=1)hits.push({r,x,y,i,j})})}
+  // 위 삼각형: 상관계수
+  if(pUp>0&&pR>0)for(let i=0;i<K;i++)for(let j=i+1;j<K;j++){const rv=Rm[i][j],x0=cellX(j),y0=cellY(i),a=pUp*pR;ctx.globalAlpha=a*Math.abs(rv)*.55;ctx.fillStyle=rv>=0?C.c1:C.c4;ctx.fillRect(x0+1,y0+1,cs-2,cs-2);ctx.globalAlpha=1;
+    txt(rv.toFixed(2),x0+cs/2,y0+cs/2+(narrow?5:7),Math.abs(rv)>.6?'#fff':C.ink,`700 ${narrow?14:20}px ${MONO}`,'center',a);txt('r',x0+cs/2,y0+cs/2+(narrow?18:26),Math.abs(rv)>.6?'#fff':C.muted,`${narrow?10:11}px ${SANS}`,'center',a)}
+  // 6단계: 패턴 강조
+  if(!fin&&t>=T6&&t<T6+1.6){const a=clamp((t-T6)/.4);[[1,0,C.c1,'면적↑ 가격↑'],[2,1,C.c4,'약한 −'],[3,1,C.c4,'약한 −']].forEach(([i,j,c,lb])=>{const[ii,jj]=i>j?[i,j]:[j,i];ctx.globalAlpha=a;ctx.strokeStyle=c;ctx.lineWidth=3;ctx.strokeRect(cellX(jj)+1.5,cellY(ii)+1.5,cs-3,cs-3);ctx.lineWidth=1;ctx.globalAlpha=1;
+    if(!narrow)txt(lb,cellX(jj)+cs-6,cellY(ii)+14,c,`700 11px ${SANS}`,'right',a)})}
+  // 왼쪽(또는 위) 정보 패널
+  const pInfo=fin?1:clamp((t-T4-2.2)/.6);
+  if(pInfo>0){let yy=narrow?ty+12:ty+16;const line_=(s,c,f,a=1)=>{txt(s,tx,yy,c,f,'left',a*pInfo);yy+=narrow?16:20};
+    if(!fin&&t<T6){line_(`변수 ${K}개 → 칸 ${K*K}개`,C.ink,`700 13px ${SANS}`);line_('대각선 = 각 변수의 분포',C.c3,`12px ${SANS}`);line_('아래 칸 = 두 변수 산점도',C.c1,`12px ${SANS}`);if(!narrow)line_('위 칸 = 같은 짝의 상관계수',C.muted,`12px ${SANS}`,clamp((t-T5)/.6))}
+    else if(!fin&&t<T7){line_('가격과 관계 (r)',C.ink,`700 13px ${SANS}`);[0,2,3].forEach(k=>line_(`${VN[k]} ↔ 가격  ${RIN[1][k]>=0?'+':''}${RIN[1][k].toFixed(2)}`,RIN[1][k]>=0?C.c1:C.c4,`12px ${MONO}`));
+      if(!narrow)line_(`면적 ↔ 연식  ${RIN[0][2].toFixed(2)} (거의 무관)`,C.muted,`12px ${MONO}`);if(t>=T6+1.6)line_('분홍 점 = 가장 비싼 5곳 → 모든 칸에서 따라감',C.c4,`700 ${narrow?11:12}px ${SANS}`,clamp((t-T6-1.6)/.4))}
+    else{const o=oCur>.5;line_(fin?`이상치 ${oUser?'포함':'제외'} · n=${rows.length}`:`이상치(노란 점) ${o?'포함':'제외'}`,C.ink,`700 13px ${SANS}`);
+      [[1,0],[2,1],[3,1]].forEach(([a,b])=>line_(`${VN[b]}↔${VN[a]}  ${RIN[a][b].toFixed(2)} → ${ROUT[a][b].toFixed(2)}`,C.muted,`12px ${MONO}`));
+      if(!narrow)line_('(포함 → 제외)',C.muted,`11px ${SANS}`);
+      if(fin&&bUser&&!narrow){const nb=rows.filter(BR[bUser]).length;line_(`강조: ${['','가장 비싼 5곳','신축 5년 이하','역세권 300m 이내'][bUser]} ${nb}곳`,C.c4,`700 12px ${SANS}`)}}}
+  // 가리키기
+  if(fin&&ptr){let best=null,bd=8;hits.forEach(h=>{const d=Math.hypot(h.x-ptr.x,h.y-ptr.y);if(d<bd){bd=d;best=h}});
+    let lines=null;
+    if(best){const r=best.r;ctx.strokeStyle=C.ink;ctx.lineWidth=2;ctx.beginPath();ctx.arc(best.x,best.y,6,0,7);ctx.stroke();ctx.lineWidth=1;
+      for(let i=1;i<K;i++)for(let j=0;j<i;j++){ctx.strokeStyle=C.ink;ctx.beginPath();ctx.arc(px(j,r.v[j]),py(i,r.v[i]),5,0,7);ctx.stroke()}
+      lines=[[`${r.id}${r.out?' (이상치)':''}`,`700 13px ${SANS}`,C.ink],[`면적 ${r.v[0]}㎡ · 가격 ${r.v[1]}억`,`12px ${SANS}`,C.ink],[`연식 ${r.v[2]}년 · 역거리 ${r.v[3]}m`,`12px ${SANS}`,C.ink],['모든 칸에서 같은 단지를 표시',`11px ${SANS}`,C.muted]]}
+    else{let ci=-1,cj=-1;for(let i=0;i<K;i++)for(let j=0;j<K;j++)if(ptr.x>=cellX(j)&&ptr.x<cellX(j)+cs&&ptr.y>=cellY(i)&&ptr.y<cellY(i)+cs){ci=i;cj=j}
+      if(ci>=0){if(ci===cj){const vs=rows.map(r=>r.v[ci]),m=vs.reduce((a,b)=>a+b,0)/vs.length;lines=[[`${VN[ci]} 분포`,`700 13px ${SANS}`,C.ink],[`평균 ${m.toFixed(1)}${VU[ci]} · n=${vs.length}`,`12px ${SANS}`,C.ink],[`범위 ${Math.min(...vs)} ~ ${Math.max(...vs)}${VU[ci]}`,`12px ${SANS}`,C.muted]]}
+        else{const[a,b]=ci>cj?[ci,cj]:[cj,ci];const rv=Rm[a][b];lines=[[`${VN[cj]}(가로) × ${VN[ci]}(세로)`,`700 13px ${SANS}`,C.ink],[`상관계수 r = ${rv.toFixed(2)}`,`700 12px ${SANS}`,rv>=0?C.c1:C.c4],[Math.abs(rv)>=.7?'강한 관계':Math.abs(rv)>=.4?'중간 정도 관계':Math.abs(rv)>=.2?'약한 관계':'거의 관계없음',`12px ${SANS}`,C.muted]]}}}
+    if(lines){const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=ptr.x+14,y0=ptr.y+14;if(x0+bw2>W-6)x0=ptr.x-14-bw2;if(x0<4)x0=4;if(y0+bh2>H-6)y0=ptr.y-14-bh2;
+      ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c],k)=>txt(s0,x0+10,y0+20+k*18,c,f,'left',1))}}}
+
+const f2=v=>(v>=0?'+':'')+v.toFixed(2);
+// 가장 비싼 5곳의 평균을 전체 평균과 비교한 문장(데이터로 생성)
+const mean=(a,k)=>a.reduce((s,r)=>s+r.v[k],0)/a.length,T5R=REC.filter(r=>TOP5.has(r.id));
+const T5DESC=(()=>{const cmp=(k,big,small)=>{const a=mean(T5R,k),b=mean(REC,k);return Math.abs(a-b)/b<.1?null:(a>b?big:small)+`(${a.toFixed(0)}${VU[k]}, 전체 ${b.toFixed(0)}${VU[k]})`};const p=[cmp(0,'더 넓고','더 좁고'),cmp(2,'더 오래되었고','더 새것이고'),cmp(3,'역에서 더 멀다','역에서 더 가깝다')].filter(Boolean);return `비싼 5곳은 평균적으로 ${p.join(', ')}.`})();
+const STEPS=[
+ {t:0,n:'원자료 표',s:'한 줄 = 단지 하나',e:`아파트 ${REC.length}개 단지의 면적·가격·연식·역까지 거리가 적힌 표입니다. 한 줄이 단지 하나, 한 열이 변수 하나입니다. 숫자만 봐서는 어떤 변수끼리 관계가 있는지 알 수 없습니다.`,u:`n=${REC.length}, p=4인 다변량 자료(관측치 × 변수 행렬)입니다. 목표는 변수 쌍별 관계(p(p−1)/2=6쌍)를 한 번에 탐색하는 것입니다.`},
+ {t:T2,n:'열마다 분포',s:'대각선 = 히스토그램',e:'표의 한 열(변수 하나)씩 값을 꺼내 구간별로 쌓으면 히스토그램이 됩니다. 이 히스토그램을 4×4 격자의 대각선 칸에 놓습니다.',u:'각 변수의 주변분포(marginal distribution)를 대각선 셀에 히스토그램으로 배치합니다. 왜도·범위·이상치를 먼저 확인합니다.'},
+ {t:T3,n:'두 열 짝짓기',s:'면적 × 가격 산점도',e:'면적 열과 가격 열을 짝지으면, 한 줄(단지 하나)이 점 하나가 됩니다. 가로는 면적, 세로는 가격입니다. 넓을수록 비싸다는 관계가 보입니다.',u:'관측치 i를 (xᵢ, yᵢ)=(면적, 가격) 점으로 사상한 이변량 산점도입니다. 셀 위치 (행=가격, 열=면적)가 축 변수를 정합니다.'},
+ {t:T4,n:'모든 짝 채우기',s:'아래 삼각형 6칸',e:'나머지 짝도 모두 산점도로 그려 아래쪽 칸을 채웁니다. 변수가 4개라 짝은 6개입니다. 칸의 행이 세로축 변수, 열이 가로축 변수입니다.',u:'p(p−1)/2=6개 변수 쌍의 산점도를 하삼각에 배치합니다. 같은 열은 같은 x축, 같은 행은 같은 y축을 공유합니다(축 정렬).'},
+ {t:T5,n:'위 칸은 상관계수',s:'거울 → r 숫자',e:'위쪽 칸은 아래 칸과 가로·세로만 바뀐 같은 짝입니다(잠깐 보이는 거울 산점도). 같은 그림을 두 번 그리지 않고 상관계수 r을 숫자와 색으로 적습니다. 파랑은 +, 분홍은 −입니다.',u:'상삼각은 하삼각의 전치(transpose)이므로 중복입니다. 피어슨 상관계수를 수치·색 명도로 표기해 정보 밀도를 높입니다(상관행렬 히트맵과 결합).'},
+ {t:T6,n:'관계 읽기 · 연결 강조',s:'같은 단지 따라가기',e:`가격 줄을 읽으면 면적↔가격은 뚜렷한 +(${RIN[1][0].toFixed(2)}), 연식↔가격(${RIN[2][1].toFixed(2)})과 역거리↔가격(${RIN[3][1].toFixed(2)})은 약한 −입니다. 이어서 가장 비싼 5곳을 분홍으로 칠하면 모든 칸에서 같은 단지를 따라갈 수 있습니다. ${T5DESC}`,u:`면적–가격 r=${RIN[1][0].toFixed(2)}, 연식–가격 r=${RIN[2][1].toFixed(2)}, 역거리–가격 r=${RIN[3][1].toFixed(2)}. 연결 강조(linked highlighting/brushing)로 동일 관측치를 모든 셀에서 추적해 다변량 패턴을 해석합니다.`},
+ {t:T7,n:'산점도 행렬의 함정',s:'이상치 하나의 힘',e:`노란 점은 재건축 기대감으로 26억이나 하는 38년 된 45㎡ 소형 단지 한 곳(이상치)입니다. 이 한 곳을 빼면 면적↔가격은 ${RIN[1][0].toFixed(2)} → ${ROUT[1][0].toFixed(2)}, 연식↔가격은 ${RIN[2][1].toFixed(2)} → ${ROUT[2][1].toFixed(2)}로 바뀝니다. 점 60개 중 하나뿐인데도 숫자가 크게 흔들리므로, r만 보지 말고 점을 꼭 같이 보세요.`,u:`단일 고레버리지 관측치가 피어슨 r을 변화시킵니다(예: 면적–가격 ${RIN[1][0].toFixed(2)}→${ROUT[1][0].toFixed(2)}). 상관계수는 이상치에 민감하므로 산점도 확인, 스피어만 순위상관, 로버스트 방법을 함께 검토합니다.`},
+ {t:T8,n:'완성',s:'4×4 산점도 행렬',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 위의 "위 칸", "강조", "이상치"를 바꿔 보세요. 강조를 "역세권"으로 바꾸면 역 가까운 단지가 모든 칸에서 어디에 있는지 보입니다. 점이나 칸에 마우스를 올리면 값과 상관계수가 나옵니다.':'완성입니다. 연결 강조로 하위집단의 다변량 위치를 확인하고, 이상치 포함·제외에 따른 r의 민감도를 비교하세요. 회귀모형 설계 전 비선형성·이상치·다중공선성 점검에 활용합니다.'}
+const LEDE={e:'산점도 행렬은 여러 변수를 둘씩 짝지은 산점도를 바둑판처럼 모아 놓은 그래프입니다. 아파트 단지 자료표의 숫자가 열마다 분포로, 두 열의 짝마다 산점도로 바뀌어 4×4 행렬이 되는 과정을 처음부터 보여줍니다.',u:'산점도 행렬(SPLOM)은 p개 변수의 모든 쌍별 산점도를 p×p 격자에 축 정렬 배치한 다변량 탐색 그래프입니다. 원자료 행렬에서 주변분포·이변량 산점도·상관계수로의 변환, 연결 강조, 이상치 민감성을 단계별로 보여줍니다.'};
+const RD=[['대각선',{e:'변수 하나의 히스토그램',u:'주변분포'},{e:'값이 어디에 많이 몰렸나',u:'왜도·범위·이상치'}],['아래 칸',{e:'두 변수의 산점도',u:'이변량 산점도(하삼각)'},{e:'점이 오른쪽 위로 → +, 오른쪽 아래로 → −',u:'방향·형태(선형/곡선)·군집'}],['위 칸',{e:'같은 짝의 상관계수 r',u:'피어슨 r(상삼각)'},{e:'1에 가까울수록 강한 +, −1에 가까울수록 강한 −',u:'선형 연관의 강도·부호'}],['행·열',{e:'행 = 세로축 변수, 열 = 가로축 변수',u:'축 공유(같은 열 = 같은 x)'},{e:'한 행을 따라가면 그 변수와 다른 변수들의 관계',u:'목표변수 행 집중 판독'}]];
+const CHK={e:['대각선에 각 변수의 분포를 넣었나요?','가격처럼 관심 있는 변수의 행(줄)을 먼저 읽었나요?','r 숫자만 보지 않고 점의 모양(곡선, 덩어리)도 확인했나요?','혼자 멀리 떨어진 점(이상치)이 있는지 확인했나요?','변수가 너무 많지 않나요? (6개 이상이면 칸이 너무 작아짐)'],
+ u:['대각 셀에 주변분포를 표시했는가','목표변수(종속변수) 행·열을 우선 판독했는가','비선형·이분산·군집을 산점도로 확인했는가','고레버리지 이상치와 r의 민감도를 점검했는가','변수 수 p가 판독 한계 내인가(p≲6, 초과 시 선별·차원축소)']};
+const PC={
+ pro:[
+  {t:'모든 짝의 관계를 한 번에 본다',e:'변수 4개면 산점도 6장을 따로 그려야 하는데, 한 장에 모두 담겨 있습니다.',u:'p(p−1)/2개 쌍의 이변량 관계를 축 정렬된 단일 화면에서 비교할 수 있습니다.',x:'면적·가격·연식·역거리 <b>6쌍</b>.'},
+  {t:'같은 단지를 모든 칸에서 따라간다',e:'비싼 단지만 색칠하면 그 단지들이 넓은지, 새것인지, 역에서 가까운지 한꺼번에 보입니다.',u:'연결 강조로 하위집단의 다변량 프로파일을 추적합니다. 상관계수 행렬로는 불가능한 관측치 수준 해석입니다.',x:'비싼 5곳은 <b>더 넓고 역에서 더 가까움</b>.'},
+  {t:'회귀분석 전 점검에 딱 좋다',e:'어떤 변수를 회귀식에 넣을지, 이상한 점은 없는지 미리 확인할 수 있습니다.',u:'비선형성, 이상치, 독립변수 간 상관(다중공선성)을 모형 적합 전에 탐지합니다.',x:'면적↔연식 <b>r≈0</b> → 함께 넣어도 공선성 걱정 적음.'},
+  {t:'숫자와 모양을 함께 본다',e:'위 칸의 r 숫자와 아래 칸의 점 모양을 같이 보면 숫자의 의미를 오해하지 않습니다.',u:'상관계수(요약)와 산점도(형태)를 병치해 r의 한계(비선형, 이상치)를 보완합니다.',x:'위 <b>r</b> + 아래 <b>점</b>.'}],
+ con:[
+  {t:'변수가 많으면 칸이 너무 작다',e:'변수가 8개면 칸이 64개라서 하나하나가 너무 작아집니다.',u:'셀 수가 p²으로 증가해 해상도가 급감합니다. 변수 선별, 목표변수 행만 표시, 차원축소(PCA)를 고려합니다.',x:'변수 4개 = 16칸, 8개 = <b>64칸</b>.'},
+  {t:'이상치 하나에 r이 흔들린다',e:'점 60개 중 하나만 이상해도 상관계수가 꽤 바뀝니다.',u:'피어슨 r은 고레버리지 관측치에 민감합니다. 스피어만 상관 또는 이상치 제외 민감도 분석을 병행합니다.',x:`면적↔가격 <b>${RIN[1][0].toFixed(2)} → ${ROUT[1][0].toFixed(2)}</b>.`},
+  {t:'점이 많으면 덩어리로 겹친다',e:'단지가 수천 개면 점이 겹쳐 까만 덩어리가 되어 모양을 알기 어렵습니다.',u:'대표본에서 과대도시(overplotting)가 발생합니다. 투명도, 표본 추출, 헥스빈·2D 밀도로 대체합니다.',x:'실거래 수만 건 → <b>헥스빈</b> 행렬.'},
+  {t:'두 변수씩만 본다',e:'세 변수가 함께 만드는 관계(예: 같은 면적이면 새것일수록 비싼가)는 바로 보이지 않습니다.',u:'쌍별 투영만 보여주므로 조건부 관계·상호작용은 직접 드러나지 않습니다. 색(제3변수), 회귀모형으로 보완합니다.',x:'연결 강조나 <b>버블 차트</b>로 보완.'}],
+ tip:{e:'<b>정리:</b> 표의 열은 대각선 분포로, 두 열의 짝은 산점도로 바뀌어 산점도 행렬이 됩니다. 관심 변수(가격)의 줄을 먼저 읽고, r 숫자와 점 모양을 함께 보고, 이상치를 확인하세요.',
+      u:'<b>권장 사용법:</b> ① 대각 주변분포 ② 목표변수 행 우선 판독 ③ 하삼각 산점도 + 상삼각 r ④ 연결 강조로 하위집단 추적 ⑤ 이상치·비선형 점검(스피어만 병행) ⑥ p가 크면 선별·PCA. JAMOVI: 회귀 → 상관행렬 → 도표 옵션.'}};
+$('foot').textContent=`※ 단지 ${REC.length}곳의 면적·가격·연식·역거리는 설명용으로 만든 예시 값이며 실제 통계가 아닙니다(단지60은 일부러 넣은 이상치). 상관계수는 이 값으로 직접 계산했습니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.`;
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('rNote').textContent=lv==='e'?'칸의 위치마다 그리는 내용이 다릅니다.':'셀 위치별 내용과 판독 요령입니다.';
+  $('rBody').innerHTML=RD.map(([n,a,b])=>`<tr><td><b>${n}</b></td><td>${a[lv]}</td><td>${b[lv]}</td></tr>`).join('');
+  $('chkNote').textContent=lv==='e'?'산점도 행렬을 만들거나 읽을 때 다섯 가지를 확인하세요.':'작성·판독 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  const g=target(),k=snap?1:Math.min(1,dt*4);snap=false;uCur=lerp(uCur,g.u,k);oCur=lerp(oCur,g.o,k);bA=lerp(bA,g.b?1:0,k);draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.6;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;snap=true});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1;snap=true};
+$('speed').onchange=e=>speed=+e.target.value;
+$('uSel').onchange=e=>{uUser=+e.target.value;toEnd()};$('bSel').onchange=e=>{bUser=+e.target.value;toEnd()};$('oSel').onchange=e=>{oUser=+e.target.value;toEnd()};
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1;snap=true};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('splomLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('splomLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

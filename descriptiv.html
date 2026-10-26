@@ -1,0 +1,409 @@
+<title>기술통계량 손그림 노트</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: 16:9 graph-paper stage (canvas 1280x720) + control strip + script panel, like a lecture notebook */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --fg:#1f2a3a; --muted:#5d6b7e; --line:#d5dbe3;
+  --accent:#d9482b; --accent-soft:#fbe3dc; --hi:#ffe27a;
+  --hand:"Gaegu","Nanum Pen Script",cursive; --body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141a22; --surface:#1d2530; --fg:#e7ecf2; --muted:#9aa8b8; --line:#2e3a48;
+  --accent:#ff7a59; --accent-soft:#3a2520; --hi:#7a6420; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a22; --surface:#1d2530; --fg:#e7ecf2; --muted:#9aa8b8; --line:#2e3a48;
+  --accent:#ff7a59; --accent-soft:#3a2520; --hi:#7a6420; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.08em;color:var(--muted)}
+h1{margin:0;font-family:var(--hand);font-weight:700;font-size:38px;line-height:1.1;text-wrap:balance}
+.seg{display:inline-flex;border:1.5px solid var(--fg);border-radius:999px;overflow:hidden}
+.seg button{font:inherit;border:0;background:transparent;color:var(--fg);padding:7px 16px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:#fcfcf8;border-radius:6px;overflow:hidden;box-shadow:0 2px 0 var(--line),0 10px 30px rgba(0,0,0,.12)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.btn{font:inherit;font-size:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:7px 12px;cursor:pointer}
+.btn:hover{border-color:var(--fg)}
+.btn.main{background:var(--accent);border-color:var(--accent);color:#fff;min-width:92px}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.btn:focus-visible,.seg button:focus-visible,.scenes button:focus-visible,select:focus-visible,input:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px}
+select{font:inherit;font-size:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:6px 8px}
+.scrub{flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:8px}
+.scrub input{flex:1;min-width:0;accent-color:var(--accent)}
+.time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;white-space:nowrap}
+.scenes{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.scenes button{font:inherit;text-align:left;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:6px 9px;cursor:pointer;min-width:0}
+.scenes .n{display:block;font-family:var(--hand);font-weight:700;font-size:17px;color:var(--accent);line-height:1}
+.scenes .l{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scenes button[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft)}
+@media (max-width:760px){.scenes{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.script{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.tag{font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.script h2{margin:0;font-family:var(--hand);font-size:26px;line-height:1.2}
+.now{margin:0;font-size:16px;line-height:1.85;max-width:72ch}
+.tip{margin:0;font-size:14px;color:var(--muted);border-left:3px solid var(--hi);padding-left:10px}
+details{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 16px}
+summary{cursor:pointer;font-weight:700}
+#sAll{margin:10px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:10px}
+#sAll li{cursor:pointer;line-height:1.75;max-width:80ch}
+#sAll li.on{background:var(--accent-soft);border-radius:6px}
+.foot{margin:0;font-size:13px;color:var(--muted)}
+.hint{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(20,26,34,.85);color:#fff;font-size:13px;padding:6px 12px;border-radius:999px;opacity:0;transition:opacity .4s;pointer-events:none;z-index:5}
+.hint.show{opacity:1}
+body.rec{background:#000}
+body.rec .wrap>*:not(.stage){display:none!important}
+body.rec .wrap{max-width:none;padding:0;height:100vh;justify-content:center;align-items:center}
+body.rec .stage{width:min(100vw,177.78vh);border-radius:0;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.hint{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div><p class="eyebrow">AI 부동산 통계 기초 · 강의 영상 자료</p><h1>기술통계량 손그림 노트</h1></div>
+    <div class="seg" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+  </header>
+
+  <div class="stage" id="stage"><canvas id="cv" aria-label="기술통계량 애니메이션 화면"></canvas></div>
+
+  <div class="ctrl">
+    <button class="btn" id="rew" title="처음으로">⏮ 처음</button>
+    <button class="btn" id="prev" title="이전 장면 (←)">◀ 이전</button>
+    <button class="btn main" id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+    <button class="btn" id="next" title="다음 장면 (→)">다음 ▶</button>
+    <select id="spd" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="0.75">0.75배</option><option value="1" selected>1배</option><option value="1.5">1.5배</option></select>
+    <button class="btn" id="auto" aria-pressed="true" title="장면이 끝나면 자동으로 멈춤">장면마다 멈춤</button>
+    <button class="btn" id="fs">전체화면</button>
+    <button class="btn" id="rec" title="영상 화면만 남기기 (H)">녹화 모드 (H)</button>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="58" step="0.05" value="0" aria-label="재생 위치"><span class="time" id="time">0:00 / 0:58</span></div>
+  </div>
+
+  <div class="scenes" id="scenes"></div>
+
+  <section class="script" aria-live="polite">
+    <div class="head"><span class="tag" id="sTag"></span><button class="btn" id="copy">전체 대본 복사</button></div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+  </section>
+
+  <details><summary>전체 시나리오 보기</summary><ol id="sAll"></ol></details>
+
+  <p class="foot">예시 데이터(아파트 20채 매매가)는 설명을 위해 만든 가상의 수치입니다. 사분위수는 R 기본 방식(type 7), 왜도·첨도는 표본 보정식(첨도는 정규분포 = 0인 초과 첨도)으로 계산했습니다. 단축키: Space 재생/정지 · ←/→ 장면 이동 · H 녹화 모드</p>
+</div>
+<div class="hint" id="hint">H 키를 누르면 원래 화면으로 돌아옵니다</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d))}
+addEventListener('resize',resize);resize();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 데이터 (가상) ---------- */
+const D=[5.3,3.8,7.2,4.6,16.8,5.5,6.1,4.1,8.5,5.1,9.6,3.2,6.8,5.8,4.9,11.2,5.6,7.9,4.4,6.4];
+const n=D.length,XS=[...D].sort((a,b)=>a-b);
+const sum=D.reduce((a,b)=>a+b,0),mean=sum/n;
+const q=p=>{const h=(n-1)*p,f=Math.floor(h);return f+1<n?XS[f]+(h-f)*(XS[f+1]-XS[f]):XS[f]};
+const med=q(.5),q1=q(.25),q3=q(.75),iqr=q3-q1,uf=q3+1.5*iqr,lf=q1-1.5*iqr;
+const min=XS[0],max=XS[n-1],range=max-min;
+const vr=D.reduce((s,x)=>s+(x-mean)**2,0)/(n-1),sd=Math.sqrt(vr),cv_=sd/mean;
+const m3=D.reduce((s,x)=>s+((x-mean)/sd)**3,0),m4=D.reduce((s,x)=>s+((x-mean)/sd)**4,0);
+const skew=n/((n-1)*(n-2))*m3;
+const kurt=n*(n+1)/((n-1)*(n-2)*(n-3))*m4-3*(n-1)**2/((n-2)*(n-3));
+const seS=Math.sqrt(6*n*(n-1)/((n-2)*(n+1)*(n+3))),seK=2*seS*Math.sqrt((n*n-1)/((n-3)*(n+5)));
+const maxIn=Math.max(...XS.filter(x=>x<=uf)),minIn=Math.min(...XS.filter(x=>x>=lf));
+const bins={};D.forEach(v=>{const b=Math.floor(v);bins[b]=(bins[b]||0)+1});
+let mb=+Object.keys(bins)[0];for(const b in bins)if(bins[b]>bins[mb])mb=+b;const modeCnt=bins[mb];
+const f1=v=>v.toFixed(1),f2=v=>v.toFixed(2),f3=v=>v.toFixed(3);
+
+/* 각 점의 위치 정보 */
+const order=D.map((v,i)=>i).sort((a,b)=>D[a]-D[b]);
+const items=D.map((v,i)=>({v,i,rank:order.indexOf(i),bin:Math.floor(v)}));
+{const cnt={};[...items].sort((a,b)=>a.v-b.v).forEach(it=>{cnt[it.bin]=(cnt[it.bin]||0);it.si=cnt[it.bin]++})}
+const hp=s=>{const x=Math.sin(s*12.9898+78.233)*43758.5453;return (x-Math.floor(x))*2-1};
+items.forEach((it,i)=>{const c=i%5,r=Math.floor(i/5);it.cx=235+c*203+hp(i+3)*22;it.cy=195+r*88+hp(i+9)*12;it.rot=hp(i+17)*.09});
+
+/* ---------- 좌표 ---------- */
+const AX=530,px=v=>170+(v-2)/16*940;
+
+/* ---------- 색과 글꼴 ---------- */
+const PAPER='#fcfcf8',GRID='rgba(64,124,190,.13)',GRID2='rgba(64,124,190,.24)',MARGIN='rgba(217,72,43,.35)';
+const INK='#22324a',INK2='#6b7889',RED='#d9482b',BLUE='#2f6db0',GREEN='#1f8a5f',ORANGE='#e0861a',GOLD='#a37800',NOTE='#fff1a6',YEL='#ffd84d';
+const HAND='"Gaegu","Nanum Pen Script",cursive';
+
+/* ---------- 손그림 도구 ---------- */
+let BOIL=0;
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=t=>t<.5?2*t*t:1-(-2*t+2)**2/2;
+const lerp=(a,b,m)=>a+(b-a)*m;
+function hline(x1,y1,x2,y2,o={}){
+ const p=o.p==null?1:clamp(o.p),a=o.a==null?1:o.a;if(p<=0||a<=0)return;
+ const c=o.c||INK,w=o.w||2.4,s=(o.s||0)+BOIL*97,r=o.r==null?1.3:o.r;
+ const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;
+ ctx.save();ctx.strokeStyle=c;ctx.lineCap='round';ctx.lineJoin='round';if(o.dash)ctx.setLineDash(o.dash);
+ const passes=o.dash||o.one?1:2;
+ for(let k=0;k<passes;k++){const sd=s+k*31;
+  const ax=x1+hp(sd+1)*r,ay=y1+hp(sd+2)*r,bx=x2+hp(sd+3)*r,by=y2+hp(sd+4)*r;
+  const bow=hp(sd+5)*Math.min(5,L*.015+1)*r,mx=(ax+bx)/2+nx*bow,my=(ay+by)/2+ny*bow;
+  ctx.lineWidth=k?w*.55:w;ctx.globalAlpha=a*(k?.5:1);
+  ctx.beginPath();const N=Math.max(2,Math.ceil(L/14));
+  for(let i=0;i<=N;i++){const t=i/N*p,u=1-t;const X=u*u*ax+2*u*t*mx+t*t*bx,Y=u*u*ay+2*u*t*my+t*t*by;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)}
+  ctx.stroke()}
+ ctx.restore()}
+function hcircle(x,y,r,o={}){
+ const p=o.p==null?1:clamp(o.p),a=o.a==null?1:o.a;if(p<=0||a<=0)return;
+ const s=(o.s||0)+BOIL*97;ctx.save();
+ if(o.fill){ctx.globalAlpha=a*(o.fa==null?1:o.fa);ctx.fillStyle=o.fill;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}
+ if(o.c!==null){ctx.strokeStyle=o.c||INK;ctx.lineCap='round';
+  const passes=o.one?1:2;
+  for(let k=0;k<passes;k++){const a0=hp(s+1+k)*Math.PI,ext=Math.PI*2*1.07*p,N=Math.max(16,Math.ceil(r*1.2));
+   ctx.lineWidth=(o.w||2.2)*(k?.55:1);ctx.globalAlpha=a*(k?.5:1);ctx.beginPath();
+   for(let i=0;i<=N;i++){const g=a0+ext*i/N,rr=r*(1+.05*Math.sin(g*2+hp(s+k+5)*3))+hp(s+9+k)*1.1;const X=x+Math.cos(g)*rr,Y=y+Math.sin(g)*rr;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)}
+   ctx.stroke()}}
+ ctx.restore()}
+function hrect(x,y,w,h,o={}){const p=o.p==null?1:clamp(o.p),s=o.s||0;
+ const seg=[[x,y,x+w,y],[x+w,y,x+w,y+h],[x+w,y+h,x,y+h],[x,y+h,x,y]];
+ seg.forEach((g,i)=>hline(g[0],g[1],g[2],g[3],{...o,p:p*4-i,s:s+i*7}))}
+function hatch(x,y,w,h,c,a,s){if(a<=0)return;ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.strokeStyle=c;ctx.globalAlpha=a;ctx.lineWidth=1.6;
+ for(let d=-h;d<w;d+=10){ctx.beginPath();ctx.moveTo(x+d+hp(s+d)*1.5,y+h);ctx.lineTo(x+d+h+hp(s+d+1)*1.5,y);ctx.stroke()}ctx.restore()}
+function marker(x,y,w,h,o={}){const p=o.p==null?1:clamp(o.p),a=o.a==null?1:o.a;if(p<=0||a<=0)return;const s=o.s||0,W=w*p;
+ ctx.save();ctx.globalCompositeOperation='multiply';ctx.globalAlpha=a*(o.k||.55);ctx.fillStyle=o.c||YEL;ctx.beginPath();
+ ctx.moveTo(x,y+hp(s)*2);ctx.lineTo(x+W,y+hp(s+1)*3);ctx.lineTo(x+W-3,y+h+hp(s+2)*3);ctx.lineTo(x+2,y+h+hp(s+3)*2);ctx.closePath();ctx.fill();ctx.restore()}
+function txt(s,x,y,o={}){const a=o.a==null?1:o.a;if(a<=0)return;const sz=o.sz||24;
+ ctx.save();ctx.globalAlpha=a;ctx.font=`${o.w||700} ${sz}px ${o.f||HAND}`;ctx.fillStyle=o.c||INK;ctx.textAlign=o.al||'left';ctx.textBaseline='alphabetic';
+ if(o.p!=null&&o.p<1){if(o.p<=0){ctx.restore();return}const W=ctx.measureText(s).width;const x0=o.al==='center'?x-W/2:o.al==='right'?x-W:x;ctx.beginPath();ctx.rect(x0-4,y-sz*1.25,W*o.p+6,sz*1.7);ctx.clip()}
+ ctx.fillText(s,x,y);ctx.restore()}
+function arrow(x1,y1,x2,y2,o={}){hline(x1,y1,x2,y2,o);if((o.p==null?1:o.p)<.97)return;const g=Math.atan2(y2-y1,x2-x1),L=o.head||15;
+ hline(x2,y2,x2-L*Math.cos(g-.45),y2-L*Math.sin(g-.45),{...o,p:1,s:(o.s||0)+3});hline(x2,y2,x2-L*Math.cos(g+.45),y2-L*Math.sin(g+.45),{...o,p:1,s:(o.s||0)+5})}
+function rrect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function note(x,y,w,h,a,o={}){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.translate(x+w/2,y+h/2);ctx.rotate(o.rot||-.012);
+ ctx.shadowColor='rgba(30,40,60,.16)';ctx.shadowBlur=10;ctx.shadowOffsetY=4;ctx.fillStyle=o.fill||NOTE;ctx.fillRect(-w/2,-h/2,w,h);
+ ctx.shadowColor='transparent';ctx.fillStyle='rgba(190,210,230,.55)';ctx.fillRect(-38,-h/2-10,76,20);ctx.restore()}
+
+/* ---------- 배경 ---------- */
+function paper(){ctx.fillStyle=PAPER;ctx.fillRect(0,0,LW,LH);ctx.lineWidth=1;
+ for(let x=0;x<=LW;x+=32){ctx.strokeStyle=x%160===0?GRID2:GRID;ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,LH);ctx.stroke()}
+ for(let y=0;y<=LH;y+=32){ctx.strokeStyle=y%160===0?GRID2:GRID;ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(LW,y+.5);ctx.stroke()}
+ ctx.strokeStyle=MARGIN;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(92,0);ctx.lineTo(92,LH);ctx.stroke();
+ for(let y=110;y<LH;y+=200){ctx.fillStyle='rgba(34,50,74,.08)';ctx.beginPath();ctx.arc(40,y,11,0,Math.PI*2);ctx.fill()}}
+
+/* ---------- 타임라인 ---------- */
+const S=[0,7,15,24,33,42,50,58],END=58;
+let T=0,playing=true,speed=1,level='mid',autoStop=true;
+const sceneIdx=t=>{let k=0;for(let i=0;i<S.length-1;i++)if(t>=S[i])k=i;return k};
+
+/* ---------- 문구 ---------- */
+const TX={
+ mid:{sub:'아파트 20채 매매가 · 가상 데이터',unit:'매매가 (억 원)',
+  scenes:['기술통계란?','쌓아서 모양 보기','가운데 찾기','흩어진 정도 재기','상자그림','분포 모양 보기','결과표로 정리'],
+  q0:'숫자 20개, 한눈에 보려면?',bins:'1억 원 단위로 쌓기',
+  mean:'평균 (균형점)',med:'중앙값 (한가운데)',mode:'가장 많은 구간',pull:'비싼 집 1채가 평균을 끌어당김',
+  i2:[`평균 = ${f2(mean)}억`,`중앙값 = ${f2(med)}억`,`가장 많은 구간 = ${mb}억대`],
+  rng:`범위 = ${f1(max)} − ${f1(min)} = ${f1(range)}억`,band:'평균 ± 표준편차 1개',
+  i3:[`범위 = ${f1(range)}억`,`표준편차 = ${f2(sd)}억`,`분산 = ${f2(vr)}`],
+  qlab:['아래 25%','중앙값','위 25%'],iqr:'가운데 절반',out:'이상치',fence:'울타리',
+  i4:[`아래 25% 선 = ${f2(q1)}억`,`위 25% 선 = ${f2(q3)}억`,`가운데 절반 폭 = ${f2(iqr)}억`,`${f2(uf)}억 넘으면 이상치`],
+  shapes:['왼쪽 꼬리','좌우 대칭','오른쪽 꼬리'],shapeNote:'우리 자료 = 오른쪽 꼬리',tail:'긴 꼬리',order:'중앙값 < 평균',
+  tTitle:'기술통계 결과표',tSub:'매매가 (억 원)',
+  rows:['아파트 수','평균','중앙값','표준편차','분산','가장 싼 값','가장 비싼 값','하위 25% 선','상위 25% 선','치우침 (왜도)','뾰족함 (첨도)'],
+  vals:[`${n}채`,`${f2(mean)}억`,`${f2(med)}억`,`${f2(sd)}억`,f2(vr),`${f1(min)}억`,`${f1(max)}억`,`${f2(q1)}억`,`${f2(q3)}억`,f2(skew),f2(kurt)]},
+ uni:{sub:'아파트 매매가 n = 20 · 가상 데이터',unit:'x : 매매가 (억 원)',
+  scenes:['기술통계 (Descriptive Statistics)','도수분포 · 점그림 · 히스토그램','중심경향치 x̄ · Mdn · Mo','산포도 R · s² · s','사분위수와 상자그림','분포 형태 왜도 · 첨도','Descriptives 결과 보고'],
+  q0:'n = 20, 무엇으로 요약할까?',bins:'계급 폭 = 1억 원',
+  mean:'x̄ (산술평균)',med:'Mdn (중앙값)',mode:'최빈 계급',pull:'극단값 → x̄ 이동',
+  i2:[`x̄ = Σx / n = ${f3(mean)}`,`Mdn = ${f3(med)}`,`최빈 계급 = [${mb}, ${mb+1})`],
+  rng:`R = max − min = ${f2(range)}`,band:'x̄ ± 1s',
+  i3:[`R = ${f2(range)}`,`s² = Σ(x − x̄)² / (n − 1) = ${f3(vr)}`,`s = ${f3(sd)},  CV = ${f1(cv_*100)}%`],
+  qlab:['Q1','Q2','Q3'],iqr:'IQR',out:'이상치',fence:'Q3 + 1.5·IQR',
+  i4:[`Q1 = ${f3(q1)}`,`Q3 = ${f3(q3)}`,`IQR = ${f3(iqr)}`,`상한 = ${f3(uf)}`],
+  shapes:['음(−)의 왜도','대칭 (≈ 0)','양(+)의 왜도'],shapeNote:`왜도 ${f2(skew)} · 첨도 ${f2(kurt)}`,tail:'오른쪽 꼬리',order:'Mo < Mdn < x̄',
+  tTitle:'Descriptives',tSub:'매매가 (억 원)',
+  rows:['N','평균 (Mean)','중앙값 (Median)','표준편차 (SD)','분산 (Variance)','최솟값 (Minimum)','최댓값 (Maximum)','25th 백분위수','75th 백분위수','왜도 (Skewness)','첨도 (Kurtosis)'],
+  vals:[`${n}`,f3(mean),f3(med),f3(sd),f3(vr),f3(min),f3(max),f3(q1),f3(q3),`${f3(skew)}  (SE ${f3(seS)})`,`${f3(kurt)}  (SE ${f3(seK)})`]}
+};
+
+/* ---------- 점 배치 ---------- */
+const LAY=['card','stack','stack','rows','line','stack','stack'];
+function posL(L,it){
+ if(L==='card')return{x:it.cx,y:it.cy,r:11,cf:1,rot:it.rot};
+ if(L==='stack')return{x:px(it.bin+.5),y:517-it.si*25,r:11,cf:0,rot:0};
+ if(L==='rows')return{x:px(it.v),y:140+it.rank*18.5,r:7,cf:0,rot:0};
+ return{x:px(it.v),y:470+((it.rank%3)-1)*10,r:8,cf:0,rot:0}}
+function dotState(it,k,lt){const to=posL(LAY[k],it);if(k===0)return to;const fr=posL(LAY[k-1],it);
+ const delay=k===1?it.i*.07:k===3?it.rank*.03:0;const m=ease(clamp((lt-delay)/1.5));
+ return{x:lerp(fr.x,to.x,m),y:lerp(fr.y,to.y,m),r:lerp(fr.r,to.r,m),cf:lerp(fr.cf,to.cf,m),rot:lerp(fr.rot,to.rot,m)}}
+function drawDots(k,lt,L){
+ const fade=k===6?1-.85*ease(clamp(lt/1)):1;
+ items.forEach(it=>{const st=dotState(it,k,lt);let sc=1;
+  if(k===0){sc=ease(clamp((lt-1.2-it.i*.12)/.4));if(sc<=0)return}
+  const isOut=it.v>uf,col=(k>=2&&isOut)?RED:k===4?INK2:BLUE;
+  ctx.save();ctx.globalAlpha=fade;ctx.translate(st.x,st.y);ctx.rotate(st.rot);ctx.scale(sc,sc);
+  if(st.cf>.02){const w=lerp(st.r*2,112,st.cf),h=lerp(st.r*2,54,st.cf),rr=lerp(st.r,6,st.cf);
+   ctx.shadowColor=`rgba(30,40,60,${.18*st.cf})`;ctx.shadowBlur=8*st.cf;ctx.shadowOffsetY=3*st.cf;
+   rrect(-w/2,-h/2,w,h,rr);ctx.fillStyle=col;ctx.fill();ctx.shadowColor='transparent';
+   ctx.globalAlpha=fade*st.cf;rrect(-w/2,-h/2,w,h,rr);ctx.fillStyle=NOTE;ctx.fill();
+   ctx.globalAlpha=fade*st.cf*st.cf;ctx.font=`700 28px ${HAND}`;ctx.fillStyle=INK;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(level==='mid'?`${f1(it.v)}억`:f1(it.v),0,2);
+   ctx.restore();return}
+  ctx.restore();
+  ctx.save();ctx.globalAlpha=fade;hcircle(st.x,st.y,st.r,{fill:col,fa:.85,c:INK,w:1.6,one:true,s:it.i*11});ctx.restore()})}
+
+/* ---------- 공통 요소 ---------- */
+function header(k,L){
+ txt('기술통계량',120,62,{sz:42});txt(L.sub,122,94,{sz:21,w:400,c:INK2});
+ const tag=`${'①②③④⑤⑥⑦'[k]} ${TX[level].scenes[k]}`;txt(tag,1236,58,{sz:24,al:'right',c:RED})}
+function axis(p,a,L){hline(px(2)-24,AX,px(18)+24,AX,{w:2.8,p,a,s:500});
+ for(let v=2;v<=18;v+=2){const pp=clamp((p-(v-2)/16*.9)*8);if(pp<=0)continue;hline(px(v),AX-6,px(v),AX+7,{w:2,a:a*pp,s:600+v,one:true});txt(String(v),px(v),AX+33,{sz:24,al:'center',c:INK2,a:a*pp})}
+ txt(L.unit,px(18)+24,AX+66,{sz:22,al:'right',c:INK2,a:a*clamp(p*2-1)})}
+function bars(a,p){if(a<=0)return;Object.keys(bins).forEach((b,j)=>{b=+b;const c=bins[b],x=px(b)+3,w=px(b+1)-px(b)-6,top=AX-c*25-6;
+ hatch(x,top,w,AX-top,b===mb?GOLD:BLUE,.16*a,b);hrect(x,top,w,AX-top,{p:p-j*.06,a:a*.8,w:1.8,c:b===mb?GOLD:BLUE,s:700+b})})}
+function infoBox(lines,lt0,lt,o={}){const x=o.x||830,y=o.y||110,w=o.w||400,lh=40,h=24+lines.length*lh;const a=clamp((lt-lt0)/.4);if(a<=0)return;
+ note(x,y,w,h,a,{rot:o.rot||.01});
+ lines.forEach((s,i)=>{const pp=clamp((lt-lt0-.3-i*.7)/.6);txt(s,x+22,y+44+i*lh,{sz:o.sz||27,p:pp,c:(o.cols&&o.cols[i])||INK})})}
+function meanMark(a,lt0,lt,L,lab=true){const pp=clamp((lt-lt0)/.6);if(pp<=0)return;const x=px(mean);
+ hline(x,AX+4,x-15,AX+30,{c:ORANGE,w:3,p:pp*3,a});hline(x-15,AX+30,x+15,AX+30,{c:ORANGE,w:3,p:pp*3-1,a,s:2});hline(x+15,AX+30,x,AX+4,{c:ORANGE,w:3,p:pp*3-2,a,s:4});
+ if(lab)txt(L.mean,x+22,AX+62,{sz:24,c:ORANGE,p:clamp((lt-lt0-.5)/.6),a})}
+function medLine(a,lt0,lt,L,top=330,lab=true){const pp=clamp((lt-lt0)/.8);if(pp<=0)return;const x=px(med);
+ hline(x,AX+6,x,top,{c:GREEN,w:2.8,p:pp,a,dash:[9,8],s:800});if(lab)txt(L.med,x-10,top-12,{sz:24,c:GREEN,al:'right',p:clamp((lt-lt0-.6)/.6),a})}
+
+/* ---------- 장면 ---------- */
+const SC=[];
+SC[0]={front(lt,L){
+ const pp=clamp((lt-4.4)/1.2);txt(L.q0,640,600,{sz:40,al:'center',p:pp,c:INK});
+ if(pp>=1)hline(430,614,850,618,{c:RED,w:3,p:clamp((lt-5.6)/.6),s:41})}};
+SC[1]={back(lt,L){bars(clamp((lt-3.4)/.6),clamp((lt-3.4)/1.4))},
+ front(lt,L){const a=clamp((lt-4.6)/.5);Object.keys(bins).forEach(b=>{b=+b;txt(String(bins[b]),px(b+.5),AX-bins[b]*25-16,{sz:24,al:'center',c:b===mb?GOLD:BLUE,a})});
+  txt(L.bins,830,170,{sz:30,p:clamp((lt-5.2)/.8),c:INK});
+  if(lt>5.9)hline(830,182,1060,184,{c:YEL,w:9,p:clamp((lt-5.9)/.5),one:true,a:.8,s:61})}};
+SC[2]={back(lt,L){bars(.55,1);marker(px(mb)+1,AX-modeCnt*25-14,px(mb+1)-px(mb)-2,modeCnt*25+14,{p:clamp((lt-3.4)/.7),s:5})},
+ front(lt,L){meanMark(1,.4,lt,L);medLine(1,1.8,lt,L,330);
+  if(lt>3.4)txt(L.mode,px(mb+.5),AX-modeCnt*25-26,{sz:23,al:'center',c:GOLD,p:clamp((lt-3.8)/.6)});
+  const pa=clamp((lt-4.8)/1);if(pa>0){arrow(px(max)-14,470,px(mean)+60,470,{c:RED,w:2.6,p:pa,s:90});txt(L.pull,px(max)-10,440,{sz:24,c:RED,al:'right',p:clamp((lt-5.6)/.7)});hcircle(px(max),517,20,{c:RED,w:2.4,p:pa,s:93})}
+  infoBox(L.i2,.9,lt,{cols:[ORANGE,GREEN,GOLD]})}};
+SC[3]={back(lt,L){const ba=clamp((lt-5)/.8);marker(px(mean-sd),125,px(mean+sd)-px(mean-sd),375,{p:ba,k:.38,s:7});
+  if(ba>0)txt(L.band,px(mean),506,{sz:22,al:'center',c:GOLD,a:ba});
+  const ml=clamp((lt-1.5)/.6);hline(px(mean),126,px(mean),AX,{c:ORANGE,w:2.6,p:ml,s:300});
+  items.forEach(it=>{const pp=clamp((lt-2.1-it.rank*.11)/.35);if(pp<=0)return;const y=140+it.rank*18.5;hline(px(mean),y,px(mean)+(px(it.v)-px(mean))*pp,y,{c:it.v>mean?RED:BLUE,w:2.2,one:true,s:310+it.rank,a:.85})})},
+ front(lt,L){const rp=clamp((lt-6.4)/.9);if(rp>0){const y=114;hline(px(min),y+8,px(min),y-4,{w:2.2,p:rp*3,one:true});hline(px(min),y,px(min)+(px(max)-px(min))*clamp(rp*1.2),y,{w:2.2,s:330});if(rp>.8)hline(px(max),y+8,px(max),y-4,{w:2.2,one:true,s:331});txt(L.rng,(px(min)+px(max))/2+80,y-12,{sz:24,al:'center',p:clamp((lt-7)/.6)})}
+  meanMark(1,1.5,lt,L,false);infoBox(L.i3,.8,lt,{y:140,cols:[INK,RED,BLUE],sz:L===TX.uni?24:27})}};
+SC[4]={back(lt,L){const y0=290,y1=370,bp=clamp((lt-1.6)/1.2);
+  if(bp>0){hatch(px(q1),y0,px(q3)-px(q1),y1-y0,BLUE,.12*bp,9);hrect(px(q1),y0,px(q3)-px(q1),y1-y0,{p:bp,w:2.8,s:400})}
+  hline(px(med),y0,px(med),y1,{c:GREEN,w:3.4,p:clamp((lt-2.6)/.5),s:410});
+  const wp=clamp((lt-3.2)/.9);if(wp>0){const ym=(y0+y1)/2;hline(px(q1),ym,px(q1)-(px(q1)-px(minIn))*wp,ym,{w:2.4,s:420});hline(px(q3),ym,px(q3)+(px(maxIn)-px(q3))*wp,ym,{w:2.4,s:421});
+   if(wp>=1){hline(px(minIn),ym-18,px(minIn),ym+18,{w:2.4,s:422});hline(px(maxIn),ym-18,px(maxIn),ym+18,{w:2.4,s:423})}}
+  const fp=clamp((lt-4.3)/.7);if(fp>0){hline(px(uf),250,px(uf),500,{c:RED,w:2,dash:[6,7],p:fp,a:.75,s:430});txt(L.fence,px(uf)+10,262,{sz:21,c:RED,p:fp,a:.85})}
+  },
+ front(lt,L){const y0=290,y1=370,la=clamp((lt-2.9)/.6);
+  if(la>0){txt(L.qlab[0],px(q1),y0-14,{sz:23,al:'center',a:la,c:BLUE});txt(L.qlab[1],px(med),y0-38,{sz:23,al:'center',a:la,c:GREEN});txt(L.qlab[2],px(q3),y0-14,{sz:23,al:'center',a:la,c:BLUE})}
+  const op=clamp((lt-4.9)/.7);if(op>0){hcircle(px(max),(y0+y1)/2,10,{c:RED,w:2.6,p:op,s:440});hcircle(px(max),470,19,{c:RED,w:2.2,p:op,s:441});txt(L.out,px(max),(y0+y1)/2-24,{sz:25,al:'center',c:RED,p:clamp((lt-5.3)/.5)})}
+  const ip=clamp((lt-5.9)/.8);if(ip>0){const y=395;hline(px(q1),y-7,px(q1),y+7,{w:2,one:true,s:450});hline(px(q1),y,px(q1)+(px(q3)-px(q1))*ip,y,{w:2.2,s:451});if(ip>=1)hline(px(q3),y-7,px(q3),y+7,{w:2,one:true,s:452});txt(L.iqr,(px(q1)+px(q3))/2,y+28,{sz:23,al:'center',p:clamp((lt-6.4)/.5)})}
+  infoBox(L.i4,.6,lt,{y:96,sz:L===TX.uni?25:24})}};
+const KG=[];{const h=.9;let mx=0;for(let v=2;v<=18.001;v+=.1){let d=0;D.forEach(x=>d+=Math.exp(-.5*((v-x)/h)**2));KG.push([v,d]);mx=Math.max(mx,d)}KG.forEach(g=>g[1]/=mx)}
+function mini(x,y,type,a,hl,lab,s){const pts=[];for(let i=0;i<=30;i++){const u=i/30;let d;
+ if(type===0)d=Math.pow(u,3.2)*Math.pow(1-u,1)*9.5;else if(type===1)d=Math.exp(-(((u-.5)/.17)**2)/2);else d=Math.pow(u,1)*Math.pow(1-u,3.2)*9.5;pts.push([x+u*104,y-Math.min(1,d)*58])}
+ ctx.save();ctx.globalAlpha=a;ctx.strokeStyle=hl?RED:INK2;ctx.lineWidth=hl?3:2.2;ctx.lineJoin='round';ctx.beginPath();pts.forEach((p,i)=>{const yy=p[1]+hp(s+i+BOIL*7)*.8;i?ctx.lineTo(p[0],yy):ctx.moveTo(p[0],yy)});ctx.stroke();ctx.restore();
+ hline(x-4,y+2,x+108,y+2,{w:1.6,a:a*.7,one:true,s:s+50,c:INK2});txt(lab,x+52,y+30,{sz:20,al:'center',a,c:hl?RED:INK2})}
+SC[5]={back(lt,L){const cp=clamp((lt-1.4)/1.6);if(cp>0){ctx.save();ctx.strokeStyle=INK;ctx.lineWidth=3;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();
+  const N=Math.floor(KG.length*cp);for(let i=0;i<N;i++){const X=px(KG[i][0]),Y=AX-4-KG[i][1]*190+hp(i*.3+BOIL*5)*.8;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)}ctx.stroke();ctx.restore()}},
+ front(lt,L){meanMark(1,3,lt,L,false);medLine(1,3,lt,L,300,false);
+  const oa=clamp((lt-3.6)/.6);if(oa>0){txt(L.med.split(' ')[0],px(med)-8,292,{sz:22,al:'right',c:GREEN,a:oa});txt(L.mean.split(' ')[0],px(mean)+20,AX+60,{sz:22,c:ORANGE,a:oa});txt(L.order,px(med),262,{sz:26,al:'center',c:INK,p:clamp((lt-4.2)/.7)})}
+  const tp=clamp((lt-5)/1);if(tp>0){arrow(px(9),436,px(16.6),488,{c:RED,w:2.8,p:tp,s:500});txt(L.tail,px(13),440,{sz:26,c:RED,p:clamp((lt-5.8)/.5)})}
+  const na=clamp((lt-.6)/.4);if(na>0){note(800,100,430,180,na,{rot:.012,fill:'#ffffff'});
+   [0,1,2].forEach(i=>mini(822+i*138,190,i,clamp((lt-.9-i*.3)/.4),i===2&&lt>2,L.shapes[i],510+i*40));
+   if(lt>2.2)hcircle(822+2*138+52,160,66,{c:RED,w:2.4,p:clamp((lt-2.2)/.6),s:560});
+   txt(L.shapeNote,1015,262,{sz:23,al:'center',c:RED,p:clamp((lt-2.6)/.6)})}}};
+SC[6]={front(lt,L){const a=clamp((lt-.5)/.6);if(a<=0)return;const x=250,y=88,w=780,h=540;note(x,y,w,h,a,{fill:'#ffffff',rot:-.006});
+ txt(L.tTitle,x+44,y+56,{sz:36,a});txt(L.tSub,x+w-44,y+56,{sz:23,al:'right',c:INK2,a});hline(x+40,y+72,x+w-40,y+73,{w:2.6,p:clamp((lt-.8)/.6),s:600});
+ L.rows.forEach((r,i)=>{const ry=y+112+i*38,pp=clamp((lt-1.1-i*.32)/.45);
+  if(i===1||i===2)marker(x+36,ry-28,w-72,36,{p:clamp((lt-5.4-(i-1)*.3)/.5),s:610+i,k:.5});
+  txt(r,x+48,ry,{sz:26,p:pp,c:INK});txt(L.vals[i],x+w-48,ry,{sz:26,al:'right',p:pp,c:i===9?RED:INK,w:700});
+  if(i<L.rows.length-1)hline(x+44,ry+11,x+w-44,ry+11,{w:1,a:.25*pp,one:true,s:620+i,c:INK2})})}};
+
+/* ---------- 프레임 ---------- */
+function frame(){
+ const t=T,k=sceneIdx(t),lt=t-S[k],L=TX[level];
+ ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);
+ paper();header(k,L);
+ const axA=k===0?0:k===6?1-.75*ease(clamp(lt/1)):1,axP=k===1?clamp(lt/1.2):1;
+ if(axA>0)axis(axP,axA,L);
+ if(SC[k].back)SC[k].back(lt,L);
+ drawDots(k,lt,L);
+ if(SC[k].front)SC[k].front(lt,L);
+}
+
+/* ---------- 대본 ---------- */
+const SHORT=TX.mid.scenes;
+const SCRIPT={
+ mid:[
+  {s:'여기 아파트 20채의 매매가가 적힌 쪽지가 있어요. 숫자가 이렇게 흩어져 있으면 "이 동네 아파트는 대체로 얼마쯤 할까?"라는 질문에 바로 답하기 어렵습니다. 이렇게 많은 숫자를 몇 개의 대표 숫자로 요약해서 자료의 특징을 보여 주는 것이 기술통계예요.',tip:'쪽지가 하나씩 나타날 때 "숫자만 봐서는 감이 안 오죠?"라고 질문을 던져 보세요.'},
+  {s:()=>`쪽지를 숫자 줄 위에 올려 1억 원 단위 칸에 쌓아 볼게요. 같은 칸에 들어가는 아파트끼리 위로 쌓으면 막대 모양이 생깁니다. 이렇게 칸마다 개수를 센 것을 도수분포, 막대로 그린 것을 히스토그램이라고 해요. ${mb}억대에 ${modeCnt}채로 가장 많이 모여 있고, 오른쪽 끝에 아주 비싼 집이 하나 떨어져 있죠.`,tip:'막대 위 숫자(칸별 개수)를 손가락으로 짚으며 읽어 주면 좋습니다.'},
+  {s:()=>`이제 대표 숫자를 찾아요. 첫째, 평균은 모든 가격을 더해 20으로 나눈 값으로 ${f2(mean)}억 원이에요. 시소의 균형점처럼 생각하면 됩니다. 둘째, 중앙값은 가격 순서로 줄을 세웠을 때 한가운데 값으로 ${f2(med)}억 원이에요. 셋째, 가장 많이 모인 가격대는 ${mb}억대입니다. 평균이 중앙값보다 큰 이유는 오른쪽 끝 ${f1(max)}억 원짜리 집이 균형점을 끌어당기기 때문이에요.`,tip:'집값 뉴스에 "평균 가격"과 "중위 가격"이 따로 나오는 이유와 연결해 주세요.'},
+  {s:()=>`대표 숫자만으로는 부족해요. 가격이 얼마나 흩어져 있는지도 알아야 합니다. 가장 쉬운 방법은 범위, 즉 가장 비싼 값에서 가장 싼 값을 뺀 ${f1(range)}억 원이에요. 더 많이 쓰는 것은 표준편차입니다. 각 집이 평균에서 얼마나 떨어져 있는지 선을 긋고, 그 거리를 평균 내듯 계산한 값이 ${f2(sd)}억 원이에요. 노란 띠가 평균에서 표준편차 하나만큼 떨어진 구간입니다.`,tip:'"표준편차가 크다 = 집값이 들쭉날쭉하다"를 한 문장으로 꼭 정리해 주세요.'},
+  {s:()=>`이번엔 상자그림을 그려요. 가격을 줄 세우고 네 묶음으로 나누면 아래 25% 선은 ${f2(q1)}억, 위 25% 선은 ${f2(q3)}억이에요. 그 사이 가운데 절반을 상자로 그리고, 상자 안 초록 선이 중앙값입니다. 상자 폭 ${f2(iqr)}억의 1.5배보다 더 멀리 떨어진 값, 여기서는 ${f2(uf)}억 원을 넘는 값은 이상치로 따로 표시해요. ${f1(max)}억 원짜리 집이 바로 이상치입니다.`,tip:'이상치는 "틀린 값"이 아니라 "따로 확인할 값"이라는 점을 강조하세요. 대형 평형이나 조망 좋은 단지일 수 있습니다.'},
+  {s:'분포의 모양도 봅니다. 쌓인 점들을 부드러운 곡선으로 이으면 왼쪽에 높게 모이고 오른쪽으로 꼬리가 길게 늘어진 모양이에요. 이런 모양을 오른쪽으로 꼬리가 긴 분포라고 합니다. 이때는 평균이 중앙값보다 오른쪽에 있어요. 그래서 집값처럼 한쪽으로 치우친 자료는 평균보다 중앙값이 대표값으로 더 믿을 만합니다.',tip:'오른쪽 위 세 가지 모양 그림을 가리키며 왼쪽 꼬리, 대칭, 오른쪽 꼬리를 비교해 보세요.'},
+  {s:()=>`지금까지 본 숫자를 한 장의 표로 정리했어요. JAMOVI에서 기술통계를 돌리면 이런 표가 나옵니다. 아파트 ${n}채의 평균은 ${f2(mean)}억, 중앙값은 ${f2(med)}억, 표준편차는 ${f2(sd)}억이에요. 평균과 중앙값이 차이 나는 것을 보고 "비싼 집 때문에 평균이 올라갔구나" 하고 읽을 수 있으면 기술통계를 제대로 이해한 거예요.`,tip:'예시는 설명용 가상 데이터라는 점을 한 번 말해 주세요.'}
+ ],
+ uni:[
+  {s:'기술통계(descriptive statistics)는 표본 자료의 특성을 요약하고 정리하는 방법입니다. 모집단에 대한 추론을 다루는 추론통계와 구분되며, 분석의 첫 단계에서 자료의 중심, 산포, 분포 형태를 파악합니다. 예시는 가상의 아파트 매매가 자료 n = 20입니다.',tip:'t검정·회귀분석 같은 추론통계로 넘어가기 전에 반드시 거치는 단계임을 강조하세요.'},
+  {s:()=>`자료를 계급 폭 1억 원으로 나눈 도수분포를 점그림(dot plot)과 히스토그램으로 나타냈습니다. 최빈 계급은 [${mb}, ${mb+1}) 구간으로 도수가 ${modeCnt}이며, 오른쪽에 ${f1(max)}억 원의 극단값이 떨어져 있습니다. 히스토그램은 계급 폭과 시작점에 따라 모양이 달라질 수 있다는 점에 유의해야 합니다.`,tip:'JAMOVI의 Descriptives → Plots에서 Histogram과 Density를 켜는 화면과 연결해 설명할 수 있습니다.'},
+  {s:()=>`중심경향치(measures of central tendency)입니다. 산술평균 x̄ = Σxᵢ / n = ${f3(mean)}이며, 편차의 합 Σ(xᵢ − x̄)가 0이 되는 균형점입니다. 중앙값은 (n + 1) / 2 = 10.5번째 값으로 ${f3(med)}입니다. 연속형 자료에서는 개별 최빈값 대신 최빈 계급을 봅니다. 평균은 극단값에 민감하고 중앙값은 강건(robust)하다는 차이가 그림에서 드러납니다.`,tip:'극단값 대응 방법으로 절사평균(trimmed mean)을 함께 소개할 수 있습니다.'},
+  {s:()=>`산포도(measures of dispersion)입니다. 범위 R = ${f2(range)}는 양 끝 두 값에만 의존합니다. 표본분산 s² = Σ(xᵢ − x̄)² / (n − 1) = ${f3(vr)}, 표본표준편차 s = ${f3(sd)}입니다. n − 1로 나누는 것은 모분산의 불편추정량을 얻기 위해서입니다. 변동계수 CV = s / x̄ = ${f1(cv_*100)}%로, 단위나 규모가 다른 자료의 산포를 비교할 때 씁니다.`,tip:'자유도 n − 1의 직관(표본평균을 쓰면서 정보 1개를 소모)을 덧붙이면 좋습니다.'},
+  {s:()=>`사분위수와 상자그림(box plot)입니다. Q1 = ${f3(q1)}, Q2 = ${f3(med)}, Q3 = ${f3(q3)}이며 사분위범위 IQR = Q3 − Q1 = ${f3(iqr)}입니다. Tukey 기준으로 Q3 + 1.5·IQR = ${f3(uf)}를 넘는 ${f1(max)}이 이상치로 표시됩니다. 수염은 울타리 안쪽의 최솟값 ${f1(minIn)}과 최댓값 ${f1(maxIn)}까지 그립니다.`,tip:'사분위수 계산법은 소프트웨어와 옵션에 따라 조금씩 다를 수 있습니다. 여기서는 R 기본 방식(type 7)으로 계산했습니다.'},
+  {s:()=>`분포 형태입니다. 커널밀도 곡선을 보면 오른쪽 꼬리가 긴 양(+)의 비대칭입니다. 표본 왜도 = ${f3(skew)} (SE ${f3(seS)}), 초과 첨도 = ${f3(kurt)} (SE ${f3(seK)})입니다. 정적 편포에서는 대체로 최빈값 < 중앙값 < 평균 순서가 나타납니다. 왜도·첨도를 SE로 나눈 값의 절댓값이 약 2를 넘으면 정규분포에서 벗어났다고 보는 경험칙도 있습니다.`,tip:'심한 비대칭이면 로그 변환을 검토한다는 점을 회귀분석 단원과 연결해 주세요.'},
+  {s:()=>`JAMOVI Descriptives 출력 형식으로 정리한 결과입니다. N = ${n}, 평균 ${f3(mean)}, 중앙값 ${f3(med)}, 표준편차 ${f3(sd)}, 왜도 ${f3(skew)}입니다. 보고할 때는 "매매가는 평균 ${f2(mean)}억 원(SD = ${f2(sd)})이나 정적 편포를 보여 중앙값 ${f2(med)}억 원을 함께 제시하였다"처럼 중심, 산포, 분포 형태를 함께 기술합니다.`,tip:'JAMOVI의 첨도는 정규분포를 0으로 두는 초과 첨도 기준입니다. 숫자는 가상 데이터로 계산했습니다.'}
+ ]};
+const sv=o=>typeof o.s==='function'?o.s():o.s;
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+const scBtns=SHORT.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">장면 ${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);$('scenes').appendChild(b);return b});
+function setPlay(p){playing=p;$('play').textContent=p?'❚❚ 일시정지':'▶ 재생'}
+function goScene(i){T=S[i]+.001;setPlay(true)}
+function togglePlay(){if(!playing){if(T>=END-.01)T=0;else{const k=sceneIdx(T);if(S[k+1]-T<.03)T=S[k+1]+.001}}setPlay(!playing)}
+$('play').onclick=togglePlay;cv.onclick=togglePlay;
+$('rew').onclick=()=>{T=0;setPlay(true)};
+const jump=d=>{const k=sceneIdx(T);goScene(clamp(k+d,0,S.length-2))};
+$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);
+$('spd').onchange=e=>speed=+e.target.value;
+$('auto').onclick=()=>{autoStop=!autoStop;$('auto').setAttribute('aria-pressed',autoStop)};
+$('scrub').oninput=e=>{T=+e.target.value;setPlay(false)};
+$('fs').onclick=()=>{try{if(document.fullscreenElement)document.exitFullscreen();else stage.requestFullscreen().catch(()=>{})}catch(e){}};
+let hintT;function rec(){document.body.classList.toggle('rec');setTimeout(resize,50);const h=$('hint');if(document.body.classList.contains('rec')){h.classList.add('show');clearTimeout(hintT);hintT=setTimeout(()=>h.classList.remove('show'),2200)}else h.classList.remove('show')}
+$('rec').onclick=rec;
+function setLevel(lv){level=lv;$('lvMid').setAttribute('aria-pressed',lv==='mid');$('lvUni').setAttribute('aria-pressed',lv==='uni');uiK=-1;buildAll()}
+$('lvMid').onclick=()=>setLevel('mid');$('lvUni').onclick=()=>setLevel('uni');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+ if(e.code==='Space'){e.preventDefault();togglePlay()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H'||e.key==='ㅗ')rec()});
+function buildAll(){const ol=$('sAll');ol.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TX[level].scenes[i]}</b><br>${sv(o)}<br><small>강의 팁 · ${o.tip}</small>`;li.onclick=()=>goScene(i);ol.appendChild(li)})}
+let uiK=-1;
+function updUI(){const k=sceneIdx(T);$('scrub').value=T;const fm=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;$('time').textContent=`${fm(T)} / ${fm(END)}`;
+ if(k===uiK)return;uiK=k;scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...$('sAll').children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];$('sTag').textContent=`장면 ${k+1} / 7 · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;$('sTitle').textContent=TX[level].scenes[k];$('sNow').textContent=sv(o);$('sTip').textContent='강의 팁 · '+o.tip}
+$('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TX[level].scenes[i]}\n${sv(o)}\n(강의 팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ const done=()=>{btn.textContent='복사했습니다';setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(all).then(done,()=>{fb();done()});else{fb();done()}};
+buildAll();
+
+/* ---------- 루프 ---------- */
+let last=performance.now();
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+ BOIL=reduce?0:Math.floor(now/170)%3;
+ if(playing){let nt=T+dt*speed;const k=sceneIdx(T);
+  if(nt>=END){nt=END-.001;setPlay(false)}
+  else if(autoStop&&nt>=S[k+1]){nt=S[k+1]-.002;setPlay(false)}
+  T=nt}
+ frame();updUI();requestAnimationFrame(loop)}
+if(document.fonts&&document.fonts.load){document.fonts.load('700 24px Gaegu').catch(()=>{})}
+requestAnimationFrame(loop);
+})();
+</script>

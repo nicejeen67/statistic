@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>히스토그램이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕, 상단 제목 → 캔버스 무대(애니메이션) → 조작부 → 단계 설명 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:baseline}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+.counter{font:500 13px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.counter b{color:var(--ink)}
+canvas{display:block;width:100%;height:460px}
+@media (max-width:560px){canvas{height:420px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:62px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p,.panel ul{margin:0}
+.panel ul{padding-left:20px;display:grid;gap:4px;margin-top:4px}
+.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:8px}
+@media (max-width:420px){.sum{grid-template-columns:repeat(2,1fr)}}
+.sum div{background:var(--paper);padding:8px 10px;display:grid}
+.sum span{font-size:11.5px;color:var(--muted)}
+.sum strong{font:500 16px var(--mono);font-variant-numeric:tabular-nums}
+.sum .mn strong{color:var(--c3)}.sum .md strong{color:var(--c2)}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 01</div>
+    <h1>히스토그램이 <span>만들어지는 과정</span></h1>
+    <p class="lede">실거래 80건의 매매가가 숫자 목록에서 출발해 수직선 위의 점이 되고, 구간별로 쌓여 히스토그램이 되는 과정을 순서대로 보여줍니다. 아래 단계 버튼을 누르면 원하는 장면으로 바로 이동합니다.</p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div><div class="counter" id="counter"></div></div>
+    <canvas id="cv" role="img" aria-label="거래가 자료가 히스토그램으로 쌓이는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp" role="group" aria-label="구간 폭"><span>구간 폭</span><button id="w1" type="button" data-w="1">1억</button><button id="w2" type="button" data-w="2">2억</button><button id="w4" type="button" data-w="4">4억</button></div>
+    <div class="grp"><button id="resample" type="button">새 표본 뽑기</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="16" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>완성된 히스토그램 요약</h2>
+      <p class="note">현재 표본 80건 기준 (단위: 억원)</p>
+      <div class="sum" id="sum"></div>
+    </div>
+    <div class="panel">
+      <h2>수업에서 이렇게 써 보세요</h2>
+      <ul>
+        <li>구간 폭을 <b>1억 → 2억 → 4억</b>으로 바꿔 보세요. 같은 자료인데 봉우리 모양이 달라집니다.</li>
+        <li><b>새 표본 뽑기</b>를 여러 번 눌러 보세요. 표본마다 막대 높이는 달라도 오른쪽 꼬리가 긴 모양은 유지됩니다.</li>
+        <li>4단계에서 멈추고 "블록 1개 = 거래 1건"이라는 점을 강조하면 도수(빈도)의 뜻이 분명해집니다.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">※ 거래가는 설명용으로 생성한 예시 값이며 실제 거래 자료가 아닙니다. 서울 아파트 매매가처럼 오른쪽 꼬리가 긴 로그정규분포에서 뽑았습니다.</p>
+</div>
+
+<script>
+(function(){
+const N=80,XMAX=32,TOTAL=16;
+const TB=1.0,TC=5.4,TD=7.0,TE=12.0,TF=13.6;
+const STEPS=[
+ {t:0,  n:'원자료 준비',      s:'숫자 80개가 목록으로만 있습니다.',
+  c:'실거래 80건의 매매가(억원)입니다. 이 상태로는 어느 가격대에 거래가 몰렸는지 알기 어렵습니다.'},
+ {t:TB, n:'수직선 위에 점 찍기', s:'각 거래를 가격 위치에 점으로 표시합니다.',
+  c:'숫자 하나하나가 수직선의 자기 가격 위치로 이동해 점이 됩니다. 점이 빽빽한 곳이 거래가 많은 가격대입니다. 이 단계만으로도 "점 그림(strip plot)"이라는 그래프가 됩니다.'},
+ {t:TC, n:'구간(계급) 나누기',  s:'0억부터 일정한 폭으로 구간을 나눕니다.',
+  c:'가격 축을 같은 폭의 구간으로 나눕니다. 이 구간을 계급(bin)이라고 부릅니다. 구간 폭을 얼마로 잡느냐가 히스토그램 모양을 결정합니다.'},
+ {t:TD, n:'구간별로 쌓기',      s:'점이 자기 구간으로 떨어져 한 칸씩 쌓입니다.',
+  c:'각 점이 자기 가격이 속한 구간으로 떨어져 블록으로 쌓입니다. 블록 1개가 거래 1건입니다. 구간 경계값은 오른쪽 구간에 넣습니다(예: 정확히 8억은 8~10억 구간).'},
+ {t:TE, n:'막대로 합치기',      s:'블록 높이 = 그 구간의 도수(빈도)',
+  c:'블록을 합치면 막대가 됩니다. 막대 높이가 그 구간에 속한 거래 건수, 곧 도수입니다. 연속형 자료라 막대끼리 빈틈없이 붙어 있는 것이 막대그래프와 다른 점입니다.'},
+ {t:TF, n:'분포 읽기',          s:'평균과 중앙값의 위치를 비교합니다.',
+  c:''}];
+
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+let seed=1020,vals=[],jit=[],binW=2,t=0,playing=true,speed=1,L={},lastPhase=-1;
+function sample(){const R=rng(seed);const nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+  vals=Array.from({length:N},()=>Math.round(clamp(Math.exp(Math.log(9)+.42*nrm()),1.5,31.9)*10)/10);
+  jit=Array.from({length:N},()=>R()*2-1)}
+function stats(){const s=[...vals].sort((a,b)=>a-b),n=s.length,mean=s.reduce((a,b)=>a+b,0)/n,q=p=>{const i=(n-1)*p,lo=Math.floor(i);return s[lo]+(s[Math.ceil(i)]-s[lo])*(i-lo)};
+  const m2=s.reduce((a,v)=>a+(v-mean)**2,0),sd=Math.sqrt(m2/(n-1)),pm=m2/n,m3=s.reduce((a,v)=>a+(v-mean)**3,0)/n,g1=m3/pm**1.5*Math.sqrt(n*(n-1))/(n-2);
+  return{mean,median:q(.5),sd,skew:g1,min:s[0],max:s[n-1]}}
+let ST={};
+
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,l=46,rr=18;const plotW=W-l-rr;
+  const stripY=66,histTop=128,base=H-46;
+  const X=v=>l+v/XMAX*plotW;
+  const nb=Math.ceil(XMAX/binW),cnt=Array(nb).fill(0),bin=[],k=[];
+  vals.forEach((v,i)=>{const b=Math.min(nb-1,Math.floor(v/binW));bin[i]=b;k[i]=cnt[b]++});
+  const maxC=Math.max(...cnt),unitH=Math.min(18,(base-histTop-22)/maxC),bw=X(binW)-X(0);
+  const cols=W<520?8:10,rows=Math.ceil(N/cols),cellW=plotW/cols,cellH=Math.min(30,(base-histTop)/rows);
+  L={W,H,l,rr,plotW,stripY,histTop,base,X,nb,cnt,bin,k,maxC,unitH,bw,cols,cellW,cellH,dotR:W<520?3.2:4};}
+
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function rrect(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper')};
+  const{W,H,l,stripY,histTop,base,X,unitH,bw}=L;
+  ctx.clearRect(0,0,W,H);
+  const a0=clamp((t-.1)/.6);
+  // ── 수직선(점 그림 영역)
+  const sa=clamp((t-TB+.3)/.6);
+  ctx.globalAlpha=sa;ctx.fillStyle=C.muted;ctx.font=`500 12px ${SANS}`;ctx.textAlign='left';ctx.fillText('수직선 위의 점 (점 그림)',l,22);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(l,stripY+22);ctx.lineTo(X(XMAX),stripY+22);ctx.stroke();
+  ctx.font=`10px ${MONO}`;ctx.textAlign='center';ctx.fillStyle=C.muted;
+  for(let v=0;v<=XMAX;v+=4){ctx.beginPath();ctx.moveTo(X(v),stripY+19);ctx.lineTo(X(v),stripY+25);ctx.stroke();ctx.fillText(v,X(v),stripY+38)}
+  ctx.globalAlpha=1;
+  // ── 히스토그램 바닥선
+  ctx.globalAlpha=a0;ctx.strokeStyle=C.muted;ctx.beginPath();ctx.moveTo(l,base);ctx.lineTo(X(XMAX),base);ctx.stroke();
+  ctx.font=`10px ${MONO}`;ctx.fillStyle=C.muted;ctx.textAlign='center';
+  const lblStep=bw<26?(bw<14?4:2):1;
+  for(let j=0;j<=L.nb;j++){if(j%lblStep===0&&t>=TC)ctx.fillText(j*binW,X(j*binW),base+16)}
+  if(t<TC)for(let v=0;v<=XMAX;v+=4)ctx.fillText(v,X(v),base+16);
+  ctx.textAlign='right';ctx.fillText('매매가(억원)',X(XMAX),base+32);ctx.globalAlpha=1;
+  // 원자료 제목
+  const ta=a0*(1-clamp((t-(TB+N*.045-.5))/.8));
+  if(ta>0){ctx.globalAlpha=ta;ctx.font=`500 12px ${SANS}`;ctx.fillStyle=C.muted;ctx.textAlign='left';ctx.fillText('원자료: 실거래 80건 (단위: 억원)',l,histTop-10);ctx.globalAlpha=1}
+  const ha=clamp((t-TD)/.6);
+  const hf=ha*(1-clamp((t-TF)/.5));if(hf>0){ctx.globalAlpha=hf;ctx.font=`500 12px ${SANS}`;ctx.fillStyle=C.muted;ctx.textAlign='left';ctx.fillText('히스토그램 (블록 1개 = 거래 1건)',l,histTop-10);ctx.globalAlpha=1}
+  // ── 구간 경계선
+  if(t>=TC){ctx.setLineDash([3,4]);for(let j=0;j<=L.nb;j++){const p=ease(clamp((t-TC-j*(1.0/L.nb))/.35));if(p<=0)continue;const x=X(Math.min(j*binW,XMAX));
+    ctx.strokeStyle=C.muted;ctx.globalAlpha=t>TE?lerp(.55,.25,clamp((t-TE)/1.2)):.55;ctx.beginPath();ctx.moveTo(x,base);ctx.lineTo(x,lerp(base,stripY+22,p));ctx.stroke()}
+    ctx.setLineDash([]);ctx.globalAlpha=1}
+  // ── y축(도수)
+  const e=clamp((t-TE)/1.2);
+  if(e>0){ctx.globalAlpha=e;ctx.font=`10px ${MONO}`;ctx.fillStyle=C.muted;ctx.textAlign='right';const st=L.maxC>16?5:L.maxC>8?2:1;
+    for(let c=st;c<=L.maxC;c+=st){const y=base-c*unitH;ctx.strokeStyle=C.line;ctx.beginPath();ctx.moveTo(l,y);ctx.lineTo(X(XMAX),y);ctx.stroke();ctx.fillText(c,l-6,y+3)}
+    ctx.save();ctx.translate(12,base-L.maxC*unitH/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('도수(건)',0,0);ctx.restore();ctx.globalAlpha=1}
+  // ── 각 거래(숫자 → 점 → 블록)
+  let arrived=0,stacked=0;
+  for(let i=0;i<N;i++){const v=vals[i],tb=TB+i*.045,td=TD+i*.05;
+    const cx=l+(i%L.cols+.5)*L.cellW,cy=histTop+(Math.floor(i/L.cols)+.5)*L.cellH;
+    const sx=X(v),sy=stripY+jit[i]*14;
+    const b=L.bin[i],gap=1.6*(1-e),bxw=Math.max(2,bw-2);
+    const slx=X(b*binW)+1,sly=base-(L.k[i]+1)*unitH;
+    if(t<tb){ctx.globalAlpha=a0;ctx.fillStyle=C.ink;ctx.font=`${L.W<520?11:12.5}px ${MONO}`;ctx.textAlign='center';ctx.fillText(v.toFixed(1),cx,cy+4);ctx.globalAlpha=1;continue}
+    if(t<tb+.5){const p=ease((t-tb)/.5),x=lerp(cx,sx,p),y=lerp(cy,sy,p);
+      ctx.globalAlpha=1-p;ctx.fillStyle=C.c3;ctx.font=`500 ${L.W<520?11:12.5}px ${MONO}`;ctx.textAlign='center';ctx.fillText(v.toFixed(1),x,y+4);
+      ctx.globalAlpha=p;ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(x,y,L.dotR*p,0,7);ctx.fill();ctx.globalAlpha=1;continue}
+    arrived++;
+    if(t<td){const fresh=t-(tb+.5)<.6;ctx.fillStyle=fresh?C.c3:C.c1;ctx.globalAlpha=.8;ctx.beginPath();ctx.arc(sx,sy,L.dotR,0,7);ctx.fill();ctx.globalAlpha=1;
+      if(fresh&&i===Math.min(N-1,Math.floor((t-TB-.5)/.045))){ctx.fillStyle=C.c3;ctx.font=`500 11px ${MONO}`;ctx.textAlign='center';ctx.fillText(v.toFixed(1),sx,sy-10)}continue}
+    if(t<td+.7){const p=ease((t-td)/.7),d=L.dotR*2;
+      const x=lerp(sx,slx+bxw/2,p),y=lerp(sy,sly+unitH/2,p),w=lerp(d,bxw,p),h=lerp(d,unitH-gap,p),r=lerp(L.dotR,1.5,p);
+      ctx.fillStyle=C.c3;rrect(x-w/2,y-h/2,w,h,r);ctx.fill();
+      // 남아 있는 점(흔적)
+      ctx.globalAlpha=.18*(1-p);ctx.fillStyle=C.c1;ctx.beginPath();ctx.arc(sx,sy,L.dotR,0,7);ctx.fill();ctx.globalAlpha=1;continue}
+    stacked++;
+    ctx.fillStyle=C.c1;rrect(slx,sly+gap/2,bxw,unitH-gap,e>.9?0:1.5);ctx.fill();
+    // 점 그림은 흐리게 남겨 둠
+    ctx.globalAlpha=.18;ctx.beginPath();ctx.arc(sx,sy,L.dotR,0,7);ctx.fill();ctx.globalAlpha=1;
+  }
+  // ── 막대 윤곽과 도수 라벨
+  if(e>0){ctx.globalAlpha=e;ctx.strokeStyle=C.c1;ctx.lineWidth=1.5;ctx.font=`500 11px ${MONO}`;ctx.fillStyle=C.ink;ctx.textAlign='center';
+    L.cnt.forEach((c,b)=>{if(!c)return;const x=X(b*binW)+1,w=Math.max(2,bw-2),y=base-c*unitH;ctx.fillStyle=C.c1;ctx.globalAlpha=e*e;ctx.fillRect(x,y,w,c*unitH);ctx.globalAlpha=e;ctx.fillStyle=C.ink;ctx.strokeRect(x,y,w,c*unitH);if(bw>=16)ctx.fillText(c,x+w/2,y-5)});ctx.globalAlpha=1;ctx.lineWidth=1}
+  // ── 평균·중앙값
+  const f=clamp((t-TF)/1),f2=clamp((t-TF-.4)/1),f3=clamp((t-TF-1)/.6);
+  const top=histTop-6;
+  function vline(v,p,color,label,dy,align){if(p<=0)return;const x=X(v);ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash(color===C.c3?[6,4]:[]);ctx.beginPath();ctx.moveTo(x,base);ctx.lineTo(x,lerp(base,top,ease(p)));ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;
+    ctx.globalAlpha=p;ctx.fillStyle=color;ctx.font=`500 12px ${SANS}`;ctx.textAlign=align;ctx.fillText(label,x+(align==='left'?6:-6),top-6);ctx.globalAlpha=1}
+  vline(ST.median,f,C.c2,`중앙값 ${ST.median.toFixed(1)}`,10,'right');
+  vline(ST.mean,f2,C.c3,`평균 ${ST.mean.toFixed(1)}`,26,'left');
+  if(f3>0){ctx.globalAlpha=f3;ctx.fillStyle=C.c4;ctx.font=`500 12px ${SANS}`;ctx.textAlign='left';const x0=X(Math.max(ST.mean+6,22));ctx.fillText('오른쪽 꼬리가 길다 →',Math.min(x0,L.W-150),base-L.maxC*unitH*.45);ctx.globalAlpha=1}
+  return{arrived,stacked}}
+
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(info){const p=phaseIdx();
+  $('counter').innerHTML=`점으로 이동 <b>${info.arrived}</b>/${N} · 쌓인 블록 <b>${info.stacked}</b>/${N}`;
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/6</span>${STEPS[p].n}`;
+    $('caption').textContent=p===5?`오른쪽 꼬리가 긴 분포입니다(왜도 ${ST.skew.toFixed(2)}). 소수의 고가 거래가 평균(${ST.mean.toFixed(1)}억)을 중앙값(${ST.median.toFixed(1)}억)보다 ${(ST.mean-ST.median).toFixed(1)}억 끌어올렸습니다. 이런 가격 자료는 중앙값을 대표값으로 함께 보고합니다.`:STEPS[p].c.replace('일정한 폭',binW+'억 폭');
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;
+  if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  ui(draw());requestAnimationFrame(frame)}
+
+function refreshSum(){ST=stats();$('sum').innerHTML=[['평균',ST.mean,'mn'],['중앙값',ST.median,'md'],['표준편차',ST.sd,''],['왜도',ST.skew,'']].map(([k,v,c])=>`<div class="${c}"><span>${k}</span><strong>${v.toFixed(2)}</strong></div>`).join('')}
+function setBin(w){binW=w;['w1','w2','w4'].forEach(id=>$(id).setAttribute('aria-pressed',+$(id).dataset.w===w));layout();lastPhase=-1;if(t>TC){t=TC;playing=true}}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+['w1','w2','w4'].forEach(id=>$(id).onclick=()=>setBin(+$(id).dataset.w));
+$('resample').onclick=()=>{seed+=7;sample();refreshSum();layout();t=TB;playing=true;lastPhase=-1};
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+
+sample();refreshSum();setBin(2);
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

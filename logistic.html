@@ -1,0 +1,485 @@
+<title>로지스틱 회귀분석 사이버 스캔</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap">
+<style>
+/* Layout: 16:9 cinematic stage (canvas, 1280x720 logical) + control strip below. Single dark "cyber HUD" look. */
+:root{
+  --bg:#03060c; --panel:#0a1322; --line:#18324d;
+  --cyan:#38e8ff; --mag:#ff3fa4; --amber:#ffc24a;
+  --fg:#d7f6ff; --dim:#6f8ea8;
+  --f-display:'Orbitron','JetBrains Mono',ui-monospace,monospace;
+  --f-body:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage{position:relative;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);overflow:hidden}
+.stage:fullscreen{border:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.scan{pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(160,240,255,.045) 0 1px,transparent 1px 3px)}
+.vig{pointer-events:none;position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(0,0,0,.65) 100%)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--f-mono);font-size:13px}
+.grp{display:flex;gap:4px;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);padding:8px 12px;cursor:pointer;border-radius:2px}
+button:hover{border-color:var(--cyan);color:var(--cyan)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--cyan);color:var(--bg);border-color:var(--cyan)}
+#scrub{flex:1 1 200px;min-width:0;accent-color:var(--cyan)}
+#tc{color:var(--dim);font-variant-numeric:tabular-nums;min-width:7ch}
+.hint{color:var(--dim);font-size:12px;line-height:1.6;margin:0}
+.hint b{color:var(--cyan);font-weight:400}
+body.rec .controls,body.rec .hint,body.rec .script,body.rec .scenes{display:none}
+.scenes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+@media (max-width:640px){.scenes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.scenes button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;min-width:0}
+.scenes button .n{font-family:var(--f-display);font-size:11px;color:var(--amber);letter-spacing:.08em}
+.scenes button .l{font-family:var(--f-body);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.scenes button[aria-current="true"]{border-color:var(--cyan);background:rgba(56,232,255,.12);color:var(--cyan)}
+.scenes button[aria-current="true"] .n{color:var(--cyan)}
+.script{border:1px solid var(--line);background:var(--panel);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.script .tag{font-family:var(--f-display);font-size:12px;letter-spacing:.1em;color:var(--amber)}
+.script h2{margin:0;font-size:19px;font-weight:700;text-wrap:balance}
+.script .now{margin:0;font-size:17px;line-height:1.85;max-width:70ch;color:var(--fg)}
+.script .tip{margin:0;font-size:13px;color:var(--dim);line-height:1.6}
+.script details{border-top:1px solid var(--line);padding-top:10px}
+.script summary{cursor:pointer;color:var(--cyan);font-size:14px}
+.script ol{margin:10px 0 0;padding-left:1.4em;display:flex;flex-direction:column;gap:10px}
+.script li{line-height:1.75;font-size:14px;max-width:75ch;cursor:pointer}
+.script li b{color:var(--cyan)}
+.script li.on{color:var(--cyan)}
+.script textarea{position:absolute;left:-9999px}
+</style>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="scan"></div><div class="vig"></div>
+  </div>
+  <nav class="scenes" id="scenes" aria-label="장면 선택"></nav>
+  <div class="controls">
+    <div class="grp">
+      <button id="auto" aria-pressed="true" title="각 장면이 끝나면 자동으로 멈춥니다">장면마다 멈춤</button>
+      <button id="prev" title="이전 장면 (←)">◀◀</button>
+      <button id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+      <button id="next" title="다음 장면 (→)">▶▶</button>
+      <button id="restart">⟲ 처음부터</button>
+    </div>
+    <input type="range" id="scrub" min="0" max="64" step="0.01" value="0" aria-label="타임라인">
+    <span id="tc">00:00</span>
+    <div class="grp" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+    <div class="grp">
+      <button id="sq" aria-pressed="true">잔차 제곱 ■</button>
+      <button id="spd">속도 1×</button>
+      <button id="fs">전체화면</button>
+      <button id="rec">녹화 모드 (H)</button>
+    </div>
+  </div>
+  <section class="script" aria-live="polite">
+    <div class="head">
+      <span class="tag" id="sTag">SCENE 01 · 설명 대본</span>
+      <button id="copy">전체 대본 복사</button>
+    </div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+    <details>
+      <summary>전체 시나리오 보기 (항목을 누르면 그 장면으로 이동)</summary>
+      <ol id="sAll"></ol>
+    </details>
+  </section>
+  <p class="hint">녹화 모드에서는 아래 조작판이 사라집니다. <b>H</b> 키로 다시 표시 · <b>Space</b> 재생/정지 · <b>← →</b> 장면 이동. 데이터는 설명용 가상 예시(전세 계약 40건, 전세가율·보증사고 여부)입니다.</p>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d));}
+addEventListener('resize',resize);resize();
+
+/* ---------- 데이터 (가상): 전세가율(%) vs 보증사고 발생(1)/미발생(0) ---------- */
+let seed=6;const rnd=()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296};
+const N=40,X=[],Y=[];
+for(let i=0;i<N;i++){const x=52+(i+rnd())*46/N;X.push(x);const p=1/(1+Math.exp(-(-13.5+0.18*x)));Y.push(rnd()<p?1:0)}
+const J=X.map(()=>(rnd()-.5)*.07);
+const xm=X.reduce((a,b)=>a+b,0)/N,sx=Math.sqrt(X.reduce((a,b)=>a+(b-xm)**2,0)/N);
+const sig=v=>1/(1+Math.exp(-v));
+const pr=(b0,b1,x)=>sig(b0+b1*x);
+/* 뉴턴-랩슨 MLE (표준화 좌표) */
+let A_=0,B_=0;
+for(let it=0;it<50;it++){let g0=0,g1=0,h00=0,h01=0,h11=0;for(let i=0;i<N;i++){const z=(X[i]-xm)/sx,p=sig(A_+B_*z),w=p*(1-p);g0+=Y[i]-p;g1+=(Y[i]-p)*z;h00+=w;h01+=w*z;h11+=w*z*z}
+ const det=h00*h11-h01*h01;A_+=(h11*g0-h01*g1)/det;B_+=(-h01*g0+h00*g1)/det}
+const toRaw=(a,b)=>[a-b*xm/sx,b/sx];
+const [B0,B1]=toRaw(A_,B_);
+const fit=x=>pr(B0,B1,x);
+const LLf=(b0,b1)=>{let s=0;for(let i=0;i<N;i++){const p=pr(b0,b1,X[i]);s+=Y[i]?Math.log(Math.max(p,1e-12)):Math.log(Math.max(1-p,1e-12))}return s};
+const LL=LLf(B0,B1),NY=Y.reduce((s,v)=>s+v,0),P0=NY/N,LL0=NY*Math.log(P0)+(N-NY)*Math.log(1-P0);
+let h00=0,h01=0,h11=0;for(let i=0;i<N;i++){const p=fit(X[i]),w=p*(1-p);h00+=w;h01+=w*X[i];h11+=w*X[i]*X[i]}
+const DET=h00*h11-h01*h01,SE0=Math.sqrt(h11/DET),SE1=Math.sqrt(h00/DET);
+function Phi(z){const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2),p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
+const Z1=B1/SE1,P1=2*(1-Phi(Math.abs(Z1))),Z0=B0/SE0;
+const OR=Math.exp(B1),OR10=Math.exp(10*B1),CI10=[Math.exp(10*(B1-1.96*SE1)),Math.exp(10*(B1+1.96*SE1))];
+const CHI=2*(LL-LL0),PCHI=2*(1-Phi(Math.sqrt(CHI)));
+const R2M=1-LL/LL0,CS=1-Math.exp(2*(LL0-LL)/N),R2N=CS/(1-Math.exp(2*LL0/N));
+const CUT=-B0/B1;
+let TP=0,FN=0,FP=0,TN=0;for(let i=0;i<N;i++){const ph=fit(X[i])>=.5;if(Y[i]){ph?TP++:FN++}else{ph?FP++:TN++}}
+const ACC=(TP+TN)/N,SENS=TP/(TP+FN),SPEC=TN/(TN+FP);
+let au=0,np_=0;for(let i=0;i<N;i++)if(Y[i])for(let j=0;j<N;j++)if(!Y[j]){au+=X[i]>X[j]?1:X[i]===X[j]?.5:0;np_++}
+const AUC=au/np_;
+const ROC=[[0,0]];{const o=[...Array(N).keys()].sort((a,b)=>X[b]-X[a]);let tp=0,fp=0;for(const i of o){Y[i]?tp++:fp++;ROC.push([fp/(N-NY),tp/NY])}}
+/* 선형확률모형 */
+let Sxx=0,Sxy=0;for(let i=0;i<N;i++){Sxx+=(X[i]-xm)**2;Sxy+=(X[i]-xm)*(Y[i]-P0)}
+const L1=Sxy/Sxx,L0=P0-L1*xm,lpm=x=>L0+L1*x;
+/* 경사상승 경로 (표준화 좌표) */
+const PATH=[];{let a=1.0,b=-1.2;for(let k=0;k<110;k++){PATH.push(toRaw(a,b));let g0=0,g1=0;for(let i=0;i<N;i++){const z=(X[i]-xm)/sx,e=Y[i]-sig(a+b*z);g0+=e;g1+=e*z}a+=2.2*g0/N;b+=2.2*g1/N}PATH.push([B0,B1])}
+const PLL=PATH.map(p=>LLf(p[0],p[1]));
+const XA=70,XB=80,pA=fit(XA),pB=fit(XB),oA=pA/(1-pA),oB=pB/(1-pB);
+const PX=85,PP=fit(PX),PO=PP/(1-PP);
+const fmtp=p=>p<.001?'< .001':p.toFixed(3);
+const pct=v=>Math.round(v*100)+'%';
+
+/* ---------- 좌표계 ---------- */
+const XMIN=50,XMAX=100,YMIN=-.3,YMAX=1.3;
+const P={x0:150,x1:890,y0:120,y1:600};
+const px=x=>P.x0+(x-XMIN)/(XMAX-XMIN)*(P.x1-P.x0);
+const py=y=>P.y1-(y-YMIN)/(YMAX-YMIN)*(P.y1-P.y0);
+
+/* ---------- 타임라인 ---------- */
+const S=[0,4,10,17,25,35,43,52,60],END=64;
+let t=0,playing=true,speed=1,level='mid';
+
+const TXT={
+ mid:{scenes:['예/아니오를 예측하는 회귀','0과 1뿐인 데이터','직선으로 그으면 생기는 문제','S자 곡선으로 바꾸기','가장 잘 맞는 S곡선 찾기','오즈비: 몇 배 더 위험할까?','사고 날 집 맞히기 (분류)','결과 정리와 예측'],
+  x:'전세가율 (%)',y:'보증사고 확률',y1:'● 사고 발생 (1)',y0:'● 사고 없음 (0)',
+  eqL:'사고 확률 = a + b × 전세가율  (직선)',eqS:'사고 확률 = 1 ÷ (1 + e^−(a + b×전세가율))',
+  eqF:`ln(오즈) = ${B0.toFixed(2)} + ${B1.toFixed(3)} × 전세가율`,
+  tick:v=>Math.round(v*100)+'%',
+  pred:`전세가율 ${PX}% → 사고 확률 약 ${pct(PP)}`,
+  rep:[['기울기 b',B1.toFixed(3)],['10%p 오르면 오즈',`약 ${OR10.toFixed(1)}배`],['우연일 확률',fmtp(P1)],['정확도',pct(ACC)],['기준 전세가율',`약 ${CUT.toFixed(0)}%`],[`${PX}% 사고 확률`,pct(PP)]]},
+ uni:{scenes:['로지스틱 회귀  logit(p) = β₀ + β₁x','이항 종속변수 Y ∈ {0, 1}','선형확률모형(LPM)의 한계','로짓 변환과 시그모이드','최대우도추정 (MLE)','Wald 검정과 오즈비 Exp(B)','분류 성능  혼동행렬 · ROC','최종 모형 보고와 예측'],
+  x:'x : 전세가율 (%)',y:'P(Y = 1 | x)',y1:'● Y = 1 (사고)',y0:'● Y = 0 (무사고)',
+  eqL:'p̂ = b₀ + b₁x   (LPM, OLS)',eqS:'p̂ = 1 / (1 + e^−(b₀ + b₁x))',
+  eqF:`logit(p̂) = ${B0.toFixed(3)} + ${B1.toFixed(4)}x`,
+  tick:v=>v.toFixed(2),
+  pred:`p̂(${PX}) = ${PP.toFixed(3)},  odds = ${PO.toFixed(2)}`,
+  rep:[['b₁ (SE)',`${B1.toFixed(4)} (${SE1.toFixed(4)})`],['b₀ (SE)',`${B0.toFixed(3)} (${SE0.toFixed(3)})`],['Wald z / p',`${Z1.toFixed(2)} / ${fmtp(P1)}`],['Exp(b₁)',OR.toFixed(3)],['OR (10%p) 95% CI',`${OR10.toFixed(2)} [${CI10[0].toFixed(2)}, ${CI10[1].toFixed(2)}]`],['LR χ²(1) / p',`${CHI.toFixed(2)} / ${fmtp(PCHI)}`],['R² McF / Nagel.',`${R2M.toFixed(3)} / ${R2N.toFixed(3)}`],['Accuracy / AUC',`${ACC.toFixed(3)} / ${AUC.toFixed(3)}`]]}
+};
+/* ---------- 유틸 ---------- */
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=v=>{v=clamp(v);return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2};
+const sceneIdx=tt=>{for(let k=S.length-2;k>=0;k--)if(tt>=S[k])return k;return 0};
+const prog=(k,tt)=>clamp((tt-S[k])/(S[k+1]-S[k]));
+const F_={d:'Orbitron, "JetBrains Mono", monospace',m:'"JetBrains Mono", Consolas, monospace',b:'"Noto Sans KR", "Malgun Gothic", sans-serif'};
+function txt(s,x,y,{f=F_.m,sz=14,c='#d7f6ff',a=1,al='left',w='400',glow=0}={}){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.font=`${w} ${sz}px ${f}`;ctx.fillStyle=c;ctx.textAlign=al;if(glow){ctx.shadowColor=c;ctx.shadowBlur=glow}ctx.fillText(s,x,y);ctx.restore()}
+function corners(x,y,w,h,len,c,a){ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=2;ctx.shadowColor=c;ctx.shadowBlur=8;ctx.beginPath();
+ [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]].forEach(([cx,cy,dx,dy])=>{ctx.moveTo(cx+dx*len,cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+dy*len)});ctx.stroke();ctx.restore()}
+function orb(x,y,r,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;const g=ctx.createRadialGradient(x-r*.3,y-r*.3,0,x,y,r*2.6);
+ g.addColorStop(0,'#ffffff');g.addColorStop(.25,c);g.addColorStop(.5,c+'55');g.addColorStop(1,c+'00');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*2.6,0,7);ctx.fill();ctx.restore()}
+function seg(x1,y1,x2,y2,c,w,a,dash){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=w;ctx.shadowColor=c;ctx.shadowBlur=8;if(dash)ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore()}
+const clipP=()=>{ctx.beginPath();ctx.rect(P.x0,P.y0,P.x1-P.x0,P.y1-P.y0);ctx.clip()};
+
+const stars=[...Array(140)].map(()=>({x:rnd()*LW,y:rnd()*LH,z:.2+rnd()*.8,p:rnd()*6}));
+function bg(tt){
+ const g=ctx.createLinearGradient(0,0,0,LH);g.addColorStop(0,'#02040a');g.addColorStop(.55,'#061226');g.addColorStop(1,'#02050b');
+ ctx.fillStyle=g;ctx.fillRect(0,0,LW,LH);
+ const hz=ctx.createRadialGradient(640,560,10,640,560,700);hz.addColorStop(0,'rgba(56,232,255,.13)');hz.addColorStop(1,'rgba(56,232,255,0)');ctx.fillStyle=hz;ctx.fillRect(0,0,LW,LH);
+ for(const s of stars){const tw=.35+.65*Math.abs(Math.sin(tt*1.3+s.p));ctx.fillStyle=`rgba(180,240,255,${.5*s.z*tw})`;const x=(s.x+tt*8*s.z)%LW;ctx.fillRect(x,s.y,1.6*s.z,1.6*s.z)}
+ const hy=470;ctx.save();ctx.beginPath();ctx.rect(0,hy,LW,LH-hy);ctx.clip();ctx.strokeStyle='rgba(56,232,255,.16)';ctx.lineWidth=1;
+ for(let i=-24;i<=24;i++){ctx.beginPath();ctx.moveTo(640+i*14,hy);ctx.lineTo(640+i*150,LH);ctx.stroke()}
+ const off=(tt*0.35)%1;for(let k=0;k<14;k++){const z=(k+off)/14;const y=hy+Math.pow(z,2.2)*(LH-hy);ctx.globalAlpha=z;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(LW,y);ctx.stroke()}
+ ctx.restore();
+}
+function frameBox(a){ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(8,18,34,.72)';ctx.fillRect(P.x0-60,P.y0-40,P.x1-P.x0+90,P.y1-P.y0+95);ctx.restore();corners(P.x0-60,P.y0-40,P.x1-P.x0+90,P.y1-P.y0+95,22,'#38e8ff',a)}
+function axesMain(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let x=40;x<=140;x+=10){ctx.beginPath();ctx.moveTo(px(x),P.y0);ctx.lineTo(px(x),P.y1);ctx.stroke()}
+ for(let y=0;y<=11;y++){ctx.beginPath();ctx.moveTo(P.x0,py(y));ctx.lineTo(P.x1,py(y));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ for(let x=40;x<=140;x+=20)txt(String(x),px(x),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let y=0;y<=10;y+=2)txt(String(y),P.x0-12,py(y)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.x,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-48,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.y,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function axesRes(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let f=Math.ceil(FMIN);f<=FMAX;f++){ctx.beginPath();ctx.moveTo(rx(f),P.y0);ctx.lineTo(rx(f),P.y1);ctx.stroke()}
+ for(let e=-EM;e<=EM+1e-9;e+=.5){ctx.beginPath();ctx.moveTo(P.x0,ry(e));ctx.lineTo(P.x1,ry(e));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ seg(P.x0,ry(0),P.x1,ry(0),'#ffc24a',2,a,[8,6]);
+ for(let f=Math.ceil(FMIN);f<=FMAX;f++)txt(String(f),rx(f),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let e=-EM;e<=EM+1e-9;e+=1)txt((e>0?'+':'')+e.toFixed(1),P.x0-12,ry(e)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.rxl,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-48,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.ryl,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function beam(a,tt){if(a<=0)return;ctx.save();clipP();const xa=px(XMIN),ya=py(yhat(XMIN)),xb=px(XMAX),yb=py(yhat(XMAX));ctx.lineCap='round';
+ ctx.strokeStyle='#38e8ff';ctx.globalAlpha=a*.18;ctx.lineWidth=14;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ ctx.globalAlpha=a;ctx.shadowColor='#38e8ff';ctx.shadowBlur=18;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ ctx.shadowBlur=0;ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ const f=(tt*.45)%1;orb(xa+(xb-xa)*f,ya+(yb-ya)*f,4,'#38e8ff',a);ctx.restore()}
+function band(fn,a,c,grow){if(a<=0)return;ctx.save();clipP();ctx.globalAlpha=a;ctx.beginPath();const st=60;
+ for(let i=0;i<=st;i++){const x=XMIN+(XMAX-XMIN)*i/st;const y=py(yhat(x)+fn(x)*grow);i?ctx.lineTo(px(x),y):ctx.moveTo(px(x),y)}
+ for(let i=st;i>=0;i--){const x=XMIN+(XMAX-XMIN)*i/st;ctx.lineTo(px(x),py(yhat(x)-fn(x)*grow))}
+ ctx.closePath();const g=ctx.createLinearGradient(0,P.y0,0,P.y1);g.addColorStop(0,c+'40');g.addColorStop(1,c+'18');ctx.fillStyle=g;ctx.fill();ctx.strokeStyle=c+'aa';ctx.lineWidth=1;ctx.stroke();ctx.restore()}
+function wrap(s,maxw,font){ctx.save();ctx.font=font;const out=[];let line='';for(const wd of s.split(' ')){const tst=line?line+' '+wd:wd;if(ctx.measureText(tst).width>maxw&&line){out.push(line);line=wd}else line=tst}out.push(line);ctx.restore();return out}
+
+/* ---------- 로지스틱 전용 그리기 ---------- */
+const C1='#ff3fa4',C0='#38e8ff',AM='#ffc24a';
+function axesL(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let x=50;x<=100;x+=5){ctx.beginPath();ctx.moveTo(px(x),P.y0);ctx.lineTo(px(x),P.y1);ctx.stroke()}
+ for(let y=0;y<=1.001;y+=.25){ctx.beginPath();ctx.moveTo(P.x0,py(y));ctx.lineTo(P.x1,py(y));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.35)';[0,1].forEach(v=>{ctx.beginPath();ctx.moveTo(P.x0,py(v));ctx.lineTo(P.x1,py(v));ctx.stroke()});
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ for(let x=50;x<=100;x+=10)txt(String(x),px(x),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let y=0;y<=1.001;y+=.25)txt(L.tick(y),P.x0-12,py(y)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.x,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-62,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.y,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function curve(fn,a,c,tt,pulse=true){if(a<=0)return;ctx.save();clipP();const st=160,pts=[];
+ for(let i=0;i<=st;i++){const x=XMIN+(XMAX-XMIN)*i/st;pts.push([px(x),py(fn(x))])}
+ const path=()=>{ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y))};
+ ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=c;
+ ctx.globalAlpha=a*.18;ctx.lineWidth=14;path();ctx.stroke();
+ ctx.globalAlpha=a;ctx.shadowColor=c;ctx.shadowBlur=18;ctx.lineWidth=3;path();ctx.stroke();
+ ctx.shadowBlur=0;ctx.strokeStyle='#fff';ctx.lineWidth=1;path();ctx.stroke();
+ if(pulse){const f=Math.floor(((tt*.4)%1)*st);orb(pts[f][0],pts[f][1],4,c,a)}ctx.restore()}
+function ring(x,y,r,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=2;ctx.shadowColor=c;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();ctx.restore()}
+function box(x,y,w,h,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.fillStyle='rgba(20,14,2,.88)';ctx.strokeStyle=c;ctx.lineWidth=1.2;ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);ctx.restore()}
+function zone(y1,y2,a,label,ly){if(a<=0)return;ctx.save();clipP();ctx.globalAlpha=a;const g=ctx.createLinearGradient(0,py(y1),0,py(y2));g.addColorStop(0,'rgba(255,63,164,.22)');g.addColorStop(1,'rgba(255,63,164,.04)');
+ ctx.fillStyle=g;ctx.fillRect(P.x0,Math.min(py(y1),py(y2)),P.x1-P.x0,Math.abs(py(y1)-py(y2)));ctx.restore();
+ txt(label,(P.x0+P.x1)/2,ly,{f:F_.b,sz:14,c:'#ff8cc6',al:'center',a,w:'700'})}
+
+/* ---------- 오른쪽 패널 ---------- */
+function panel(tt,k,L,cb){
+ const x=930,w=310,ix=x+20,iw=w-40;
+ ctx.save();ctx.fillStyle='rgba(8,18,34,.72)';ctx.fillRect(x,80,w,575);ctx.restore();corners(x,80,w,575,16,'#38e8ff',1);
+ txt(`SCENE ${String(k+1).padStart(2,'0')} / 08`,ix,112,{f:F_.d,sz:12,c:AM,w:'700'});
+ wrap(L.scenes[k],iw,`700 20px ${F_.b}`).slice(0,2).forEach((ln,i)=>txt(ln,ix,144+i*27,{f:F_.b,sz:20,w:'700',c:'#eafcff',glow:6}));
+ const p=prog(k,tt),fa=clamp(p*4),mid=level==='mid';
+ const kv=(lab,val,y,c=C0,a=1,big=18)=>{txt(lab,ix,y,{f:F_.b,sz:13,c:'#6f8ea8',a});txt(val,ix+iw,y,{sz:big,c,al:'right',a,glow:6})};
+ const lines=(arr,y0,gap,sz=15,c='#eafcff',f=F_.b)=>arr.forEach((s,i)=>txt(s,ix,y0+i*gap,{f,sz,c,a:clamp(p*4-1-i*.5)}));
+ if(k===0){
+  txt('MODEL',ix,226,{f:F_.d,sz:11,c:'#6f8ea8',a:fa});
+  lines(mid?['결과가 두 가지뿐','  사고 O(1) / 사고 X(0)','→ "사고 날 확률"을 예측','확률은 항상 0 ~ 1 사이']:['Y ∈ {0, 1}  (이항변수)','E(Y|x) = P(Y=1|x) = p','logit(p) = ln(p / (1−p))','         = β₀ + β₁x'],262,36,mid?16:15,'#eafcff',mid?F_.b:F_.m);
+ }else if(k===1){
+  kv('n',String(N),236,AM,fa);kv(mid?'사고 난 집':'Y = 1',`${NY}건`,268,C1,fa);kv(mid?'사고 없는 집':'Y = 0',`${N-NY}건`,300,C0,fa);
+  lines(mid?['전세가율 = 보증금 ÷ 집값','높을수록 집값이 조금만','떨어져도 보증금이 위험','점은 0과 1 두 줄에만!']:['x = 전세보증금 / 매매가 ×100','y = 보증사고 발생 여부','산점도가 두 수평선에 집중','연속형 y 가정이 깨짐'],350,34);
+ }else if(k===2){
+  const lo=lpm(XMIN),hi=lpm(XMAX);
+  kv(mid?'전세가율 50%일 때':'p̂(50)',mid?pct(lo):lo.toFixed(3),236,C1,clamp(p*3-.6),20);
+  kv(mid?'전세가율 100%일 때':'p̂(100)',mid?pct(hi):hi.toFixed(3),272,C1,clamp(p*3-.6),20);
+  lines(mid?['직선은 끝없이 뻗어서','0보다 작거나 1보다 큰','이상한 "확률"이 나옴','→ 직선은 확률에 안 맞음']:['선형확률모형(LPM)의 문제','① p̂ ∉ [0, 1] 가능','② 오차 이분산 Var = p(1−p)','③ 오차 비정규 (2점 분포)'],330,36);
+ }else if(k===3){
+  txt(mid?'변환 3단계':'LINK : logit',ix,226,{f:mid?F_.b:F_.d,sz:mid?13:11,c:'#6f8ea8',a:fa});
+  const ch=mid?[['확률 p','0 ~ 1'],['오즈 = p ÷ (1−p)','0 ~ ∞'],['ln(오즈)','−∞ ~ +∞']]:[['p','(0, 1)'],['odds = p/(1−p)','(0, ∞)'],['logit = ln(odds)','(−∞, ∞)']];
+  ch.forEach(([a,b],i)=>{const al=clamp(p*4-.5-i*.6),y=262+i*50;txt(a,ix,y,{f:mid?F_.b:F_.m,sz:16,c:'#eafcff',a:al,w:'700'});txt(b,ix+iw,y,{sz:15,c:AM,al:'right',a:al,glow:6});
+   if(i<2)txt('↓',ix+8,y+28,{sz:16,c:C0,a:clamp(p*4-1-i*.6)})});
+  const la=clamp(p*4-2.5);
+  txt(mid?'ln(오즈)는 직선으로 맞힘!':'logit(p) = β₀ + β₁x',ix,430,{f:mid?F_.b:F_.m,sz:mid?16:17,w:'700',c:AM,a:la,glow:10});
+  txt(mid?'다시 거꾸로 바꾸면 S자 곡선':'⇔ p = 1 / (1 + e^−(β₀+β₁x))',ix,460,{f:mid?F_.b:F_.m,sz:14,c:'#9fdcef',a:la});
+  txt(mid?'예) 확률 80% → 오즈 4':'e.g. p = .8 → odds = 4',ix,510,{f:mid?F_.b:F_.m,sz:14,c:'#9fdcef',a:la});
+  txt(mid?'(사고 날 확률이 안 날 확률의 4배)':'logit = ln 4 ≈ 1.386',ix,534,{f:F_.b,sz:13,c:'#6f8ea8',a:la});
+ }else if(k===4){
+  const n=cb.gd,i=Math.min(PATH.length-1,Math.floor(n));
+  txt(mid?'맞힘 점수 (로그우도)':'log L(β)',ix,226,{f:F_.b,sz:13,c:'#6f8ea8'});
+  txt(cb.ll.toFixed(2),ix,272,{sz:40,w:'700',c:AM,glow:14});
+  if(!mid)txt(`−2LL = ${(-2*cb.ll).toFixed(2)}`,ix+iw,272,{sz:14,c:'#9fdcef',al:'right'});
+  kv(mid?'시작 높이 a':'b₀',cb.b0.toFixed(3),314,C0,1,17);kv(mid?'기울기 b':'b₁',cb.b1.toFixed(4),344,C0,1,17);
+  const gx=ix,gy=372,gw=iw,gh=120,lmin=Math.min(...PLL),lmax=LL;
+  ctx.save();ctx.strokeStyle='rgba(56,232,255,.25)';ctx.lineWidth=1;ctx.strokeRect(gx,gy,gw,gh);ctx.restore();
+  if(n>0){ctx.save();ctx.beginPath();for(let j=0;j<=i;j++){const xx=gx+j/(PATH.length-1)*gw,yy=gy+gh-6-(PLL[j]-lmin)/(lmax-lmin)*(gh-12);j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)}
+   ctx.strokeStyle=AM;ctx.shadowColor=AM;ctx.shadowBlur=10;ctx.lineWidth=2;ctx.stroke();ctx.restore();
+   orb(gx+i/(PATH.length-1)*gw,gy+gh-6-(PLL[i]-lmin)/(lmax-lmin)*(gh-12),3,AM,1)}
+  txt(mid?'점수가 올라가 꼭대기에 도착':'iteration → 수렴',ix,gy+gh+20,{f:F_.b,sz:12,c:'#6f8ea8'});
+  wrap(mid?'정답에 높은 확률을 준 곡선일수록 점수가 높음':'L(β) = Π pᵢ^yᵢ (1−pᵢ)^(1−yᵢ) 를 최대화',iw,`400 13px ${F_.b}`).forEach((s,j)=>txt(s,ix,gy+gh+48+j*20,{f:F_.b,sz:13,c:'#9fdcef'}));
+ }else if(k===5){
+  const rows=mid?[['기울기 b',B1.toFixed(3),C0],['1%p 오를 때 오즈',`× ${OR.toFixed(3)}`,C0],['10%p 오를 때 오즈',`× ${OR10.toFixed(2)}`,AM],['우연일 확률 p',fmtp(P1),C1]]
+   :[['B',B1.toFixed(4),C0],['S.E.',SE1.toFixed(4),C0],['Wald z (χ² = z²)',`${Z1.toFixed(2)} (${(Z1*Z1).toFixed(2)})`,C0],['p',fmtp(P1),C1],['Exp(B)',OR.toFixed(4),AM],['OR per 10%p',OR10.toFixed(2),AM],['95% CI (10%p)',`[${CI10[0].toFixed(2)}, ${CI10[1].toFixed(2)}]`,AM]];
+  rows.forEach(([a,b,c],i)=>{const al=clamp(p*5-.5-i*.3),y=232+i*(mid?40:34);txt(a,ix,y,{f:F_.b,sz:13,c:'#9fdcef',a:al});txt(b,ix+iw,y,{sz:mid?18:15,c,al:'right',a:al,glow:6})});
+  const sa=clamp(p*3-2),yb=mid?420:488;
+  wrap(mid?`전세가율이 10%p 오르면 사고 오즈가 약 ${OR10.toFixed(1)}배!`:`H₀: β₁ = 0 기각. x가 10%p 증가하면 오즈가 ${OR10.toFixed(2)}배`,iw,`700 15px ${F_.b}`).forEach((s,j)=>txt(s,ix,yb+j*24,{f:F_.b,sz:15,w:'700',c:'#eafcff',a:sa,glow:6}));
+  txt(mid?'※ 확률이 아니라 "오즈"가 몇 배':'※ OR = e^(10·b₁)  (확률비 아님)',ix,yb+64,{f:F_.b,sz:12,c:'#6f8ea8',a:sa});
+ }else if(k===6){
+  const ca=clamp(p*3),cx=ix+70,cw=(iw-70)/2,ch=46,cy=236;
+  txt(mid?'없음 예측':'예측 0',cx+cw/2,cy,{f:F_.b,sz:12,c:'#6f8ea8',al:'center',a:ca});txt(mid?'사고 예측':'예측 1',cx+cw*1.5,cy,{f:F_.b,sz:12,c:'#6f8ea8',al:'center',a:ca});
+  const cells=[[TN,true],[FP,false],[FN,false],[TP,true]],rl=mid?['실제 없음','실제 사고']:['실제 0','실제 1'],tag=mid?['맞힘','틀림','틀림','맞힘']:['TN','FP','FN','TP'];
+  rl.forEach((r,ri)=>txt(r,ix,cy+12+ri*(ch+4)+ch/2+5,{f:F_.b,sz:12,c:'#9fdcef',a:ca}));
+  cells.forEach(([v,ok],j)=>{const r=Math.floor(j/2),c=j%2,X0=cx+c*cw,Y0=cy+12+r*(ch+4);
+   ctx.save();ctx.globalAlpha=ca;ctx.fillStyle=ok?'rgba(56,232,255,.14)':'rgba(255,63,164,.14)';ctx.strokeStyle=ok?C0:C1;ctx.fillRect(X0+2,Y0,cw-4,ch);ctx.strokeRect(X0+2,Y0,cw-4,ch);ctx.restore();
+   txt(String(v),X0+cw/2,Y0+31,{sz:22,w:'700',c:ok?'#eafcff':'#ff8cc6',al:'center',a:ca,glow:6});txt(tag[j],X0+cw-8,Y0+14,{f:F_.b,sz:10,c:'#6f8ea8',al:'right',a:ca})});
+  const ma=clamp(p*3-1);
+  kv(mid?'정확도':'Accuracy',mid?pct(ACC):ACC.toFixed(3),370,AM,ma);
+  kv(mid?'사고 집을 사고로 맞힘':'Sensitivity',mid?pct(SENS):SENS.toFixed(3),398,C1,ma,16);
+  kv(mid?'안전한 집을 안전으로 맞힘':'Specificity',mid?pct(SPEC):SPEC.toFixed(3),426,C0,ma,16);
+  const ra=clamp(p*3-1.8);
+  if(mid){wrap(`기준: 확률 50% 이상이면 "사고"로 예측 → 전세가율 약 ${CUT.toFixed(0)}% 이상`,iw,`400 13px ${F_.b}`).forEach((s,j)=>txt(s,ix,470+j*20,{f:F_.b,sz:13,c:'#9fdcef',a:ra}))}
+  else{const gx=ix,gy=456,gs=120;ctx.save();ctx.globalAlpha=ra;ctx.strokeStyle='rgba(56,232,255,.3)';ctx.lineWidth=1;ctx.strokeRect(gx,gy,gs,gs);ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(gx,gy+gs);ctx.lineTo(gx+gs,gy);ctx.stroke();ctx.setLineDash([]);
+   ctx.beginPath();ROC.forEach(([f,tr],j)=>{const xx=gx+f*gs,yy=gy+gs-tr*gs;j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.strokeStyle=AM;ctx.shadowColor=AM;ctx.shadowBlur=8;ctx.lineWidth=2;ctx.stroke();ctx.restore();
+   txt('ROC',gx+gs+16,gy+20,{f:F_.d,sz:12,c:'#6f8ea8',a:ra});txt(`AUC = ${AUC.toFixed(3)}`,gx+gs+16,gy+50,{sz:15,w:'700',c:AM,a:ra,glow:8});
+   txt('cutoff p = .5',gx+gs+16,gy+80,{sz:12,c:'#9fdcef',a:ra});txt(`x* = ${CUT.toFixed(1)}`,gx+gs+16,gy+100,{sz:12,c:'#9fdcef',a:ra});
+   txt('1 − Specificity',gx+gs/2,gy+gs+16,{sz:10,c:'#6f8ea8',al:'center',a:ra})}
+ }else{
+  txt(mid?'최종 결과':'REPORT · Binomial Logistic',ix,222,{f:mid?F_.b:F_.d,sz:mid?13:11,c:'#6f8ea8',a:fa});
+  L.rep.forEach(([a,b],i)=>{const al=clamp(p*5-i*.35),y=254+i*(mid?44:38);txt(a,ix,y,{f:F_.b,sz:13,c:'#9fdcef',a:al});txt(b,ix+iw,y,{sz:mid?15:12.5,c:i===L.rep.length-1?AM:'#eafcff',al:'right',a:al,glow:4});
+   ctx.save();ctx.globalAlpha=al*.4;ctx.fillStyle='#18324d';ctx.fillRect(ix,y+11,iw,1);ctx.restore()});
+ }
+}
+
+/* ---------- 프레임 ---------- */
+function frame(){
+ const tt=t,L=TXT[level],k=sceneIdx(tt),p=prog(k,tt),mid=level==='mid';
+ ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);
+ bg(tt);
+ txt('REGRESSION // LOGISTIC',40,46,{f:F_.d,sz:16,w:'900',c:'#38e8ff',glow:10});
+ txt('AI 부동산 통계 · 로지스틱 회귀분석',320,46,{f:F_.b,sz:14,c:'#6f8ea8'});
+ const m_=Math.floor(tt/60),s_=(tt%60).toFixed(1).padStart(4,'0');
+ txt(`T+${String(m_).padStart(2,'0')}:${s_}`,1240,46,{sz:14,c:'#9fdcef',al:'right'});
+ if(Math.floor(tt*2)%2===0)orb(1120,41,4,'#ff3fa4',1);txt('LIVE',1132,46,{f:F_.d,sz:12,c:'#ff3fa4',w:'700'});
+ const fa=clamp((tt-.6)/1.8);frameBox(fa);
+ const cb={gd:0,ll:LLf(PATH[0][0],PATH[0][1]),b0:PATH[0][0],b1:PATH[0][1]};
+
+ if(k===0){const tl='LOGISTIC REGRESSION';const nch=Math.floor(clamp(tt/2.4)*tl.length),cx=(P.x0+P.x1)/2;
+  txt(tl.slice(0,nch)+(Math.floor(tt*4)%2?'_':''),cx,290,{f:F_.d,sz:26,c:'#38e8ff',al:'center',glow:14,a:fa});
+  const ma=clamp((tt-2.2)/1),bend=ease(clamp((tt-2.6)/1.2));
+  ctx.save();ctx.globalAlpha=ma;ctx.strokeStyle='#38e8ff';ctx.shadowColor='#38e8ff';ctx.shadowBlur=14;ctx.lineWidth=3;ctx.beginPath();
+  for(let i=0;i<=80;i++){const u=i/80,xx=cx-180+u*360,yl=470-u*120,ys=470-120/(1+Math.exp(-(u-.5)*14));const yy=yl+(ys-yl)*bend;i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)}ctx.stroke();ctx.restore();
+  seg(cx-200,350,cx+200,350,'#6f8ea8',1,ma*.6,[4,4]);seg(cx-200,470,cx+200,470,'#6f8ea8',1,ma*.6,[4,4]);
+  txt('1',cx-214,355,{sz:13,c:'#6f8ea8',al:'right',a:ma});txt('0',cx-214,475,{sz:13,c:'#6f8ea8',al:'right',a:ma});
+  txt(mid?'"예 / 아니오"의 확률을 예측하는 회귀':'logit(p) = β₀ + β₁x',cx,530,{f:mid?F_.b:F_.m,sz:20,c:'#eafcff',al:'center',a:ma,glow:8});
+  panel(tt,k,L,cb);return}
+
+ axesL(1,L);
+ txt(L.y1,P.x0+12,py(1)-14,{f:F_.b,sz:13,c:C1,a:clamp((tt-S[1]-3)/1)});
+ txt(L.y0,P.x1-12,py(0)+24,{f:F_.b,sz:13,c:C0,al:'right',a:clamp((tt-S[1]-3)/1)});
+
+ /* 곡선 결정 */
+ let fn=null,ca=0,cc='#38e8ff';
+ if(k===2){fn=lpm;ca=clamp((p-.1)*4)}
+ else if(k===3){const m=ease(clamp((p-.15)*1.7));fn=x=>{const l=lpm(x);return l+(fit(x)-l)*m};ca=1}
+ else if(k===4){const g=ease(clamp(p*1.15))*(PATH.length-1),i=Math.floor(g),f=g-i,a=PATH[i],b=PATH[Math.min(i+1,PATH.length-1)];
+  cb.gd=g;cb.b0=a[0]+(b[0]-a[0])*f;cb.b1=a[1]+(b[1]-a[1])*f;cb.ll=LLf(cb.b0,cb.b1);fn=x=>pr(cb.b0,cb.b1,x);ca=1}
+ else if(k>=5){fn=fit;ca=1}
+
+ /* 불가능 영역 */
+ if(k===2||k===3){const za=k===2?clamp((p-.4)*3):1-clamp((p-.2)*3);
+  zone(1,YMAX,za,mid?'확률이 100%를 넘는다?!':'p̂ > 1 : 확률로 해석 불가',py(1.18));
+  zone(YMIN,0,za,mid?'확률이 마이너스?!':'p̂ < 0',py(-.16))}
+
+ /* 분류 영역 */
+ if(k===6){const a=clamp(p*3);ctx.save();clipP();ctx.globalAlpha=a*.09;ctx.fillStyle=C0;ctx.fillRect(P.x0,P.y0,px(CUT)-P.x0,P.y1-P.y0);ctx.fillStyle=C1;ctx.fillRect(px(CUT),P.y0,P.x1-px(CUT),P.y1-P.y0);ctx.restore();
+  seg(P.x0,py(.5),P.x1,py(.5),AM,1.5,a,[8,6]);seg(px(CUT),P.y0,px(CUT),P.y1,AM,1.5,a,[8,6]);
+  txt(mid?'← "사고 없음"으로 예측':'← ŷ = 0',px(CUT)-12,P.y0+22,{f:F_.b,sz:13,c:'#9fdcef',al:'right',a});
+  txt(mid?'"사고"로 예측 →':'ŷ = 1 →',px(CUT)+12,P.y0+22,{f:F_.b,sz:13,c:'#ff8cc6',a});
+  txt(mid?`기준 50%  ·  약 ${CUT.toFixed(0)}%`:`p = .5  ·  x* = ${CUT.toFixed(1)}`,px(CUT)+12,py(.5)-10,{sz:13,c:AM,a})}
+
+ /* 우도 연결선 */
+ if(k===4){ctx.save();clipP();for(let i=0;i<N;i++){const y=fn(X[i]);seg(px(X[i]),py(Y[i]+J[i]),px(X[i]),py(y),Y[i]?C1:C0,1.5,.55,[3,3])}ctx.restore()}
+
+ if(fn)curve(fn,ca,k===2?C1:cc,tt);
+ /* 선형 곡선 범위 밖 강조 */
+ if(k===2&&ca>0){const a=clamp((p-.4)*3);[[XMIN,(0-L0)/L1],[(1-L0)/L1,XMAX]].forEach(([x1,x2])=>{if(x2>x1&&x1>=XMIN-1)orb(px(x1<XMIN?XMIN:x1),py(lpm(x1<XMIN?XMIN:x1)),5,C1,0)});
+  [XMIN,XMAX].forEach(xv=>{const yv=lpm(xv);if(yv<0||yv>1){orb(px(xv),py(yv),6,'#ffffff',a);ring(px(xv),py(yv),12+3*Math.sin(tt*5),C1,a)}})}
+
+ /* 점 */
+ for(let i=0;i<N;i++){let a=1,yoff=0;
+  if(k===1){const d=S[1]+i*.07,q=clamp((tt-d)/.6);a=q;yoff=(Y[i]?1:-1)*(1-ease(q))*.5;
+   const lp=clamp((tt-d-.6)/.5);if(lp>0&&lp<1)ring(px(X[i]),py(Y[i]+J[i]),6+lp*20,Y[i]?C1:C0,1-lp)}
+  const xx=px(X[i]),yy=py(Y[i]+J[i]+yoff);
+  orb(xx,yy,5,Y[i]?C1:C0,a);
+  if(k===6){const wrong=(fit(X[i])>=.5)!==(Y[i]===1);if(wrong)ring(xx,yy,10+2*Math.sin(tt*5),AM,clamp(p*3-1))}}
+
+ /* 오즈비 장면 */
+ if(k===5){[[XA,pA,oA,0],[XB,pB,oB,1]].forEach(([xv,pv,ov,j])=>{const a=clamp(p*3-.4-j*.5),X0=px(xv),Y0=py(pv);
+   seg(X0,P.y1,X0,Y0,AM,1.5,a,[6,5]);seg(X0,Y0,P.x0,Y0,AM,1,a*.5,[6,5]);orb(X0,Y0,6,AM,a);
+   const bw=mid?190:200,bx=j?X0+18:X0-bw-18,by=Y0+(j?-62:14);box(bx,by,bw,48,AM,a);
+   txt(mid?`전세가율 ${xv}%`:`x = ${xv}`,bx+12,by+19,{f:F_.b,sz:13,c:'#ffe1a1',a,w:'700'});
+   txt(mid?`확률 ${pct(pv)} · 오즈 ${ov.toFixed(2)}`:`p̂ = ${pv.toFixed(3)}, odds = ${ov.toFixed(2)}`,bx+12,by+38,{f:mid?F_.b:F_.m,sz:13,c:'#ffe1a1',a})});
+  const ra=clamp(p*3-1.6);txt(`오즈 ${oA.toFixed(2)} × ${OR10.toFixed(2)} = ${oB.toFixed(2)}`,(px(XA)+px(XB))/2,P.y1-24,{sz:16,w:'700',c:AM,al:'center',a:ra,glow:10})}
+
+ /* 예측 */
+ if(k===7){const q=clamp((tt-S[7]-2)/2);if(q>0){const X0=px(PX),Y0=py(PP);
+  seg(X0,P.y1,X0,P.y1+(Y0-P.y1)*ease(clamp(q*2)),AM,1.5,1,[6,5]);
+  if(q>.5)seg(X0,Y0,X0+(P.x0-X0)*ease(clamp(q*2-1)),Y0,AM,1.5,1,[6,5]);
+  if(q>.9){orb(X0,Y0,7*(1+.25*Math.sin(tt*5)),AM,1);const bw=mid?300:300,bx=X0-bw-26,by=Y0+18;box(bx,by,bw,40,AM,1);
+   txt(L.pred,bx+14,by+26,{f:mid?F_.b:F_.m,sz:15,w:'700',c:'#ffe1a1'})}}}
+
+ /* 상단 식 */
+ const eqY=P.y0-14,cx=(P.x0+P.x1)/2-15,EF=mid?F_.b:F_.m;
+ if(k===1)txt(mid?'점이 위(1)와 아래(0) 두 줄에만 있어요':'y ∈ {0, 1}  —  Bernoulli(p)',cx,eqY,{f:EF,sz:21,w:'700',c:'#eafcff',al:'center',glow:14,a:clamp(p*3-1)});
+ if(k===2)txt(L.eqL,cx,eqY,{f:EF,sz:21,w:'700',c:'#eafcff',al:'center',glow:14,a:ca});
+ if(k===3){const m=ease(clamp((p-.15)*1.7));txt(m<.5?L.eqL:L.eqS,cx,eqY,{f:EF,sz:21,w:'700',c:'#eafcff',al:'center',glow:14,a:Math.abs(m-.5)*2})}
+ if(k===4)txt(mid?'S곡선을 움직여 "맞힘 점수"가 가장 높은 곳으로':'MLE : argmax  Σ [ yᵢ ln pᵢ + (1−yᵢ) ln(1−pᵢ) ]',cx,eqY,{f:EF,sz:mid?20:19,w:'700',c:'#eafcff',al:'center',glow:14});
+ if(k>=5)txt(L.eqF,cx,eqY,{f:EF,sz:21,w:'700',c:'#eafcff',al:'center',glow:14,a:k===5?clamp(p*4):1});
+
+ panel(tt,k,L,cb);
+ for(let j=1;j<S.length-1;j++){const d=tt-S[j];if(d>=0&&d<.35){const a=1-d/.35;ctx.save();ctx.globalAlpha=a*.5;for(let r=0;r<6;r++){const yy=rnd()*LH;ctx.fillStyle=r%2?'#38e8ff':'#ff3fa4';ctx.fillRect(0,yy,LW,1+rnd()*3)}ctx.restore()}}
+}
+
+/* ---------- 시나리오 ---------- */
+const SHORT=['개념','0/1 데이터','직선의 한계','S자 곡선','최대우도','오즈비','분류·혼동행렬','결과·예측'];
+const SCRIPT={
+ mid:[
+  {s:'지금까지는 가격처럼 "숫자"를 예측했어요. 그런데 "이 집에 보증사고가 날까, 안 날까?"처럼 답이 "예" 또는 "아니오" 두 가지뿐인 문제도 많습니다. 이럴 때는 결과 대신 "예가 될 확률"을 예측하는데, 그 방법이 로지스틱 회귀분석이에요. 확률은 0%에서 100% 사이이므로, 선도 그 사이에서만 움직이는 S자 모양을 씁니다.',tip:'화면의 직선이 S자로 휘는 순간에 "오늘의 주인공은 S자 곡선"이라고 소개하세요.'},
+  {s:`이번 데이터는 전세 계약 ${N}건이에요. 가로축은 전세가율, 즉 전세보증금이 집값의 몇 %인지입니다. 사고가 난 집은 위쪽 줄(1)에, 사고가 없던 집은 아래쪽 줄(0)에 찍혀요. 오른쪽으로 갈수록 위쪽 점이 많아지죠? 전세가율이 높으면 집값이 조금만 떨어져도 보증금을 돌려받기 어려워지기 때문입니다.`,tip:'"깡통전세" 뉴스 사례를 하나 들어 주면 학생들의 관심이 높아집니다.'},
+  {s:`지난 시간처럼 직선을 그어 볼게요. 문제가 보이나요? 전세가율 100%에서는 확률이 ${pct(lpm(XMAX))}로 100%를 넘고, 50%에서는 ${pct(lpm(XMIN))}로 마이너스가 됩니다. 확률이 100%를 넘거나 마이너스일 수는 없죠. 그래서 직선은 확률을 예측하는 데 맞지 않아요.`,tip:'분홍색 영역을 가리키며 "여기는 확률이 있을 수 없는 곳"이라고 강조하세요.'},
+  {s:'해결 방법은 "오즈"라는 개념을 쓰는 거예요. 오즈는 사고가 날 확률을 안 날 확률로 나눈 값입니다. 확률이 80%면 오즈는 80 ÷ 20 = 4예요. 이 오즈에 로그(ln)를 씌우면 아주 작은 값부터 아주 큰 값까지 자유롭게 움직이기 때문에 직선으로 맞힐 수 있어요. 그 결과를 다시 확률로 되돌리면 0과 1 사이를 부드럽게 오가는 S자 곡선이 됩니다.',tip:'오른쪽 패널의 3단계 변환(확률 → 오즈 → ln 오즈)을 하나씩 짚어 주세요.'},
+  {s:'가장 잘 맞는 S곡선은 어떻게 찾을까요? 사고 난 집에는 높은 확률을, 사고 없는 집에는 낮은 확률을 줄수록 "맞힘 점수"가 높아집니다. 처음에는 거꾸로 된 엉뚱한 곡선에서 시작해서, 점수가 올라가는 쪽으로 조금씩 움직여 꼭대기를 찾아가요. 이 방법을 "최대우도추정"이라고 부릅니다. 점과 곡선을 잇는 점선이 짧아지는 모습을 보세요.',tip:'선형회귀의 "오차 줄이기"와 비교해 "여기서는 점수 올리기"라고 설명하면 쉽습니다.'},
+  {s:`결과를 읽는 핵심은 "오즈비"예요. 전세가율이 1%p 오르면 사고 오즈가 ${OR.toFixed(3)}배가 되고, 10%p 오르면 약 ${OR10.toFixed(1)}배가 됩니다. 화면에서 전세가율 70%일 때 오즈는 ${oA.toFixed(2)}, 80%일 때는 ${oB.toFixed(2)}로 정확히 ${OR10.toFixed(1)}배 차이가 나요. 우연일 확률은 ${fmtp(P1)}로 아주 작아서, 전세가율은 정말로 사고 위험과 관계가 있다고 말할 수 있습니다.`,tip:'"확률이 몇 배"가 아니라 "오즈가 몇 배"라는 점을 꼭 구분해 주세요.'},
+  {s:`이제 이 곡선으로 사고 날 집을 맞혀 봅시다. 확률이 50% 이상이면 "사고"로, 아니면 "사고 없음"으로 예측해요. 전세가율로 바꾸면 약 ${CUT.toFixed(0)}%가 기준선입니다. ${N}건 중 ${TP+TN}건을 맞혀 정확도는 ${pct(ACC)}예요. 노란 동그라미는 틀린 집인데, 기준선 근처에 몰려 있죠. 사고 난 집을 사고로 맞힌 비율은 ${pct(SENS)}, 안전한 집을 안전으로 맞힌 비율은 ${pct(SPEC)}입니다.`,tip:'표의 "맞힘/틀림" 칸을 가리키며 혼동행렬 읽는 법을 알려 주세요.'},
+  {s:`정리하면, 전세가율이 높을수록 보증사고 위험이 크게 올라가고 이 결과는 우연이 아닙니다. 전세가율 ${PX}%인 집의 사고 확률은 약 ${pct(PP)}로 예측돼요. 전세 계약 전에 전세가율을 꼭 확인해야 하는 이유를 숫자로 확인한 셈입니다. 단, 오늘 데이터는 설명을 위한 가상 예시라는 점을 기억해 주세요.`,tip:'실생활 조언(전세가율 확인, 보증보험 가입)으로 마무리하면 수업 만족도가 높습니다.'}
+ ],
+ uni:[
+  {s:'로지스틱 회귀(Logistic Regression)는 종속변수가 0/1인 이항변수일 때 사용하는 일반화선형모형(GLM)입니다. 종속변수 대신 성공확률 p = P(Y=1|x)를 모형화하며, 연결함수로 로짓 logit(p) = ln(p/(1−p))를 사용해 logit(p) = β₀ + β₁x로 표현합니다. 확률분포는 베르누이(이항)분포를 가정합니다.',tip:'GLM의 세 요소(확률분포 · 선형예측자 · 연결함수)로 구조를 정리해 주세요.'},
+  {s:`종속변수는 전세보증사고 발생 여부(Y=1: ${NY}건, Y=0: ${N-NY}건), 독립변수는 전세가율 x(%)입니다. 산점도가 y=0과 y=1 두 수평선에만 나타나므로, 연속형 정규 오차를 가정하는 OLS의 전제가 성립하지 않습니다.`,tip:'JAMOVI에서는 Regression → 2 Outcomes: Binomial 메뉴를 사용한다고 미리 안내하세요.'},
+  {s:`0/1 종속변수에 OLS를 적용한 선형확률모형(LPM)은 p̂ = ${L0.toFixed(3)} + ${L1.toFixed(4)}x입니다. x = 100에서 p̂ = ${lpm(XMAX).toFixed(3)}, x = 50에서 p̂ = ${lpm(XMIN).toFixed(3)}로 확률의 범위 [0, 1]을 벗어납니다. 또한 오차분산 Var(ε|x) = p(1−p)가 x에 따라 달라지는 이분산이 생기고, 오차가 두 값만 가지므로 정규성도 위배됩니다.`,tip:'LPM은 계량경제학에서 해석 편의상 쓰이기도 하지만 예측 범위 문제가 핵심 한계입니다.'},
+  {s:'확률 p ∈ (0,1)를 오즈 p/(1−p) ∈ (0,∞)로, 다시 로그를 취해 로짓 ∈ (−∞,∞)으로 변환하면 선형예측자 β₀ + β₁x와 범위가 일치합니다. 역변환하면 p = 1/(1+e^−(β₀+β₁x))인 시그모이드(로지스틱) 함수가 되어, 예측값이 항상 0과 1 사이에 놓입니다.',tip:'시그모이드의 기울기가 p = 0.5에서 가장 크다는 점(한계효과 β₁p(1−p))을 덧붙일 수 있습니다.'},
+  {s:`모수는 최대우도추정(MLE)으로 구합니다. 우도함수 L(β) = Π pᵢ^yᵢ(1−pᵢ)^(1−yᵢ)의 로그 ln L = Σ[yᵢ ln pᵢ + (1−yᵢ) ln(1−pᵢ)]을 최대화합니다. 닫힌 해가 없으므로 반복 알고리즘(뉴턴-랩슨, IRLS 등)을 쓰며, 화면은 경사상승법으로 수렴하는 과정을 보여 줍니다. 최종 ln L = ${LL.toFixed(3)}, −2LL = ${(-2*LL).toFixed(3)}입니다.`,tip:'−2LL(이탈도, deviance)이 OLS의 SSE 역할을 한다고 연결해 주세요.'},
+  {s:`추정 결과 b₁ = ${B1.toFixed(4)}(SE = ${SE1.toFixed(4)})이고, Wald 검정통계량 z = ${Z1.toFixed(2)}(χ² = ${(Z1*Z1).toFixed(2)}), p ${fmtp(P1)}로 H₀: β₁ = 0을 기각합니다. Exp(b₁) = ${OR.toFixed(4)}은 전세가율 1%p 증가 시 사고 오즈가 ${OR.toFixed(4)}배 된다는 의미이며, 10%p 단위로는 OR = e^(10b₁) = ${OR10.toFixed(2)}, 95% CI [${CI10[0].toFixed(2)}, ${CI10[1].toFixed(2)}]입니다. x = 70의 오즈 ${oA.toFixed(2)}에서 x = 80의 오즈 ${oB.toFixed(2)}로 정확히 OR배 증가합니다.`,tip:'오즈비는 확률비(상대위험도 RR)가 아니라는 점과, 신뢰구간이 1을 포함하는지로 유의성을 판단한다는 점을 강조하세요.'},
+  {s:`절단값(cutoff) p = 0.5, 즉 x* = −b₀/b₁ = ${CUT.toFixed(1)}%를 기준으로 분류하면 혼동행렬은 TN = ${TN}, FP = ${FP}, FN = ${FN}, TP = ${TP}입니다. 정확도 ${ACC.toFixed(3)}, 민감도 ${SENS.toFixed(3)}, 특이도 ${SPEC.toFixed(3)}입니다. 절단값을 바꿔 가며 그린 ROC 곡선의 아래 면적 AUC = ${AUC.toFixed(3)}는 절단값과 무관한 판별력 지표입니다.`,tip:'보증사고처럼 놓치면 손실이 큰 문제는 절단값을 낮춰 민감도를 높이는 선택도 가능하다고 토론해 보세요.'},
+  {s:`보고 예시: 전세가율은 보증사고 발생을 유의하게 예측하였다(b = ${B1.toFixed(4)}, Wald z = ${Z1.toFixed(2)}, p ${fmtp(P1)}, OR(10%p) = ${OR10.toFixed(2)}, 95% CI [${CI10[0].toFixed(2)}, ${CI10[1].toFixed(2)}]). 모형 적합도는 LR χ²(1) = ${CHI.toFixed(2)}, p ${fmtp(PCHI)}, McFadden R² = ${R2M.toFixed(3)}, Nagelkerke R² = ${R2N.toFixed(3)}입니다. x = ${PX}에서 예측확률은 p̂ = ${PP.toFixed(3)}입니다. 의사 R²는 OLS의 R²처럼 "설명된 분산 비율"로 해석하지 않습니다.`,tip:'JAMOVI 출력의 Model Fit(Deviance, AIC, R²McF)과 Model Coefficients(Estimate, SE, Z, p, Odds ratio) 항목에 대응시켜 설명하세요.'}
+ ]
+};
+/* ---------- 루프 & 컨트롤 ---------- */
+const scrub=document.getElementById('scrub'),tc=document.getElementById('tc'),playB=document.getElementById('play');
+scrub.max=END;
+let last=performance.now(),autoStop=true,passK=-1,uiK=-1,uiLv='';
+function loop(now){const dt=Math.min(.1,(now-last)/1000);last=now;
+ if(playing){const k0=sceneIdx(t);t+=dt*speed;if(t>=END){t=END;setPlay(false)}
+  const k1=sceneIdx(t);if(autoStop&&k1>k0&&k1!==passK){t=S[k1]-.02;setPlay(false);passK=k1}}
+ frame();updUI();scrub.value=t;tc.textContent=`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+ requestAnimationFrame(loop)}
+function setPlay(v){playing=v;playB.textContent=v?'❚❚ 일시정지':'▶ 재생'}
+playB.onclick=()=>{if(t>=END)t=0;setPlay(!playing)};
+document.getElementById('restart').onclick=()=>{t=0;passK=-1;setPlay(true)};
+const jump=d=>{const k=sceneIdx(t);const nk=clamp(k+d,0,S.length-2);t=S[nk]+.01;passK=-1};
+document.getElementById('prev').onclick=()=>jump(t-S[sceneIdx(t)]>1?0:-1);
+document.getElementById('next').onclick=()=>jump(1);
+scrub.oninput=()=>{t=+scrub.value;passK=-1};
+const mid=document.getElementById('lvMid'),uni=document.getElementById('lvUni');
+function setLv(l){level=l;mid.setAttribute('aria-pressed',l==='mid');uni.setAttribute('aria-pressed',l==='uni')}
+mid.onclick=()=>setLv('mid');uni.onclick=()=>setLv('uni');
+const sqB=document.getElementById('sq');if(sqB)sqB.remove();
+const spB=document.getElementById('spd');const sps=[1,.75,.5,1.5];let si=0;spB.onclick=()=>{si=(si+1)%sps.length;speed=sps[si];spB.textContent=`속도 ${speed}×`};
+document.getElementById('fs').onclick=()=>{const r=stage.requestFullscreen&&stage.requestFullscreen();if(r&&r.catch)r.catch(()=>{});setTimeout(resize,200)};
+document.addEventListener('fullscreenchange',()=>setTimeout(resize,100));
+document.getElementById('rec').onclick=()=>document.body.classList.toggle('rec');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.key!==' ')return;
+ if(e.key===' '){e.preventDefault();playB.click()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H')document.body.classList.toggle('rec')});
+
+const scBox=document.getElementById('scenes');scBox.style.gridTemplateColumns='repeat(auto-fit,minmax(110px,1fr))';
+const scBtns=SHORT.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">SCENE 0${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);scBox.appendChild(b);return b});
+function goScene(i){t=S[i]+.01;passK=-1;setPlay(true)}
+const sTag=document.getElementById('sTag'),sTitle=document.getElementById('sTitle'),sNow=document.getElementById('sNow'),sTip=document.getElementById('sTip'),sAll=document.getElementById('sAll');
+function buildAll(){sAll.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TXT[level].scenes[i]}</b><br>${o.s}`;li.onclick=()=>goScene(i);sAll.appendChild(li)})}
+function updUI(){const k=sceneIdx(t);if(k===uiK&&level===uiLv)return;if(level!==uiLv)buildAll();uiK=k;uiLv=level;
+ scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...sAll.children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];sTag.textContent=`SCENE 0${k+1} · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;sTitle.textContent=TXT[level].scenes[k];sNow.textContent=o.s;sTip.textContent='강의 팁 · '+o.tip}
+const autoB=document.getElementById('auto');autoB.onclick=()=>{autoStop=!autoStop;autoB.setAttribute('aria-pressed',autoStop)};
+document.getElementById('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TXT[level].scenes[i]}\n${o.s}\n(팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;btn.parentNode.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(()=>{btn.textContent='복사됨'},()=>{fb();btn.textContent='복사됨'})}else{fb();btn.textContent='복사됨'}
+ setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+requestAnimationFrame(loop);
+})();
+</script>

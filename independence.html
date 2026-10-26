@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>html{background:#1a1f1d;color-scheme:dark}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}*,*::before,*::after{box-sizing:border-box}</style>
+<title>독립표본 t검정 칠판 수업</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: 어두운 교실 벽 위에 나무 테 칠판(캔버스, 두 줄 비교) → 분필 받침(조작) → 노란 포스트잇(단계 설명) → 카드들. 한 가지 테마(칠판)로 고정 */
+:root{
+  --wall:#1a1f1d; --board:#203b33; --frame:#6e4b2f; --tray:#4f3622;
+  --chalk:#efebe0; --dim:#a7b5ad; --yel:#f2d06b; --pink:#f08a9a; --sky:#8ec5e8; --org:#f2a65a;
+  --note:#fff1a8; --noteInk:#3a321a; --card:#232a27; --line:#3a4641;
+  --hand:"Gaegu","Nanum Pen Script",cursive; --body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  color-scheme:dark;
+}
+body{background:var(--wall);color:var(--chalk);font-family:var(--body);font-size:15px;line-height:1.65}
+.wrap{max-width:920px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+h1{font-family:var(--hand);font-weight:700;font-size:2.3rem;line-height:1.1;margin:0;text-wrap:balance}
+h1 small{display:block;font-size:1.1rem;color:var(--dim);font-weight:400;margin-top:6px}
+h2{font-family:var(--hand);font-weight:700;font-size:1.6rem;margin:0 0 8px;color:var(--yel)}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+.seg{display:inline-flex;border:2px solid var(--dim);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--dim);font-family:var(--hand);font-size:1.15rem;font-weight:700;padding:4px 14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--chalk);color:var(--board)}
+.board{border:12px solid var(--frame);border-bottom-width:0;border-radius:8px 8px 0 0;background:var(--board);box-shadow:inset 0 0 40px rgba(0,0,0,.45)}
+canvas{display:block;width:100%}
+.subs{font-family:var(--hand);font-size:1.3rem;color:var(--chalk);text-align:center;padding:6px 16px 12px;min-height:3.4em;display:flex;align-items:center;justify-content:center;line-height:1.35;text-wrap:balance;border-top:1px dashed rgba(239,235,224,.25)}
+.tray{background:var(--tray);border-radius:0 0 8px 8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-top:-18px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{background:var(--chalk);color:var(--board);border:0;border-radius:6px;font-family:var(--hand);font-weight:700;font-size:1.1rem;padding:3px 12px;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.btn.ghost{background:transparent;color:var(--chalk);border:1.5px solid var(--dim);box-shadow:none}
+.btn.on{background:var(--yel)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--yel);outline-offset:2px}
+select{font-family:var(--body);font-size:14px;padding:4px 6px;border-radius:6px;border:1px solid var(--dim);background:var(--wall);color:var(--chalk);max-width:180px}
+#seek{flex:1 1 160px;min-width:0;accent-color:var(--yel)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{background:transparent;border:1.5px dashed var(--dim);color:var(--dim);border-radius:6px;font-family:var(--hand);font-size:1.05rem;padding:0 9px;cursor:pointer}
+.chips button.on{border-style:solid;border-color:var(--yel);color:var(--yel)}
+#vNote{font-size:12px;color:var(--dim);flex-basis:100%}
+.note{background:var(--note);color:var(--noteInk);padding:16px 18px;transform:rotate(-.6deg);box-shadow:0 6px 14px rgba(0,0,0,.4);font-size:15.5px;min-height:6em}
+.note strong{font-family:var(--hand);font-size:1.35rem;display:block;line-height:1.2;margin-bottom:4px}
+.note b{background:linear-gradient(transparent 60%,#ffd34d 60%)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:600px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{color:var(--dim);font-weight:400;border-bottom:2px solid var(--chalk)}
+.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,Consolas,monospace}
+.muted{color:var(--dim);font-size:13.5px;margin:8px 0 0}
+.sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.sliders label{display:flex;flex-direction:column;gap:4px;font-size:14px}
+.sliders input{accent-color:var(--yel)}
+.sliders b{color:var(--yel);font-variant-numeric:tabular-nums}
+.live{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
+.live div{border:1.5px dashed var(--line);border-radius:8px;padding:6px 10px}
+.live small{display:block;color:var(--dim);font-size:12px}
+.live span{font-family:var(--hand);font-size:1.6rem;font-weight:700}
+#verdict{margin-top:12px;font-family:var(--hand);font-size:1.35rem;font-weight:700}
+table.script{min-width:620px}
+.script td,.script th{white-space:normal;text-align:left!important;vertical-align:top}
+.script td:nth-child(1){white-space:nowrap;color:var(--yel);font-family:var(--hand);font-size:1.1rem}
+.script td:nth-child(2){color:var(--dim);width:24%}
+ul{margin:0;padding-left:1.2em}li{margin:4px 0}
+html[data-m="easy"] .pro{display:none}
+html[data-m="pro"] .easy{display:none}
+.foot{color:var(--dim);font-size:12px}
+.board:fullscreen{overflow:auto}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top">
+    <h1>독립표본 t검정 칠판 수업
+      <small class="easy">서로 다른 두 그룹의 평균이 정말 다른지 확인하는 방법</small>
+      <small class="pro">Independent samples t-test: 두 모평균 μ₁, μ₂의 비교</small></h1>
+    <div class="seg" role="group" aria-label="설명 수준"><button id="mEasy" aria-pressed="true">쉬운 설명</button><button id="mPro" aria-pressed="false">전공 설명</button></div>
+  </div>
+
+  <div>
+    <div class="board" id="board">
+      <canvas id="cv" aria-label="독립표본 t검정 칠판 애니메이션"></canvas>
+      <div id="subs" style="display:none"></div>
+    </div>
+    <div class="tray" style="margin-top:0">
+      <div class="row">
+        <button class="btn" id="play">일시정지</button>
+        <button class="btn ghost" id="restart">처음부터</button>
+        <select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select>
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="재생 위치">
+      </div>
+      <div class="row">
+        <button class="btn ghost" id="vBtn">음성 켜기</button>
+        <select id="vSel" aria-label="목소리"></select>
+        <select id="rate" aria-label="말하기 속도"><option value="0.85">천천히</option><option value="1" selected>보통 속도</option><option value="1.15">빠르게</option></select>
+        <button class="btn ghost" id="fs">전체화면</button>
+        <span id="vNote"></span>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+
+  <div class="note" id="cap"></div>
+
+  <section class="card">
+    <h2>결과표 <span class="pro" style="font-size:1rem;color:var(--dim)">(JAMOVI 독립표본 T-검정 형식)</span></h2>
+    <div class="tbl"><table>
+      <thead><tr><th></th>
+        <th><span class="easy">점수(t)</span><span class="pro">통계량</span></th><th>df</th>
+        <th><span class="easy">우연일 확률</span><span class="pro">p</span></th>
+        <th>평균 차이</th><th><span class="easy">흔들림 1칸</span><span class="pro">SE 차이</span></th>
+        <th><span class="easy">차이의 범위(95%)</span><span class="pro">95% 신뢰구간</span></th>
+        <th><span class="easy">차이의 크기</span><span class="pro">Cohen's d</span></th></tr></thead>
+      <tbody><tr><td>월 임대료 <span class="pro">(Student's t)</span></td><td class="num" id="r_t"></td><td class="num" id="r_df"></td><td class="num" id="r_p"></td><td class="num" id="r_md"></td><td class="num" id="r_se"></td><td class="num" id="r_ci"></td><td class="num" id="r_d"></td></tr></tbody>
+    </table></div>
+    <p class="muted easy">읽는 순서: ① 우연일 확률이 0.05보다 작은가? → ② 작으면 “두 그룹은 다르다” → ③ 평균 차이로 얼마나 다른지 말하기. 차이의 범위(95%)에 0이 없으면 같은 결론이에요.</p>
+    <p class="muted pro" id="report"></p>
+  </section>
+
+  <section class="card">
+    <h2>직접 바꿔보기</h2>
+    <div class="sliders">
+      <label><span><span class="easy">두 그룹 평균 차이</span><span class="pro">x̄₁ − x̄₂</span> : <b id="vM"></b>만 원</span><input type="range" id="sM" min="0" max="8" step="0.1" value="3.8"></label>
+      <label><span><span class="easy">상가마다 들쭉날쭉</span><span class="pro">그룹 내 표준편차 s</span> : <b id="vS"></b>만 원</span><input type="range" id="sS" min="1.5" max="8" step="0.1" value="4"></label>
+      <label><span><span class="easy">그룹별 상가 수</span><span class="pro">그룹별 n</span> : <b id="vN"></b>곳</span><input type="range" id="sN" min="5" max="30" step="1" value="12"></label>
+    </div>
+    <div style="margin-top:12px"><button class="btn ghost" id="resample">새 표본 뽑기</button></div>
+    <div class="live">
+      <div><small><span class="easy">거리(신호)</span><span class="pro">x̄₁ − x̄₂</span></small><span id="lD"></span></div>
+      <div><small><span class="easy">차이의 흔들림 1칸</span><span class="pro">SE</span></small><span id="lSe"></span></div>
+      <div><small><span class="easy">점수 t (몇 칸?)</span><span class="pro">t</span></small><span id="lT"></span></div>
+      <div><small><span class="easy">우연일 확률</span><span class="pro">p (양측)</span></small><span id="lP"></span></div>
+    </div>
+    <div id="verdict"></div>
+  </section>
+
+  <section class="card">
+    <div class="top" style="align-items:center"><h2 style="margin:0">영상 시나리오(대본)</h2><button class="btn ghost" id="copyScript">대본 복사</button></div>
+    <p class="muted">녹화 순서: 음성 켜기 → 전체화면 → 처음부터 → 화면과 소리를 함께 녹화. 직접 설명하실 때는 장면 버튼을 누르고 애니메이션이 끝나면 일시정지한 뒤 대본을 읽으세요.</p>
+    <div class="tbl"><table class="script"><thead><tr><th>장면</th><th>화면</th><th>내레이션</th></tr></thead><tbody id="scriptBody"></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="easy">쓰기 전에 확인할 것</span><span class="pro">가정과 점검</span></h2>
+    <ul class="easy">
+      <li>두 그룹에 겹치는 상가가 없어야 해요. 같은 상가를 전·후로 두 번 쟀다면 대응표본 t검정을 써요.</li>
+      <li>그룹 하나의 평균을 “기준 숫자”와 비교할 때는 일표본 t검정을 써요.</li>
+      <li>그룹이 3개 이상(대로변·이면도로·골목)이면 분산분석(ANOVA)을 써요.</li>
+      <li>두 그룹의 들쭉날쭉이 많이 다르면 Welch 방식을 써요(JAMOVI에서 체크 하나).</li>
+      <li>“다르다”는 “대로변이라서 비싸다(원인)”와 같은 말이 아니에요. 면적, 층, 업종도 함께 봐야 해요.</li>
+    </ul>
+    <ul class="pro">
+      <li>독립성: 두 집단 간 관측치 중복 없음, 집단 내 관측치 독립.</li>
+      <li>정규성: 집단별 Shapiro-Wilk, Q-Q 플롯. 위반 시 Mann-Whitney U 또는 순열 검정.</li>
+      <li>등분산성: Levene 검정. 위반 시 Welch t검정(자유도 Welch–Satterthwaite 근사).</li>
+      <li>순열 검정은 분포 가정 없이 “이름표 교환 가능성”만으로 p값을 구하며, 정규 가정이 맞으면 t검정과 결과가 거의 같음.</li>
+      <li>관측자료이므로 입지 효과의 인과 해석에는 교란변수 통제(회귀분석 등)가 필요.</li>
+    </ul>
+  </section>
+
+  <p class="foot">예시 데이터는 설명을 위해 만든 가상의 수치이며 실제 임대료가 아닙니다. 단위: 3.3㎡당 월 임대료(만 원).</p>
+</div>
+
+<script>
+(()=>{
+// ---------- 통계 ----------
+function lgamma(x){const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5)return Math.log(Math.PI/Math.sin(Math.PI*x))-lgamma(1-x);x-=1;let a=c[0];const t=x+7.5;for(let i=1;i<9;i++)a+=c[i]/(x+i);return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);}
+function betacf(x,a,b){let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;if(Math.abs(d)<1e-30)d=1e-30;d=1/d;let h=d;
+  for(let m=1;m<=200;m++){const m2=2*m;let aa=m*(b-m)*x/((qam+m2)*(a+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c;
+  aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<3e-12)break;}return h;}
+function ibeta(x,a,b){if(x<=0)return 0;if(x>=1)return 1;const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));return x<(a+1)/(a+b+2)?bt*betacf(x,a,b)/a:1-bt*betacf(1-x,b,a)/b;}
+const pT2=(t,df)=>ibeta(df/(df+t*t),df/2,0.5);
+const tpdf=(x,df)=>Math.exp(lgamma((df+1)/2)-lgamma(df/2))/Math.sqrt(df*Math.PI)*Math.pow(1+x*x/df,-(df+1)/2);
+function tcrit(df){let lo=0,hi=30;for(let i=0;i<60;i++){const m=(lo+hi)/2;pT2(m,df)>0.05?lo=m:hi=m;}return (lo+hi)/2;}
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const gauss=r=>Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(2*Math.PI*r());
+const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const sdv=a=>{const m=mean(a);return Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/(a.length-1));};
+const f1=v=>v.toFixed(1),f2=v=>v.toFixed(2);
+const fp=p=>p<0.001?'< .001':p.toFixed(3).replace(/^0/,'');
+const pct=p=>p<0.001?'0.1% 미만':(p*100).toFixed(1)+'%';
+const spPct=p=>p<0.001?'0.1퍼센트 미만':(p*100).toFixed(1)+'퍼센트';
+
+// ---------- 데이터 ----------
+const SIMS=300,BW=0.25;let seed=5,P={m:3.8,s:4,n:12},D;
+function build(){
+  const n=P.n,r=rng(seed*131+n),std=z=>{const m=mean(z),s=sdv(z);return z.map(v=>(v-m)/s);};
+  const za=[],zb=[];for(let i=0;i<n;i++){za.push(gauss(r));zb.push(gauss(r));}
+  const base=15,A=std(za).map(v=>Math.round((base+P.m+P.s*v)*10)/10),B=std(zb).map(v=>Math.round((base+P.s*v)*10)/10);
+  const tstat=(a,b)=>{const ma=mean(a),mb=mean(b),sa=sdv(a),sb=sdv(b),sp=Math.sqrt(((a.length-1)*sa*sa+(b.length-1)*sb*sb)/(a.length+b.length-2));return{t:(ma-mb)/(sp*Math.sqrt(1/a.length+1/b.length)),sp,ma,mb,sa,sb};};
+  const o=tstat(A,B),df=2*n-2,se=o.sp*Math.sqrt(2/n),p=pT2(Math.abs(o.t),df),tc=tcrit(df);
+  const all=A.concat(B),r2=rng(seed*7919+n*17),sims=[],perms=[];
+  for(let k=0;k<SIMS;k++){const idx=all.map((_,i)=>i);for(let i=idx.length-1;i>0;i--){const j=Math.floor(r2()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+    const lab=new Array(2*n);idx.forEach((v,i)=>lab[v]=i<n?0:1);if(k<3)perms.push(lab);
+    sims.push(tstat(all.filter((_,i)=>lab[i]===0),all.filter((_,i)=>lab[i]===1)).t);}
+  const bins={},pile=sims.map(v=>{const b=Math.max(-20,Math.min(20,Math.round(v/BW)));bins[b]=(bins[b]||0)+1;return{v,b,h:bins[b]-1};});
+  const maxC=Math.max(...Object.values(bins)),ext=sims.filter(v=>Math.abs(v)>=Math.abs(o.t)).length;
+  const step=2,lo=Math.floor((Math.min(...all)-1)/step)*step,hi=Math.ceil((Math.max(...all)+1)/step)*step;
+  D={A,B,all,mA:o.ma,mB:o.mb,sA:o.sa,sB:o.sb,sp:o.sp,se,df,t:o.t,p,tc,d:(o.ma-o.mb)/o.sp,ci:[o.ma-o.mb-tc*se,o.ma-o.mb+tc*se],pile,perms,maxC,ext,lo,hi};
+  panels();if(starts.length){layout();script();}
+}
+
+// ---------- 모드 ----------
+let mode='easy';const L=(e,p)=>mode==='easy'?e:p;
+function setMode(m){mode=m;document.documentElement.dataset.m=m;
+  document.getElementById('mEasy').setAttribute('aria-pressed',m==='easy');document.getElementById('mPro').setAttribute('aria-pressed',m==='pro');
+  stopSpeech();chips();panels();layout();script();}
+document.getElementById('mEasy').onclick=()=>setMode('easy');document.getElementById('mPro').onclick=()=>setMode('pro');
+
+// ---------- 장면 ----------
+const dd=()=>D.mA-D.mB;
+const ST=[
+ {d:3,e:'궁금한 질문',p:'가설 세우기',scr:'칠판에 대로변 / 이면도로 두 줄 이름표',
+  ce:()=>`창업 상담 단골 질문: “<b>대로변 상가</b>가 <b>이면도로 상가</b>보다 임대료가 정말 비쌀까?” 두 그룹을 비교하는 <b>독립표본 t검정</b>으로 확인해요.`,
+  cp:()=>`H₀: μ₁ = μ₂, H₁: μ₁ ≠ μ₂ (양측). 서로 독립인 두 집단의 모평균 비교.`,
+  ne:()=>`상가 창업 상담에서 자주 나오는 질문이에요. 대로변 상가가 이면도로 상가보다 임대료가 정말 비쌀까요? 두 그룹의 평균을 비교하는 독립표본 티 검정으로 확인해 볼게요.`,
+  np:()=>`독립표본 티 검정은 서로 다른 두 집단의 모평균을 비교합니다. 귀무가설은 대로변과 이면도로 상가의 평균 임대료가 같다는 것이고, 대립가설은 다르다는 것입니다.`},
+ {d:3.5,e:'상가 조사',p:'두 표본',scr:'두 줄에 분필 점이 찍힘 (위 대로변, 아래 이면도로)',
+  ce:()=>`대로변 <b>${P.n}곳</b>, 이면도로 <b>${P.n}곳</b>의 3.3㎡당 월 임대료를 점으로 찍었어요. 점 하나가 상가 한 곳이에요.`,
+  cp:()=>`n₁ = n₂ = ${P.n}. 종속변수: 3.3㎡당 월 임대료(만 원). 관측치 독립, 정규성, 등분산 가정.`,
+  ne:()=>`대로변 상가 ${P.n}곳과 이면도로 상가 ${P.n}곳의 3.3제곱미터당 월 임대료를 점으로 찍었어요. 위 줄이 대로변, 아래 줄이 이면도로예요.`,
+  np:()=>`두 독립표본은 각각 ${P.n}개 점포의 3.3제곱미터당 월 임대료입니다. 관측치 독립, 정규성, 등분산을 가정합니다.`},
+ {d:3,e:'거리 = 신호',p:'평균 차이',scr:'두 줄의 평균선과 그 사이 분홍 화살표',
+  ce:()=>`평균은 대로변 <b>${f1(D.mA)}만 원</b>, 이면도로 <b>${f1(D.mB)}만 원</b>. 차이 <b>${f1(dd())}만 원</b>이 “신호”예요.`,
+  cp:()=>`x̄₁ = ${f2(D.mA)}, x̄₂ = ${f2(D.mB)}, x̄₁ − x̄₂ = ${f2(dd())}.`,
+  ne:()=>`평균은 대로변 ${f1(D.mA)}만 원, 이면도로 ${f1(D.mB)}만 원이에요. 차이는 ${f1(dd())}만 원, 이 거리가 신호예요.`,
+  np:()=>`표본평균은 각각 ${f2(D.mA)}와 ${f2(D.mB)}이고, 평균 차이는 ${f2(dd())}만 원입니다.`},
+ {d:4,e:'차이의 흔들림',p:'표준오차',scr:'넓은 띠(들쭉날쭉)가 좁은 괄호(평균의 흔들림)로 줄어듦',
+  ce:()=>`상가마다 들쭉날쭉은 ±${f1(D.sp)}만 원(넓은 띠). 다른 상가를 뽑았다면 두 평균도 조금씩 달라졌겠죠. 두 평균이 <b>함께</b> 흔들리니, 차이의 흔들림 “1칸”은 <b>${f2(D.se)}만 원</b>이에요.`,
+  cp:()=>`s₁ = ${f2(D.sA)}, s₂ = ${f2(D.sB)}, sₚ = ${f2(D.sp)}. SE = sₚ√(1/n₁ + 1/n₂) = ${f2(D.se)}.`,
+  ne:()=>`그런데 상가마다 임대료가 들쭉날쭉해요. 다른 상가를 뽑았다면 두 평균도 조금씩 달라졌겠죠. 두 평균이 함께 흔들리니, 차이의 흔들림 한 칸은 ${f2(D.se)}만 원이에요.`,
+  np:()=>`합동표준편차는 ${f2(D.sp)}이고, 평균 차이의 표준오차는 합동표준편차에 n분의 1을 두 번 더한 값의 제곱근을 곱한 ${f2(D.se)}입니다.`},
+ {d:4,e:'몇 칸 떨어졌나',p:'t 통계량',scr:'“차이 0”에서 시작하는 흔들림 눈금자, 차이가 몇 칸째인지 표시',
+  ce:()=>`“차이 0”에서 출발해 흔들림 1칸으로 재요. ${f1(Math.abs(dd()))} ÷ ${f2(D.se)} = <b>${f2(Math.abs(D.t))}칸</b>. 이 칸 수가 <b>t값</b>이에요.`,
+  cp:()=>`t = (x̄₁ − x̄₂)/SE = ${f2(dd())}/${f2(D.se)} = ${f2(D.t)}, df = n₁ + n₂ − 2 = ${D.df}.`,
+  ne:()=>`차이 0에서 출발해서 흔들림 한 칸으로 재 볼게요. ${f1(Math.abs(dd()))}을 ${f2(D.se)}로 나누면 ${f2(Math.abs(D.t))}칸이에요. 이 칸 수가 티 값이에요.`,
+  np:()=>`티 통계량은 평균 차이를 표준오차로 나눈 ${f2(D.t)}이며, 자유도는 ${D.df}입니다.`},
+ {d:6,e:'이름표 섞기 300번',p:'순열 분포',scr:'이름표를 뗀 점들이 두 줄을 오가며 섞이고, 아래 칠판에 점수 300개가 쌓임',
+  ce:()=>`대로변이든 이면도로든 상관없다면, <b>이름표를 아무렇게나 바꿔 붙여도</b> 차이는 비슷해야 해요. 이름표를 <b>300번</b> 섞어 점수를 쟀더니, 우리 점수보다 먼 경우는 <b>300번 중 ${D.ext}번(${(D.ext/3).toFixed(1)}%)</b>이에요.`,
+  cp:()=>`H₀ 하에서 집단 이름표는 교환 가능. 이름표를 ${SIMS}회 무작위 재배치한 순열 분포에서 |t*| ≥ ${f2(Math.abs(D.t))}: ${D.ext}/${SIMS} = ${(D.ext/SIMS).toFixed(3)} (순열 p).`,
+  ne:()=>`만약 대로변이든 이면도로든 임대료와 상관이 없다면, 이름표를 아무렇게나 바꿔 붙여도 결과가 비슷해야 해요. 이름표를 300번 섞어서 점수를 재 봤어요. 우리 점수 ${f2(Math.abs(D.t))}보다 멀리 나온 경우는 300번 중 ${D.ext}번이에요.`,
+  np:()=>`귀무가설이 참이면 집단 이름표는 서로 바꿔도 됩니다. 이름표를 무작위로 300번 재배치해 티 값을 계산한 순열 분포에서, 관측값보다 극단적인 경우는 ${D.ext}번입니다. 이 비율이 순열 검정 피 값입니다.`},
+ {d:4,e:'판정',p:'결론',scr:'더미 위에 t분포 곡선이 겹치고 판정 도장',
+  ce:()=>D.p<0.05?`곡선으로 정확히 계산한 우연일 확률은 <b>${pct(D.p)}</b>. 5%보다 작으니 “대로변과 이면도로의 임대료는 <b>다르다</b>”고 판단해요.`:`곡선으로 계산한 우연일 확률은 <b>${pct(D.p)}</b>. 5% 이상이라 “두 그룹이 다르다고 <b>말하기 어렵다</b>”고 판단해요.`,
+  cp:()=>`t(${D.df}) 분포의 양측 p = ${fp(D.p)} ${D.p<0.05?'< .05 → H₀ 기각':'≥ .05 → H₀ 기각 실패'}. 평균 차이 95% CI [${f2(D.ci[0])}, ${f2(D.ci[1])}], d = ${f2(D.d)}.`,
+  ne:()=>D.p<0.05?`섞어서 쌓은 더미 위에 곡선을 겹치면 거의 같은 모양이에요. 이 곡선으로 정확히 계산한 우연일 확률은 ${spPct(D.p)}예요. 5퍼센트보다 작으니 대로변과 이면도로 상가의 임대료는 다르다고 판단해요.`:`섞어서 쌓은 더미 위에 곡선을 겹치면 거의 같은 모양이에요. 이 곡선으로 계산한 우연일 확률은 ${spPct(D.p)}예요. 5퍼센트 이상이니 두 그룹이 다르다고 말하기 어려워요.`,
+  np:()=>D.p<0.05?`순열 분포는 자유도 ${D.df}인 티 분포와 거의 일치합니다. 정확한 양측 피 값은 ${D.p.toFixed(3)}로 유의수준 0.05보다 작으므로 귀무가설을 기각합니다. 효과크기 코헨의 디는 ${f2(D.d)}입니다.`:`순열 분포는 자유도 ${D.df}인 티 분포와 거의 일치합니다. 정확한 양측 피 값은 ${D.p.toFixed(3)}로 유의수준 0.05 이상이므로 귀무가설을 기각하지 못합니다.`},
+];
+let starts=[],slots=[],TOTAL=0,time=0;
+const narr=k=>mode==='easy'?ST[k].ne():ST[k].np();
+const sents=x=>x.split(/(?<=[.?!])\s+/).filter(Boolean);
+function cur(t){let k=0;for(let i=0;i<starts.length;i++)if(t>=starts[i])k=i;return k;}
+function prog(k,t){return Math.max(0,Math.min(1,(t-starts[k])/ST[k].d));}
+function layout(){const r=+document.getElementById('rate').value||1,k=starts.length?cur(time):0,off=starts.length?time-starts[k]:0;
+  starts=[];slots=[];let acc=0;ST.forEach((st,i)=>{const sl=Math.max(st.d+0.8,narr(i).length*0.15/r+0.6);starts.push(acc);slots.push(sl);acc+=sl;});TOTAL=acc;
+  time=Math.min(starts[k]+Math.min(off,slots[k]),TOTAL);lastK=-1;}
+function script(){document.getElementById('scriptBody').innerHTML=ST.map((st,i)=>`<tr><td>${i+1}. ${L(st.e,st.p)}</td><td>${st.scr}</td><td>${narr(i)}</td></tr>`).join('');}
+const chipsEl=document.getElementById('chips');
+function chips(){chipsEl.innerHTML='';ST.forEach((s,i)=>{const b=document.createElement('button');b.textContent=(i+1)+'. '+L(s.e,s.p);b.onclick=()=>{stopSpeech();time=starts[i];playing=true;if(voiceOn)speakStage(i);syncPlay();};chipsEl.appendChild(b);});lastK=-1;}
+// ---------- 칠판 그리기 ----------
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),bg=document.createElement('canvas');let W=600,H=420,C={};
+function readC(){const s=getComputedStyle(document.documentElement);['board','chalk','dim','yel','pink','sky','org'].forEach(k=>C[k]=s.getPropertyValue('--'+k).trim());}
+function resize(){W=cv.parentElement.clientWidth;H=Math.round(Math.max(440,Math.min(560,W*0.68)));const r=window.devicePixelRatio||1;
+  cv.width=W*r;cv.height=H*r;cv.style.height=H+'px';ctx.setTransform(r,0,0,r,0,0);
+  bg.width=W*r;bg.height=H*r;const b=bg.getContext('2d');b.setTransform(r,0,0,r,0,0);b.fillStyle=C.board;b.fillRect(0,0,W,H);
+  const rr=rng(99);for(let i=0;i<14;i++){const g=b.createRadialGradient(rr()*W,rr()*H,0,rr()*W,rr()*H,80+rr()*160);g.addColorStop(0,'rgba(255,255,255,.035)');g.addColorStop(1,'rgba(255,255,255,0)');b.fillStyle=g;b.fillRect(0,0,W,H);}
+  for(let i=0;i<W*H/90;i++){b.fillStyle=`rgba(255,255,255,${rr()*.05})`;b.fillRect(rr()*W,rr()*H,1,1);}}
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const HAND='"Gaegu","Nanum Pen Script",cursive';
+function T(s,x,y,col,size,al='left',w=700){ctx.fillStyle=col;ctx.textAlign=al;ctx.textBaseline='middle';ctx.font=`${w} ${size}px ${HAND}`;ctx.fillText(s,x,y);}
+function chalkLine(x0,y0,x1,y1,col,w=2.5,a=1){ctx.globalAlpha=a*.9;ctx.strokeStyle=col;ctx.lineWidth=w;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x0,y0);
+  const n=Math.max(2,Math.round(Math.hypot(x1-x0,y1-y0)/14));for(let i=1;i<=n;i++){const t=i/n;ctx.lineTo(x0+(x1-x0)*t+(i<n?Math.sin(i*7.3)*.6:0),y0+(y1-y0)*t+(i<n?Math.cos(i*5.1)*.6:0));}ctx.stroke();ctx.globalAlpha=1;}
+function arrowHead(x,y,dir,col){ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-8*dir,y-5);ctx.lineTo(x-8*dir,y+5);ctx.fill();}
+
+function draw(t){
+  ctx.drawImage(bg,0,0,W,H);
+  const sm=W<520,fs=sm?15:18,pl=20,pr=20,X=v=>pl+(v-D.lo)/(D.hi-D.lo)*(W-pl-pr),n=P.n;
+  const yA=H*0.12,yB2=H*0.25,yL=H*0.32,yArr=(yA+yB2)/2,yRul=H*0.45,yB=H*0.93,hB=H*0.34;
+  const p5=prog(5,t),shuf=p5>0&&p5<0.45,dim=shuf?0.2:1;
+  // 축
+  chalkLine(pl,yL,W-pr,yL,C.chalk,2,.8);
+  for(let v=D.lo;v<=D.hi;v+=2){chalkLine(X(v),yL,X(v),yL+5,C.chalk,1.5,.7);T(String(v),X(v),yL+16,C.dim,fs-3,'center',400);}
+  T(L('만 원','만 원/3.3㎡'),W-pr,yL-10,C.dim,fs-4,'right',400);
+  // 1 이름표
+  const p0=ease(prog(0,t));
+  if(p0>0){ctx.globalAlpha=p0*(shuf?0.35:1);T(L('대로변 상가','대로변 (집단 1)'),pl,yA-24,C.sky,fs);T(L('이면도로 상가','이면도로 (집단 2)'),pl,yB2-24,C.org,fs);
+    chalkLine(pl,yA+16,pl+60*p0,yA+16,C.sky,1.5,.4);chalkLine(pl,yB2+16,pl+60*p0,yB2+16,C.org,1.5,.4);ctx.globalAlpha=1;}
+  // 4 띠 → 괄호
+  const p3=prog(3,t);
+  if(p3>0){const a=ease(Math.min(1,p3/0.4)),shr=ease(Math.max(0,(p3-0.5)/0.5));
+    [[D.mA,D.sA,yA,C.sky],[D.mB,D.sB,yB2,C.org]].forEach(([m,s,y,c])=>{const half=(s+(s/Math.sqrt(n)-s)*shr)*a,x0=X(m-half),x1=X(m+half);
+      ctx.globalAlpha=.13*dim;ctx.fillStyle=c;ctx.fillRect(x0,y-14,x1-x0,28);ctx.globalAlpha=1;chalkLine(x0,y-15,x0,y+15,c,2,.8*dim);chalkLine(x1,y-15,x1,y+15,c,2,.8*dim);});
+    if(shr>0.6){ctx.globalAlpha=Math.min(1,(shr-.6)*2.5)*dim;T(L('차이의 흔들림 1칸 = ','SE = ')+f2(D.se),W-pr,H*0.045,C.yel,fs-2,'right',400);ctx.globalAlpha=1;}
+    else if(p3<0.55){ctx.globalAlpha=a*dim;T(L('들쭉날쭉 ±','s ≈ ±')+f1(D.sp),W-pr,H*0.045,C.yel,fs-2,'right',400);ctx.globalAlpha=1;}}
+  // 2 점 (+ 6단계 섞기)
+  const p1=prog(1,t),r0=sm?4.2:5.2,rowY=g=>g===0?yA:yB2;
+  D.all.forEach((v,i)=>{const g0=i<n?0:1,q=ease(Math.max(0,Math.min(1,(p1-(i/(2*n))*0.6)/0.4)));if(q<=0)return;
+    const jy=((i*7)%5-2)*3.5;let y=rowY(g0),col=g0?C.org:C.sky;
+    if(p5>0&&p5<0.55){col=C.chalk;const seg=Math.min(3,p5/0.45*3),j=Math.min(2,Math.floor(seg)),lc=seg-j;
+      const from=j===0?g0:D.perms[j-1][i],to=seg>=3?g0:D.perms[j][i];
+      const yf=rowY(from),yt=rowY(to),e=ease(Math.min(1,lc*2));y=p5>=0.45?yt+(rowY(g0)-yt)*ease(Math.min(1,(p5-0.45)/0.1)):yf+(yt-yf)*e;
+      if(p5>=0.45)y=rowY(D.perms[2][i])+(rowY(g0)-rowY(D.perms[2][i]))*ease(Math.min(1,(p5-0.45)/0.1));}
+    ctx.globalAlpha=q*.92;ctx.fillStyle=col;ctx.beginPath();ctx.arc(X(v),y+jy,r0*(0.6+0.4*q),0,7);ctx.fill();ctx.globalAlpha=1;});
+  // 3 평균선 + 화살표
+  const p2=ease(prog(2,t));
+  if(p2>0){const xa=X(D.mA),xb=X(D.mB),g=Math.min(1,p2*1.6);
+    chalkLine(xa,yA-18*g,xa,yA+18*g,C.yel,3.5,dim);chalkLine(xb,yB2-18*g,xb,yB2+18*g,C.yel,3.5,dim);
+    if(p2>.3){ctx.globalAlpha=Math.min(1,(p2-.3)*2)*dim;T(L('평균 ','x̄₁ = ')+f1(D.mA),xa,yA-30,C.yel,fs-1,'center');T(L('평균 ','x̄₂ = ')+f1(D.mB),xb,yB2+28,C.yel,fs-1,'center');ctx.globalAlpha=1;}
+    if(p2>.45&&!shuf){const q=(p2-.45)/.55,xe=xb+(xa-xb)*q,dir=Math.sign(xa-xb)||1;
+      chalkLine(xb,yB2-18,xb,yArr,C.pink,1.5,.6);chalkLine(xa,yA+18,xa,yArr,C.pink,1.5,.6);chalkLine(xb,yArr,xe,yArr,C.pink,3);if(Math.abs(xe-xb)>8)arrowHead(xe,yArr,dir,C.pink);
+      if(q>.8){const lab=L('거리 ','x̄₁−x̄₂ = ')+f1(dd()),xr=Math.max(xa,xb)+12;xr<W*0.72?T(lab,xr,yArr,C.pink,fs-1,'left'):T(lab,Math.min(xa,xb)-12,yArr,C.pink,fs-1,'right');}}}
+  // 5 눈금자
+  const p4=prog(4,t);
+  if(p4>0){const a=ease(Math.min(1,p4/0.4)),x0=W/2,u=(W-pl-pr)/14;ctx.globalAlpha=a;
+    chalkLine(pl,yRul,W-pr,yRul,C.dim,1.5,a);
+    for(let k=-7;k<=7;k++){const x=x0+k*u;chalkLine(x,yRul-6,x,yRul+6,C.dim,1.5,a);if(Math.abs(k)<=6&&(!sm||k%2===0))T(k===0?L('차이 0','0'):String(k),x,yRul+18,C.dim,fs-4,'center',400);}
+    T(L('1칸 = '+f2(D.se)+'만 원','1 SE = '+f2(D.se)),pl,yRul-16,C.dim,fs-3,'left',400);ctx.globalAlpha=1;
+    const q=ease(Math.max(0,(p4-0.4)/0.6)),tv=Math.max(-6.8,Math.min(6.8,D.t)),xt=x0+tv*u*q;
+    if(q>0){chalkLine(x0,yRul,xt,yRul,C.yel,4);ctx.fillStyle=C.yel;ctx.beginPath();ctx.arc(xt,yRul,6,0,7);ctx.fill();
+      T(L(f2(Math.abs(D.t*q))+'칸 = t','t = '+f2(D.t*q)),xt,yRul-18,C.yel,fs+2,xt>W*0.78?'right':(xt<W*0.22?'left':'center'));}}
+  // 6 점수 더미
+  if(p5>0.4){const pp=(p5-0.4)/0.6,tl=-5,th=5,X2=v=>pl+(v-tl)/(th-tl)*(W-pl-pr),bwPx=X2(BW)-X2(0),rd=Math.max(1.6,Math.min(bwPx/2-0.6,hB/(D.maxC*2)));
+    chalkLine(pl,yB,W-pr,yB,C.chalk,2,.8);for(let v=-4;v<=4;v+=1)T(String(v),X2(v),yB+14,C.dim,fs-4,'center',400);
+    const at=Math.abs(D.t);let shown=0,ex=0;
+    D.pile.forEach((o,i)=>{const q=Math.max(0,Math.min(1,(pp*1.25-i/SIMS*0.9)/0.12));if(q<=0)return;shown++;const far=Math.abs(o.v)>=at;if(far)ex++;
+      const y=yB-rd-o.h*rd*2,yy=(yB-hB)+(y-(yB-hB))*ease(q);ctx.globalAlpha=.9;ctx.fillStyle=far?C.pink:C.chalk;ctx.beginPath();ctx.arc(X2(o.b*BW),yy,rd,0,7);ctx.fill();ctx.globalAlpha=1;});
+    const xt=X2(Math.max(-4.9,Math.min(4.9,D.t)));chalkLine(xt,yB,xt,yB-hB*0.85,C.yel,3);T(L('우리 ','t = ')+f2(D.t),xt,yB-hB*0.85-12,C.yel,fs,xt>W*0.8?'right':'center');
+    if(at<5){const xo=X2(-Math.sign(D.t||1)*at);ctx.setLineDash([5,5]);chalkLine(xo,yB,xo,yB-hB*0.5,C.yel,1.5,.7);ctx.setLineDash([]);}
+}
+  // 7 곡선 + 도장
+  const p6=prog(6,t);
+  if(p6>0){const tl=-5,th=5,X2=v=>pl+(v-tl)/(th-tl)*(W-pl-pr),bwPx=X2(BW)-X2(0),rd=Math.max(1.6,Math.min(bwPx/2-0.6,hB/(D.maxC*2))),q=Math.min(1,p6/0.5),xe=tl+(th-tl)*q;
+    ctx.globalAlpha=.95;ctx.strokeStyle=C.sky;ctx.lineWidth=3;ctx.beginPath();for(let v=tl;v<=xe;v+=0.05){const y=yB-SIMS*BW*tpdf(v,D.df)*2*rd;v===tl?ctx.moveTo(X2(v),y):ctx.lineTo(X2(v),y);}ctx.stroke();ctx.globalAlpha=1;
+    if(p6>0.5){const a=ease((p6-.5)*2),sig=D.p<0.05,col=sig?C.yel:C.dim,s=sig?L('다르다!','H₀ 기각'):L('다르다고 말하기 어려움','기각 실패'),sub=L('우연일 확률 ','p = ')+(mode==='easy'?pct(D.p):fp(D.p));
+      ctx.font=`700 ${fs+4}px ${HAND}`;const w=Math.max(ctx.measureText(s).width,84)+24;ctx.save();ctx.translate(pl+w/2+4,yB-hB*0.72);ctx.rotate(-0.1);ctx.globalAlpha=a;ctx.strokeStyle=col;ctx.lineWidth=3;
+      ctx.strokeRect(-w/2,-30,w,58);T(s,0,-10,col,fs+4,'center');T(sub,0,14,col,fs-2,'center',400);ctx.restore();ctx.globalAlpha=1;}}
+}
+
+// ---------- 패널 ----------
+const $=id=>document.getElementById(id),setT=(id,v)=>$(id).textContent=v;
+function panels(){if(!D)return;
+  setT('r_t',f2(D.t));setT('r_df',D.df);setT('r_p',fp(D.p));setT('r_md',f2(dd()));setT('r_se',f2(D.se));setT('r_ci',`[${f2(D.ci[0])}, ${f2(D.ci[1])}]`);setT('r_d',f2(D.d));
+  $('report').textContent=`보고 예: 대로변 상가의 3.3㎡당 월 임대료(M = ${f2(D.mA)}, SD = ${f2(D.sA)})는 이면도로(M = ${f2(D.mB)}, SD = ${f2(D.sB)})와 ${D.p<0.05?'유의한 차이가 있었다':'유의한 차이가 없었다'}, t(${D.df}) = ${f2(D.t)}, p = ${fp(D.p)}, 95% CI [${f2(D.ci[0])}, ${f2(D.ci[1])}], d = ${f2(D.d)}.`;
+  setT('vM',P.m.toFixed(1));setT('vS',P.s.toFixed(1));setT('vN',P.n);
+  setT('lD',f1(dd())+'만');setT('lSe',f2(D.se)+'만');setT('lT',f2(D.t));setT('lP',mode==='easy'?pct(D.p):fp(D.p));
+  const sig=D.p<0.05,v=$('verdict');v.style.color=sig?'var(--yel)':'var(--dim)';
+  v.textContent=sig?L('우연일 확률 < 5% → 두 그룹은 다르다!',`p < .05 → H₀ 기각, t(${D.df}) = ${f2(D.t)}`):L('우연일 확률 ≥ 5% → 다르다고 말하기 어려워요',`p ≥ .05 → H₀ 기각 실패, t(${D.df}) = ${f2(D.t)}`);lastK=-1;}
+[['sM','m'],['sS','s'],['sN','n']].forEach(([id,k])=>{$(id).oninput=()=>{P[k]=+$(id).value;build();};});
+$('resample').onclick=()=>{seed++;build();};
+
+// ---------- 재생·음성 ----------
+let playing=true,speed=1,last=performance.now(),lastK=-1;
+const playBtn=$('play'),seek=$('seek'),cap=$('cap'),subs=$('subs'),synth=window.speechSynthesis,vBtn=$('vBtn'),vSel=$('vSel'),vNote=$('vNote'),rateEl=$('rate');
+let voiceOn=false,speaking=false,spokenStage=-1,tok=0,voices=[];
+function syncPlay(){playBtn.textContent=playing?'일시정지':'재생';}
+function loadVoices(){if(!synth)return;voices=synth.getVoices().filter(v=>/^ko/i.test(v.lang));
+  vSel.innerHTML=voices.length?voices.map((v,i)=>`<option value="${i}">${v.name.replace(/^(Microsoft|Google)\s*/,'')}</option>`).join(''):'<option>한국어 음성 없음</option>';
+  const b=voices.findIndex(v=>/Natural|Online|Google/i.test(v.name));if(b>=0)vSel.value=b;
+  vNote.textContent=voices.length?'Edge의 “SunHi/InJoon (Natural)” 목소리가 가장 자연스럽습니다.':'이 브라우저에 한국어 음성이 없습니다. 내려받은 파일을 Edge나 Chrome에서 열어 주세요.';}
+function stopSpeech(){tok++;speaking=false;spokenStage=-1;try{synth&&synth.cancel();}catch(e){}}
+function speakStage(k){if(!synth||!voiceOn)return;stopSpeech();spokenStage=k;const my=tok,ss=sents(narr(k));let i=0;speaking=true;
+  const next=()=>{if(my!==tok)return;if(i>=ss.length){speaking=false;return;}const u=new SpeechSynthesisUtterance(ss[i]);u.lang='ko-KR';const v=voices[+vSel.value];if(v)u.voice=v;u.rate=+rateEl.value;
+    subs.textContent=ss[i];u.onend=u.onerror=()=>{if(my!==tok)return;i++;next();};synth.speak(u);};next();}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}else{vBtn.disabled=true;vSel.hidden=true;vNote.textContent='이 브라우저는 음성 읽기를 지원하지 않습니다.';}
+vBtn.onclick=()=>{voiceOn=!voiceOn;vBtn.textContent=voiceOn?'음성 끄기':'음성 켜기';vBtn.classList.toggle('on',voiceOn);if(!voiceOn)stopSpeech();else if(playing)speakStage(cur(time));};
+vSel.onchange=()=>{if(voiceOn&&playing)speakStage(cur(time));};
+rateEl.onchange=()=>{stopSpeech();layout();};
+playBtn.onclick=()=>{if(!playing&&time>=TOTAL)time=0;playing=!playing;if(!playing)stopSpeech();else if(voiceOn)speakStage(cur(time));syncPlay();};
+$('restart').onclick=()=>{stopSpeech();time=0;playing=true;if(voiceOn)speakStage(0);syncPlay();};
+$('speed').onchange=e=>speed=+e.target.value;
+seek.oninput=()=>{stopSpeech();time=seek.value/1000*TOTAL;playing=false;syncPlay();};
+$('fs').onclick=()=>{try{(document.fullscreenElement?document.exitFullscreen():$('board').requestFullscreen()).catch(()=>{});}catch(e){}};
+$('copyScript').onclick=()=>{const txt=ST.map((st,i)=>`장면 ${i+1}. ${L(st.e,st.p)}\n[화면] ${st.scr.replace('15',P.n)}\n[내레이션] ${narr(i)}`).join('\n\n'),b=$('copyScript');
+  try{navigator.clipboard.writeText(txt).then(()=>{b.textContent='복사됨';setTimeout(()=>b.textContent='대본 복사',1500);},()=>{const r=document.createRange();r.selectNode($('scriptBody'));getSelection().removeAllRanges();getSelection().addRange(r);});}catch(e){}};
+function loop(now){const dt=Math.min(0.1,(now-last)/1000);last=now;
+  if(playing){let nt=time+dt*speed;const k0=cur(time),end=starts[k0]+slots[k0];if(voiceOn&&speaking&&nt>=end-0.02)nt=Math.max(time,end-0.02);
+    time=nt;if(time>=TOTAL){time=TOTAL;playing=false;syncPlay();}}
+  seek.value=Math.round(time/TOTAL*1000);
+  const k=cur(time);if(voiceOn&&playing&&spokenStage!==k)speakStage(k);
+  if(!voiceOn||!speaking){const ss=sents(narr(k)),tot=ss.join('').length,f=(time-starts[k])/slots[k]*tot;let a=0,j=0;for(;j<ss.length-1;j++){a+=ss[j].length;if(a>f)break;}if(subs.textContent!==ss[j])subs.textContent=ss[j];}
+  if(k!==lastK){lastK=k;cap.innerHTML=`<strong>장면 ${k+1} · ${L(ST[k].e,ST[k].p)}</strong>`+(mode==='easy'?ST[k].ce():ST[k].cp());[...chipsEl.children].forEach((b,i)=>b.classList.toggle('on',i===k));}
+  draw(time);requestAnimationFrame(loop);}
+window.addEventListener('resize',resize);
+document.documentElement.dataset.m='easy';
+readC();resize();build();layout();script();chips();
+if(matchMedia('(prefers-reduced-motion: reduce)').matches){time=TOTAL;playing=false;}
+syncPlay();requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>

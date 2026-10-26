@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q-Q 플롯이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 위(정렬 줄) / 가운데(표준정규 곡선) / 아래(왼쪽 표본 눈금 + Q-Q 산점도) */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:640px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.tg[aria-pressed="true"]{background:var(--c3);border-color:var(--c3);color:#fff}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 240px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.formula{font:14px var(--mono);background:var(--soft);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:nowrap;margin:8px 0}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:8px}
+@media (max-width:420px){.sum{grid-template-columns:repeat(2,1fr)}}
+.sum div{background:var(--paper);padding:8px 10px;display:grid}
+.sum span{font-size:11.5px;color:var(--muted)}
+.sum strong{font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+.pat{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:8px}
+.pat figure{margin:0;display:grid;gap:4px;font-size:12.5px;color:var(--muted)}
+.pat figcaption b{color:var(--ink);font-weight:500;display:block}
+.pat svg{width:100%;height:auto;background:var(--soft);border-radius:6px}
+.pc{display:grid;gap:12px}
+.pc-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 04</div>
+    <h1>Q-Q 플롯이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="거래가 자료의 분위수를 정규분포 분위수와 짝지어 Q-Q 플롯을 만드는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><button class="tg" id="logT" type="button" aria-pressed="false">로그 변환 적용</button><button id="resample" type="button">새 표본 뽑기</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="20" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>Q-Q 플롯의 두 축</h2>
+      <div id="axisText"></div>
+      <div class="formula">가로: zᵢ = Φ⁻¹((i − 0.5) / n) &nbsp;&nbsp; 세로: (x₍ᵢ₎ − x̄) / s</div>
+      <div class="sum" id="sum"></div>
+    </div>
+    <div class="panel">
+      <h2>모양별 읽는 법</h2>
+      <div class="pat" id="pat"></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">Q-Q 플롯을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 거래가는 설명용으로 생성한 예시 값이며 실제 거래 자료가 아닙니다. 서울 아파트 매매가처럼 오른쪽 꼬리가 긴 로그정규분포에서 뽑았습니다. 누적비율 (i − 0.5)/n은 R에서 표본이 10개를 넘을 때 쓰는 기본 방식입니다.</p>
+</div>
+
+<script>
+(function(){
+const N=20,TOTAL=20;
+const T2=1.4,T3=3.4,T4=5.6,T5=9.4,T6=11.4,T7=15.3,T8=16.8;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const pdf=z=>Math.exp(-.5*z*z)/Math.sqrt(2*Math.PI);
+function probit(p){const q=Math.min(p,1-p),t=Math.sqrt(-2*Math.log(q));const x=t-(2.515517+.802853*t+.010328*t*t)/(1+1.432788*t+.189269*t*t+.001308*t*t*t);return p<.5?-x:x}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1),f2=v=>v.toFixed(2);
+
+let seed=4020,vals=[],rank=[],sorted=[],th=[],zRaw=[],zLog=[],D={},t=0,playing=true,speed=1,L={},lastPhase=-1,lgOn=false,lgP=0,lv='e';
+try{const v=localStorage.getItem('qqLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function stdz(a){const n=a.length,m=a.reduce((s,v)=>s+v,0)/n,sd=Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(n-1));return{z:a.map(v=>(v-m)/sd),m,sd}}
+function skew(a){const n=a.length,m=a.reduce((s,v)=>s+v,0)/n,m2=a.reduce((s,v)=>s+(v-m)**2,0)/n,m3=a.reduce((s,v)=>s+(v-m)**3,0)/n;return m3/m2**1.5*Math.sqrt(n*(n-1))/(n-2)}
+function corr(a,b){const n=a.length,ma=a.reduce((s,v)=>s+v,0)/n,mb=b.reduce((s,v)=>s+v,0)/n;let sab=0,saa=0,sbb=0;for(let i=0;i<n;i++){sab+=(a[i]-ma)*(b[i]-mb);saa+=(a[i]-ma)**2;sbb+=(b[i]-mb)**2}return sab/Math.sqrt(saa*sbb)}
+function sample(){const R=rng(seed),nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+  vals=Array.from({length:N},()=>Math.round(clamp(Math.exp(Math.log(9)+.5*nrm()),2.5,40)*10)/10);
+  const idx=vals.map((v,i)=>i).sort((a,b)=>vals[a]-vals[b]||a-b);rank=[];idx.forEach((i,r)=>rank[i]=r);sorted=idx.map(i=>vals[i]);
+  th=sorted.map((_,i)=>probit((i+.5)/N));
+  const a=stdz(sorted),b=stdz(sorted.map(Math.log));zRaw=a.z;zLog=b.z;
+  D={mean:a.m,sd:a.sd,skRaw:skew(sorted),skLog:skew(sorted.map(Math.log)),rRaw:corr(th,zRaw),rLog:corr(th,zLog),hi:Math.max(2.6,...zRaw.map(z=>z+.35),...zLog.map(z=>z+.35)),lo:Math.min(-2.6,...zRaw.map(z=>z-.35),...zLog.map(z=>z-.35))};
+  $('sum').innerHTML=[['표본 수 n',N,0],['평균(억원)',D.mean,2],['표준편차(억원)',D.sd,2],['왜도 · 원자료',D.skRaw,2],['왜도 · 로그 변환',D.skLog,2],['',null],['Q-Q 상관 r · 원자료',D.rRaw,3],['Q-Q 상관 r · 로그 변환',D.rLog,3],['',null]].map(([k,v,d])=>v===null?'<div></div>':`<div><span>${k}</span><strong>${v.toFixed(d)}</strong></div>`).join('')}
+
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640,pad=16;
+  const per=narrow?10:20,rows=Math.ceil(N/per),cw=(W-2*pad)/per,rowY0=40,rowH=50,bandH=rowY0+rows*rowH-6;
+  const bellH=narrow?70:84,bellTop=bandH+12,plotTop=bellTop+bellH+10;
+  const rugW=narrow?30:44,yAxisW=34,availW=W-2*pad-rugW-yAxisW,availH=H-plotTop-40;
+  const S=Math.max(140,Math.min(availW,availH));
+  const plotX0=(W-(S+rugW+yAxisW))/2+rugW+yAxisW;
+  L={W,H,narrow,pad,per,cw,rowY0,rowH,bellTop,bellH,bellBase:bellTop+bellH,plotTop,S,plotX0,rugX:plotX0-yAxisW-rugW/2,fs:narrow?10.5:11.5}}
+const Px=z=>L.plotX0+(z-D.lo)/(D.hi-D.lo)*L.S, Py=z=>L.plotTop+L.S-(z-D.lo)/(D.hi-D.lo)*L.S;
+const cellPos=r=>({x:L.pad+(r%L.per+.5)*L.cw,y:L.rowY0+Math.floor(r/L.per)*L.rowH});
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper'),soft:col('--soft')};
+  const{W,H,S,plotX0,plotTop,bellBase,bellH,bellTop,rugX,fs}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  const sz=i=>lerp(zRaw[i],zLog[i],lgP); // i = 정렬 순위
+  txt(t<T2?'원자료: 실거래 20건 (입력 순서, 단위: 억원)':'크기순 정렬 · 아래 = 순위 i · 누적비율 (i − 0.5)/n',L.pad,22,C.muted,`500 12px ${SANS}`,'left',a0);
+  // ── 순위와 누적비율 라벨
+  const pr=clamp((t-T2-1)/.5);
+  for(let r=0;r<N;r++){const c=cellPos(r);txt(r+1,c.x,c.y+16,C.muted,`10px ${MONO}`,'center',pr);
+    const pp=clamp((t-T3-r*.06)/.4);txt(((r+.5)/N*100).toFixed(1)+'%',c.x,c.y+30,C.c2,`500 ${L.narrow?9:10}px ${MONO}`,'center',pp)}
+  // ── 거래값(입력 순서 → 정렬)
+  for(let i=0;i<N;i++){const r=rank[i],a=cellPos(i),b=cellPos(r),p=ease(clamp((t-T2-r*.02)/1.1));
+    const x=lerp(a.x,b.x,p),y=lerp(a.y,b.y,p)-Math.sin(Math.PI*p)*22;const moving=p>0&&p<1;
+    const ghost=t>=T5?lerp(1,.35,clamp((t-T5-r*.05)/.4)):1;
+    txt(f1(vals[i]),x,y+4,moving?C.c3:C.ink,`${moving?500:400} ${fs}px ${MONO}`,'center',a0*ghost)}
+  // ── 표준정규 곡선 (가로축과 정렬)
+  const pb=clamp((t-T4)/.8);
+  if(pb>0){const xs0=D.lo,xs1=D.lo+(D.hi-D.lo)*ease(pb),sc=(bellH-14)/pdf(0);
+    txt('표준정규분포 (평균 0, 표준편차 1)',plotX0,bellTop-2,C.muted,`500 11.5px ${SANS}`,'left',pb);
+    ln(plotX0,bellBase,plotX0+S,bellBase,C.muted,1,null,pb);
+    ctx.beginPath();for(let k=0;k<=120;k++){const z=xs0+(xs1-xs0)*k/120,y=bellBase-pdf(z)*sc;k?ctx.lineTo(Px(z),y):ctx.moveTo(Px(z),y)}ctx.strokeStyle=C.c2;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+    // 예시: 1번째 값의 왼쪽 넓이 2.5%
+    const pd=clamp((t-T4-.9)/.6)*(1-clamp((t-T5)/.6));
+    if(pd>0){const zq=th[0];ctx.beginPath();ctx.moveTo(Px(D.lo),bellBase);for(let k=0;k<=40;k++){const z=D.lo+(zq-D.lo)*k/40;ctx.lineTo(Px(z),bellBase-pdf(z)*sc)}ctx.lineTo(Px(zq),bellBase);ctx.closePath();ctx.globalAlpha=.5*pd;ctx.fillStyle=C.c2;ctx.fill();ctx.globalAlpha=1;
+      txt(`왼쪽 넓이 2.5% → z = ${f2(zq)}`,Px(zq)+6,bellBase-sc*pdf(zq)-18,C.c2,`500 12px ${SANS}`,'left',pd);
+      const c=cellPos(0);ln(c.x,c.y+34,Px(zq),bellBase-2,C.c2,1,[3,3],pd*.8)}
+    // 모든 순위의 이론 분위수 표시
+    for(let r=0;r<N;r++){const pm=clamp((t-T4-1.6-r*.06)/.3);if(pm<=0)continue;const x=Px(th[r]);ln(x,bellBase,x,bellBase-sc*pdf(th[r]),C.c2,1,null,pm*.5);
+      ctx.globalAlpha=pm;ctx.fillStyle=C.c2;ctx.beginPath();ctx.moveTo(x,bellBase+1);ctx.lineTo(x-4,bellBase+8);ctx.lineTo(x+4,bellBase+8);ctx.closePath();ctx.fill();ctx.globalAlpha=1}}
+  // ── Q-Q 좌표틀
+  const pf=clamp((t-T5+.6)/.6);
+  if(pf>0){ctx.globalAlpha=pf;ctx.strokeStyle=C.line;ctx.strokeRect(plotX0,plotTop,S,S);ctx.globalAlpha=1;
+    for(let z=Math.ceil(D.lo);z<=Math.floor(D.hi);z++){ln(Px(z),plotTop,Px(z),plotTop+S,C.line,1,null,pf*.6);ln(plotX0,Py(z),plotX0+S,Py(z),C.line,1,null,pf*.6);
+      txt(z,Px(z),plotTop+S+14,C.muted,`10px ${MONO}`,'center',pf);txt(z,plotX0-6,Py(z)+3,C.muted,`10px ${MONO}`,'right',pf)}
+    txt('이론 분위수 (정규분포의 z)',plotX0+S,plotTop+S+30,C.muted,`11px ${SANS}`,'right',pf);
+    ctx.save();ctx.translate(rugX-(L.narrow?10:16),plotTop+S/2);ctx.rotate(-Math.PI/2);txt(lgP>.5?'표본 분위수 (로그 거래가를 표준화)':'표본 분위수 (거래가를 표준화)',0,0,C.muted,`11px ${SANS}`,'center',pf);ctx.restore();
+    ln(rugX,plotTop,rugX,plotTop+S,C.line,1,null,pf)}
+  // ── 기준선 y = x
+  const pl=clamp((t-T7)/1);
+  if(pl>0){const z1=lerp(D.lo,D.hi,ease(pl));ln(Px(D.lo),Py(D.lo),Px(z1),Py(z1),C.c3,2,[7,5],1);
+    txt('기준선: 정규분포라면 점이 이 선 위에',Px(D.lo)+12,Py(D.lo+ (D.hi-D.lo)*.62)+0,C.c3,`500 12px ${SANS}`,'left',clamp((t-T7-.8)/.5)*(1-.6*clamp((t-T8)/.6)))}
+  // ── 표본값 → 왼쪽 눈금 → 점
+  const p8=clamp((t-T8)/.8);
+  let devHi=0,devLo=0;
+  for(let r=0;r<N;r++){const c=cellPos(r),y=Py(sz(r)),x=Px(th[r]);
+    const tr=T5+r*.05,pr2=ease(clamp((t-tr)/.6));
+    if(pr2>0){const fx=lerp(c.x,rugX,pr2),fy=lerp(c.y,y,pr2);ctx.globalAlpha=1;ctx.fillStyle=pr2<1?C.c3:C.c1;ctx.beginPath();ctx.arc(fx,fy,3.4,0,7);ctx.fill()}
+    const tp=T6+r*.15,pp=clamp((t-tp)/.5);
+    if(pp>0){const gA=(1-clamp((t-tp-.9)/.6))*.9;
+      ln(x,bellBase+8,x,lerp(bellBase+8,y,ease(pp)),C.c2,1,[2,3],gA);ln(rugX,y,lerp(rugX,x,ease(pp)),y,C.c1,1,[2,3],gA);
+      const dev=sz(r)-th[r],bad=Math.abs(dev)>.35&&Math.abs(th[r])>.8;if(bad&&dev>0&&th[r]>0)devHi++;if(bad&&dev<0&&th[r]<0)devLo++;
+      const colr=bad&&p8>0?C.c4:C.c1;
+      if(pp>=1){ctx.globalAlpha=1;ctx.fillStyle=colr;ctx.beginPath();ctx.arc(x,y,4.6,0,7);ctx.fill();
+        if(bad&&p8>0){ctx.globalAlpha=p8;ctx.strokeStyle=C.c4;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,9,0,7);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1}}
+      else{ctx.globalAlpha=pp;ctx.fillStyle=C.c3;ctx.beginPath();ctx.arc(x,y,4.6*ease(pp)+1,0,7);ctx.fill();ctx.globalAlpha=1}
+      if(pp<1&&pp>0&&r===Math.min(N-1,Math.floor((t-T6)/.15))){txt(`(${f2(th[r])}, ${f2(sz(r))})`,x+8,y-8,C.c3,`500 11px ${MONO}`,'left',1)}}}
+  if(p8>0){const msg=devHi>=devLo?(devHi?'위로 휨 = 오른쪽 꼬리가 김 (고가 거래)':'점이 기준선을 잘 따름'):'아래로 휨 = 왼쪽 꼬리가 김';
+    txt(msg,Px(D.lo)+10,plotTop+20,devHi||devLo?C.c4:C.c2,`700 13px ${SANS}`,'left',p8)}
+}
+
+// ── 단계와 두 수준 설명
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'거래가 20건',e:'아파트 거래 20건의 가격입니다. 이 가격들이 "종 모양(정규분포)"처럼 퍼져 있는지 확인하는 그림이 Q-Q 플롯입니다.',u:'표본 x₁…x₂₀의 분포가 정규분포를 따르는지(정규성) 시각적으로 진단하려 합니다. Q-Q 플롯은 표본 분위수와 이론 분위수를 짝지어 비교합니다.'},
+ {t:T2,n:'크기순 정렬',s:'작은 값부터 순위 i',e:'가격을 작은 것부터 큰 것까지 줄 세웁니다. 1등부터 20등까지 번호를 붙입니다.',u:'정렬하여 순서통계량 x₍₁₎ ≤ … ≤ x₍₂₀₎을 얻습니다. 각 순서통계량이 표본 분위수가 됩니다.'},
+ {t:T3,n:'누적비율 구하기',s:'(i − 0.5) / n',e:'각 가격이 "전체에서 몇 % 위치"인지 계산합니다. 1등은 2.5%, 10등은 47.5%, 20등은 97.5% 위치입니다.',u:'각 순위에 플로팅 위치 pᵢ = (i − 0.5)/n을 부여합니다. 0과 1을 피하기 위해 0.5를 빼며, 이는 R의 ppoints(n > 10) 기본값입니다.'},
+ {t:T4,n:'정규분포에서 같은 위치 찾기',s:'이론 분위수 z',e:'완벽한 종 모양에서 "왼쪽 넓이가 2.5%가 되는 곳"을 찾으면 −1.96입니다. 20개 위치 모두 이렇게 짝이 되는 z값을 찾습니다.',u:'표준정규분포의 역누적분포함수로 이론 분위수 zᵢ = Φ⁻¹(pᵢ)를 구합니다. 예: Φ⁻¹(0.025) = −1.96.'},
+ {t:T5,n:'표본값 표준화',s:'평균 0, 표준편차 1로',e:'억 단위 가격을 정규분포와 같은 눈금으로 맞추기 위해 "평균에서 표준편차 몇 개만큼 떨어졌나"로 바꿉니다. 왼쪽 세로줄에 찍힙니다.',u:'비교 척도를 맞추기 위해 표본값을 zₓ = (x₍ᵢ₎ − x̄)/s로 표준화합니다. 위치·척도만 바꾸는 선형변환이라 분포 모양은 그대로입니다.'},
+ {t:T6,n:'짝지어 점 찍기',s:'(이론 z, 표본 z)',e:'같은 순위끼리 짝을 지어 점을 찍습니다. 가로 위치는 정규분포에서 찾은 값, 세로 위치는 실제 가격을 바꾼 값입니다.',u:'각 i에 대해 점 (zᵢ, zₓ₍ᵢ₎)을 찍습니다. 두 분위수 함수를 서로 대응시킨 그래프이므로 Quantile-Quantile 플롯이라 부릅니다.'},
+ {t:T7,n:'기준선 긋기',s:'y = x 대각선',e:'가격이 완벽한 종 모양이라면 두 값이 같으므로 점들이 대각선 위에 놓입니다. 이 대각선이 비교 기준입니다.',u:'표본이 정규분포를 따르면 zₓ₍ᵢ₎ ≈ zᵢ이므로 점들이 y = x 근처에 놓입니다. 표준화하지 않았다면 기준선은 y = x̄ + s·z가 됩니다.'},
+ {t:T8,n:'분포 읽기',s:'선에서 벗어난 곳 찾기',e:'',u:''}];
+function readMsg(){const r=lerp(D.rRaw,D.rLog,lgP),sk=lerp(D.skRaw,D.skLog,lgP);
+  if(lv==='e')return lgP>.5?`로그로 바꾼 가격은 점들이 대각선에 훨씬 가까워졌습니다. 집값처럼 한쪽으로 치우친 자료는 로그로 바꾸면 종 모양에 가까워집니다.`:`오른쪽 위의 점들이 대각선보다 위로 올라갔습니다. 아주 비싼 거래가 "종 모양이라면 나올 값"보다 더 비싸다는 뜻이고, 오른쪽 꼬리가 길다는 신호입니다. 아래 "로그 변환 적용" 버튼을 눌러 보세요.`;
+  return lgP>.5?`로그 변환 후 Q-Q 상관 r = ${r.toFixed(3)}, 왜도 ${sk.toFixed(2)}로 직선성이 개선되었습니다. 매매가는 로그정규분포에 가까워, 회귀분석에서 ln(가격)을 종속변수로 쓰는 근거가 됩니다.`:`상단 꼬리의 점들이 기준선 위로 휘는 볼록한 형태로, 양의 왜도(${sk.toFixed(2)})를 보입니다. Q-Q 상관 r = ${r.toFixed(3)}. 정규성 가정이 의심되므로 샤피로-윌크 검정을 병행하고 로그 변환을 검토합니다.`}
+const LEDE={e:'Q-Q 플롯은 "내 자료가 종 모양(정규분포)처럼 생겼나?"를 확인하는 그림입니다. 거래가 20건을 줄 세우고, 완벽한 종 모양이었다면 나왔을 값과 짝지어 점을 찍는 과정을 순서대로 보여줍니다.',u:'Q-Q 플롯(Quantile-Quantile Plot)은 표본 분위수를 이론분포(여기서는 표준정규분포)의 분위수에 대응시켜 정규성을 진단하는 그래프입니다. 순서통계량, 플로팅 위치, 역누적분포함수, 표준화를 거쳐 그래프가 구성되는 과정을 단계별로 보여줍니다.'};
+const AXIS={e:'<p><b>가로축</b>은 "완벽한 종 모양이었다면 이 순위에서 나왔을 값", <b>세로축</b>은 "실제 가격을 같은 눈금으로 바꾼 값"입니다. 둘이 같으면 대각선 위에 점이 찍힙니다.</p>',u:'<p><b>가로축</b>은 이론 분위수 zᵢ = Φ⁻¹(pᵢ), <b>세로축</b>은 표준화한 표본 분위수입니다. 점들의 직선성은 Q-Q 상관계수 r로 요약할 수 있으며, 이는 샤피로-프란시아 검정 통계량의 바탕이 됩니다.</p>'};
+
+// 모양별 읽는 법 (작은 그림)
+const PATS=[
+ {n:'직선',e:'종 모양에 가까움',u:'정규분포에 부합',f:z=>z},
+ {n:'끝이 위로 휨',e:'오른쪽 꼬리가 김 (집값·소득)',u:'양의 왜도 (right-skewed)',f:z=>z+.22*z*z-.22},
+ {n:'끝이 아래로 휨',e:'왼쪽 꼬리가 김',u:'음의 왜도 (left-skewed)',f:z=>z-.22*z*z+.22},
+ {n:'S자 (양끝이 바깥)',e:'양쪽 끝에 극단값이 많음',u:'두꺼운 꼬리, 양의 초과첨도',f:z=>z+.12*z*z*z}];
+function patSvg(f){const W=150,H=110,m=10,X=z=>m+(z+2.2)/4.4*(W-2*m),Y=z=>H-m-(z+2.2)/4.4*(H-2*m);let s=`<line x1="${X(-2.2)}" y1="${Y(-2.2)}" x2="${X(2.2)}" y2="${Y(2.2)}" style="stroke:var(--c3)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+  for(let k=0;k<15;k++){const z=probit((k+.5)/15);s+=`<circle cx="${X(z)}" cy="${Y(clamp(f(z),-2.2,2.2))}" r="3" style="fill:var(--c1)"/>`}return`<svg viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`}
+
+const PC={
+ pro:[
+  {t:'종 모양인지 바로 판단할 수 있다',e:'점이 대각선 위에 있으면 종 모양, 벗어나면 아니라는 것을 한눈에 봅니다. 히스토그램보다 판단이 쉽습니다.',u:'직선으로부터의 이탈로 정규성을 진단합니다. 사람의 눈은 곡선 비교보다 직선 이탈을 훨씬 정확히 감지하므로 히스토그램·밀도곡선보다 민감합니다.',x:'실거래가가 정규분포인지 평균·t검정을 쓰기 전에 <b>먼저 확인</b>.'},
+  {t:'어디가 어긋나는지 알려준다',e:'위쪽 끝이 어긋나는지, 아래쪽 끝이 어긋나는지, 양쪽 다인지 위치까지 알 수 있습니다.',u:'이탈 패턴으로 왜도(한쪽 끝 굽음), 첨도(S자), 이상치(고립점), 이봉성(계단형)을 구분해 진단할 수 있습니다.',x:'고가 아파트 몇 건이 <b>오른쪽 위로 튀어 오르는</b> 모습으로 바로 드러납니다.'},
+  {t:'그리는 사람의 선택이 거의 없다',e:'히스토그램은 구간 폭, 밀도곡선은 종의 폭을 정해야 하지만 Q-Q 플롯은 정할 것이 없어 누가 그려도 같습니다.',u:'구간 폭이나 대역폭 같은 평활 모수가 없어 결과가 유일하게 결정됩니다. 소표본에서도 각 관측치를 그대로 표시합니다.',x:'거래가 <b>20건뿐인</b> 소규모 단지 자료도 그대로 그릴 수 있습니다.'},
+  {t:'분석 전제 확인에 표준으로 쓰인다',e:'회귀분석이나 t검정을 하기 전에 "자료가 조건에 맞나"를 확인할 때 가장 많이 쓰는 그림입니다.',u:'선형회귀의 잔차 정규성, ANOVA·t검정의 정규성 가정 점검에 쓰이는 표준 진단 도구입니다. jamovi도 기술통계와 회귀의 가정 점검 메뉴에서 Q-Q 플롯을 제공합니다.',x:'아파트 가격 회귀모형의 <b>잔차</b>가 정규분포인지 확인.'}],
+ con:[
+  {t:'읽는 법을 따로 배워야 한다',e:'가로·세로가 무엇인지 모르면 처음 보는 사람은 무슨 그림인지 알기 어렵습니다. 보고서를 읽는 일반인에게는 맞지 않습니다.',u:'축이 원 단위가 아닌 분위수라 직관성이 낮습니다. 비전문가 대상 보고에는 히스토그램이 더 적합하며, Q-Q 플롯은 분석가용 진단 도구에 가깝습니다.',x:'시세 보고서에는 Q-Q 플롯보다 <b>히스토그램</b>을 싣습니다.'},
+  {t:'"얼마나 벗어나야 문제인지" 기준이 없다',e:'조금 휜 것이 괜찮은지 안 되는지는 보는 사람마다 다르게 판단할 수 있습니다.',u:'판정이 주관적이며 유의수준이 없습니다. 샤피로-윌크 등 정규성 검정이나 모의 신뢰띠(envelope)와 함께 해석해야 합니다.',x:'jamovi에서 <b>Shapiro-Wilk</b>를 함께 체크해 p값으로 보완.'},
+  {t:'자료가 적으면 정상이어도 휜다',e:'정말 종 모양 자료라도 20개쯤이면 우연히 꽤 휘어 보일 수 있습니다. 반대로 자료가 아주 많으면 작은 차이도 크게 보입니다.',u:'소표본에서는 꼬리 분위수의 표본변동이 커서 정규 자료도 이탈해 보이고, 대표본에서는 실질적으로 무시해도 될 이탈까지 드러납니다. 표본 크기를 고려해 해석해야 합니다.',x:'<b>새 표본 뽑기</b>를 눌러 보면 표본마다 휘는 정도가 다릅니다.'},
+  {t:'분포의 생김새 자체는 안 보인다',e:'"종 모양과 같은가 다른가"만 알려줄 뿐, 가격이 어디에 몰려 있는지는 이 그림만으로 알기 어렵습니다.',u:'기준분포와의 상대 비교만 제공하며 최빈값 위치, 범위 등 분포의 절대적 형태 정보는 직접 드러나지 않습니다. 히스토그램·밀도곡선과 함께 보아야 합니다.',x:'"7~9억에 거래가 많다"는 정보는 <b>히스토그램</b>에서 읽습니다.'},
+  {t:'같은 값이 많으면 계단 모양이 된다',e:'가격을 1억 단위로 반올림한 자료처럼 같은 숫자가 많으면 점들이 계단처럼 층층이 찍혀 읽기 어렵습니다.',u:'동률(ties)이 많은 이산화된 자료는 수평 계단 패턴을 만들어 연속분포와의 비교가 왜곡됩니다. 호가처럼 반올림된 자료는 주의가 필요합니다.',x:'<b>"9억 9천만 원"</b>처럼 특정 금액에 몰린 거래가 많으면 계단이 생깁니다.'}],
+ tip:{e:'<b>정리:</b> Q-Q 플롯은 "종 모양인가?"를 확인하는 데 가장 좋은 그림입니다. 다만 읽는 법이 어렵고 판단 기준이 없으니, 히스토그램과 함께 보고 검정 결과(p값)로 확인하세요.',
+      u:'<b>권장 사용법:</b> ① 분석 전제(정규성) 점검용으로 사용 ② 샤피로-윌크 검정과 병행 ③ 표본 크기를 고려해 해석 ④ 가격·면적처럼 양의 왜도가 있는 변수는 로그 변환 후 다시 확인 ⑤ 보고용 시각화는 히스토그램·상자그림으로 대체.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];$('axisText').innerHTML=AXIS[lv];
+  $('pat').innerHTML=PATS.map(p=>`<figure>${patSvg(p.f)}<figcaption><b>${p.n}</b>${lv==='e'?p.e:p.u}</figcaption></figure>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+let lastLg=-1;
+function ui(){const p=phaseIdx(),lgK=lgP>.5?1:0;
+  if(p!==lastPhase||(p===7&&lgK!==lastLg)){lastPhase=p;lastLg=lgK;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===7?readMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  lgP=Math.abs(lgP-(lgOn?1:0))<.003?(lgOn?1:0):lerp(lgP,lgOn?1:0,.08);
+  draw();ui();requestAnimationFrame(frame)}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('logT').onclick=()=>{lgOn=!lgOn;$('logT').setAttribute('aria-pressed',lgOn);$('logT').textContent=lgOn?'원자료로 되돌리기':'로그 변환 적용';if(t<T6){t=T8;playing=true}lastPhase=-1};
+$('resample').onclick=()=>{seed+=17;sample();layout();t=0;playing=true;lastPhase=-1};
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('qqLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('qqLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+sample();layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

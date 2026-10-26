@@ -1,0 +1,414 @@
+<title>켄달 순위상관 짝 맞추기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&family=Roboto+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: 16:9 플랫 모션그래픽 스테이지(동네 지도 → 산점도) + 컨트롤 + 장면 버튼 + 대본 패널 */
+:root{
+  --bg:#ece4d3; --surface:#fffaf0; --fg:#1d2b4f; --muted:#5f6784; --line:#cfc4ad;
+  --accent:#ef6f5e; --accent-soft:#fbe0d9; --blue:#3d7dd8; --shadow:#1d2b4f;
+  --display:"Black Han Sans","Noto Sans KR","Malgun Gothic",sans-serif;
+  --body:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"Roboto Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#151b2c; --surface:#1f2740; --fg:#eef0f6; --muted:#a4abc2; --line:#36405e;
+  --accent:#ff8676; --accent-soft:#3c2630; --blue:#73a6f0; --shadow:#05070d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#151b2c; --surface:#1f2740; --fg:#eef0f6; --muted:#a4abc2; --line:#36405e;
+  --accent:#ff8676; --accent-soft:#3c2630; --blue:#73a6f0; --shadow:#05070d; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.08em;color:var(--muted)}
+h1{margin:0;font-family:var(--display);font-weight:400;font-size:36px;line-height:1.1;text-wrap:balance}
+.seg{display:inline-flex;border:2px solid var(--fg);border-radius:999px;overflow:hidden;box-shadow:3px 3px 0 var(--shadow)}
+.seg button{font:inherit;border:0;background:var(--surface);color:var(--fg);padding:7px 16px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:#ece4d3;border:2.5px solid var(--fg);border-radius:14px;overflow:hidden;box-shadow:6px 6px 0 var(--shadow)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.btn{font:inherit;font-size:14px;border:2px solid var(--fg);background:var(--surface);color:var(--fg);border-radius:10px;padding:6px 12px;cursor:pointer;box-shadow:2px 2px 0 var(--shadow)}
+.btn:active{transform:translate(2px,2px);box-shadow:none}
+.btn.main{background:var(--accent);color:#fff;min-width:96px}
+.btn[aria-pressed="true"]{background:var(--accent-soft)}
+.btn:focus-visible,.seg button:focus-visible,.scenes button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+select{font:inherit;font-size:14px;border:2px solid var(--fg);background:var(--surface);color:var(--fg);border-radius:10px;padding:5px 8px}
+.scrub{flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:8px}
+.scrub input{flex:1;min-width:0;accent-color:var(--accent)}
+.time{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;white-space:nowrap}
+.scenes{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.scenes button{font:inherit;text-align:left;border:2px solid var(--fg);background:var(--surface);color:var(--fg);border-radius:10px;padding:6px 9px;cursor:pointer;min-width:0}
+.scenes .n{display:block;font-family:var(--display);font-size:15px;color:var(--accent);line-height:1.2}
+.scenes .l{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scenes button[aria-current="true"]{background:var(--fg);color:var(--bg)}
+.scenes button[aria-current="true"] .n{color:var(--accent)}
+@media (max-width:760px){.scenes{grid-template-columns:repeat(4,minmax(0,1fr))}h1{font-size:28px}}
+.script{background:var(--surface);border:2px solid var(--fg);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:4px 4px 0 var(--shadow)}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.tag{font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.script h2{margin:0;font-family:var(--display);font-weight:400;font-size:24px;line-height:1.25}
+.now{margin:0;font-size:16px;line-height:1.85;max-width:72ch}
+.tip{margin:0;font-size:14px;color:var(--muted);border-left:4px solid var(--accent);padding-left:10px}
+details{background:var(--surface);border:2px solid var(--fg);border-radius:14px;padding:10px 16px}
+summary{cursor:pointer;font-weight:700}
+#sAll{margin:10px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:10px}
+#sAll li{cursor:pointer;line-height:1.75;max-width:80ch}
+#sAll li.on{background:var(--accent-soft);border-radius:6px}
+.foot{margin:0;font-size:13px;color:var(--muted)}
+.hint{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(20,26,40,.88);color:#fff;font-size:13px;padding:6px 12px;border-radius:999px;opacity:0;transition:opacity .4s;pointer-events:none;z-index:5}
+.hint.show{opacity:1}
+body.rec{background:#000}
+body.rec .wrap>*:not(.stage){display:none!important}
+body.rec .wrap{max-width:none;padding:0;height:100vh;justify-content:center;align-items:center}
+body.rec .stage{width:min(100vw,177.78vh);border:0;border-radius:0;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.hint{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div><p class="eyebrow">AI 부동산 통계 기초 · 강의 영상 자료</p><h1>켄달 순위상관 짝 맞추기</h1></div>
+    <div class="seg" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+  </header>
+
+  <div class="stage" id="stage"><canvas id="cv" aria-label="켄달 순위상관분석 애니메이션 화면"></canvas></div>
+
+  <div class="ctrl">
+    <button class="btn" id="rew" title="처음으로">⏮ 처음</button>
+    <button class="btn" id="prev" title="이전 장면 (←)">◀ 이전</button>
+    <button class="btn main" id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+    <button class="btn" id="next" title="다음 장면 (→)">다음 ▶</button>
+    <select id="spd" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="0.75">0.75배</option><option value="1" selected>1배</option><option value="1.5">1.5배</option></select>
+    <button class="btn" id="auto" aria-pressed="true" title="장면이 끝나면 자동으로 멈춤">장면마다 멈춤</button>
+    <button class="btn" id="fs">전체화면</button>
+    <button class="btn" id="rec" title="영상 화면만 남기기 (H)">녹화 모드 (H)</button>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="60" step="0.05" value="0" aria-label="재생 위치"><span class="time" id="time">0:00 / 1:00</span></div>
+  </div>
+
+  <div class="scenes" id="scenes"></div>
+
+  <section class="script" aria-live="polite">
+    <div class="head"><span class="tag" id="sTag"></span><button class="btn" id="copy">전체 대본 복사</button></div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+  </section>
+
+  <details><summary>전체 시나리오 보기</summary><ol id="sAll"></ol></details>
+
+  <p class="foot">예시 데이터(아파트 단지 8곳의 전문가 입지평가 순위와 3.3㎡당 실거래가 순위)는 설명을 위해 만든 가상의 수치입니다. τ, 일치쌍·불일치쌍, 정확 검정 p값(8! = 40,320가지 순열 전부), 정규근사 z는 페이지 안에서 직접 계산합니다. 단축키: Space 재생/정지 · ←/→ 장면 이동 · H 녹화 모드</p>
+</div>
+<div class="hint" id="hint">H 키를 누르면 원래 화면으로 돌아옵니다</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d))}
+addEventListener('resize',resize);resize();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 데이터 (가상) : 단지 8곳 · 전문가 입지평가 순위 RX, 실거래가 순위 RY ---------- */
+const NM='ABCDEFGH'.split('');
+const RX=[1,2,3,4,5,6,7,8],RY=[2,1,4,3,6,8,5,7];
+const n=RX.length,NPAIR=n*(n-1)/2;
+const PAIRS=[];for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const s=Math.sign((RX[j]-RX[i])*(RY[j]-RY[i]));PAIRS.push({i,j,s})}
+const C=PAIRS.filter(p=>p.s>0).length,Dn=PAIRS.filter(p=>p.s<0).length,Sk=C-Dn,tau=Sk/NPAIR;
+let d2=0;RX.forEach((v,i)=>d2+=(v-RY[i])**2);const rho=1-6*d2/(n*(n*n-1));
+/* 정확 분포 : 역순(불일치) 개수의 분포 = Mahonian 수 */
+let M=[1];for(let m=2;m<=n;m++){const nx=new Array(M.length+m-1).fill(0);M.forEach((c,k)=>{for(let a=0;a<m;a++)nx[k+a]+=c});M=nx}
+const TOT=M.reduce((a,b)=>a+b,0);
+let ext=0;M.forEach((c,k)=>{if(Math.abs(NPAIR-2*k)>=Math.abs(Sk))ext+=c});const pExact=ext/TOT;
+const varS=n*(n-1)*(2*n+5)/18,zval=Sk/Math.sqrt(varS);
+function erf(x){const t=1/(1+.3275911*Math.abs(x));const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x);return x>=0?y:-y}
+const pZ=2*(1-.5*(1+erf(Math.abs(zval)/Math.SQRT2)));
+const mMax=Math.max(...M);
+const f2=v=>v.toFixed(2),f3=v=>v.toFixed(3);
+const pTxt=pExact<.001?'< .001':f3(pExact);
+
+/* ---------- 색과 글꼴 ---------- */
+const BG='#ece4d3',INK='#1d2b4f',CORAL='#ef6f5e',BLUE='#3d7dd8',MINT='#2bb39a',YEL='#f5c242',MUT='#6d7491',WHITE='#fffaf0',PURP='#7c5cc4';
+const DISP='"Black Han Sans","Noto Sans KR",sans-serif',BODY='"Noto Sans KR",sans-serif',MONO='"Roboto Mono",monospace';
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=t=>t<.5?2*t*t:1-((-2*t+2)**2)/2;
+const back=t=>{const c=1.70158,c3=c+1;return 1+c3*((t-1)**3)+c*((t-1)**2)};
+const lerp=(a,b,m)=>a+(b-a)*m;
+const hp=s=>{const x=Math.sin(s*12.9898+78.233)*43758.5453;return (x-Math.floor(x))*2-1};
+const colOf=r=>{const t=(n-r)/(n-1);return `rgb(${Math.round(156+83*t)},${Math.round(195-84*t)},${Math.round(240-146*t)})`};
+const CC=MINT,DC=CORAL;
+/* ---------- 그리기 도구 (플랫) ---------- */
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function card(x,y,w,h,a,o={}){if(a<=0)return;ctx.save();ctx.globalAlpha=a;const s=o.sh==null?7:o.sh;
+ rr(x+s,y+s,w,h,o.r||16);ctx.fillStyle=INK;ctx.fill();rr(x,y,w,h,o.r||16);ctx.fillStyle=o.fill||WHITE;ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=INK;ctx.stroke();ctx.restore()}
+function txt(s,x,y,o={}){const a=o.a==null?1:o.a;if(a<=0)return;const sz=o.sz||24;
+ ctx.save();ctx.globalAlpha=a;ctx.font=`${o.w||500} ${sz}px ${o.f||BODY}`;ctx.fillStyle=o.c||INK;ctx.textAlign=o.al||'left';ctx.textBaseline=o.bl||'alphabetic';
+ if(o.p!=null&&o.p<1){if(o.p<=0){ctx.restore();return}const W=ctx.measureText(s).width;const x0=o.al==='center'?x-W/2:o.al==='right'?x-W:x;ctx.beginPath();ctx.rect(x0-4,y-sz*1.3,W*o.p+6,sz*1.8);ctx.clip()}
+ ctx.fillText(s,x,y);ctx.restore()}
+function line(x1,y1,x2,y2,o={}){const p=o.p==null?1:clamp(o.p),a=o.a==null?1:o.a;if(p<=0||a<=0)return;
+ ctx.save();ctx.globalAlpha=a;ctx.strokeStyle=o.c||INK;ctx.lineWidth=o.w||3;ctx.lineCap='round';if(o.dash)ctx.setLineDash(o.dash);
+ ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(lerp(x1,x2,p),lerp(y1,y2,p));ctx.stroke();ctx.restore()}
+function dot(x,y,rad,fill,a=1,sc=1){if(a<=0||sc<=0)return;const R=rad*sc;ctx.save();ctx.globalAlpha=a;
+ ctx.fillStyle='rgba(29,43,79,.28)';ctx.beginPath();ctx.arc(x+2.5,y+3,R,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle=fill;ctx.beginPath();ctx.arc(x,y,R,0,Math.PI*2);ctx.fill();ctx.lineWidth=2.4;ctx.strokeStyle=INK;ctx.stroke();ctx.restore()}
+function shop(x,y,s,fill,a=1){if(a<=0||s<=0)return;ctx.save();ctx.globalAlpha=a;ctx.translate(x,y);ctx.scale(s,s);ctx.lineJoin='round';ctx.lineWidth=2.6;
+ ctx.fillStyle='rgba(29,43,79,.28)';ctx.fillRect(-24+4,-18+4,48,44);
+ ctx.fillStyle=WHITE;ctx.strokeStyle=INK;ctx.beginPath();ctx.rect(-24,-8,48,34);ctx.fill();ctx.stroke();
+ ctx.fillStyle=fill;ctx.fillRect(-10,6,20,20);ctx.strokeRect(-10,6,20,20);
+ for(let i=0;i<4;i++){ctx.fillStyle=i%2?WHITE:fill;ctx.beginPath();ctx.moveTo(-26+i*13,-8);ctx.lineTo(-26+i*13,-20);ctx.lineTo(-13+i*13,-20);ctx.lineTo(-13+i*13,-8);ctx.arc(-19.5+i*13,-8,6.5,0,Math.PI);ctx.closePath();ctx.fill();ctx.stroke()}
+ ctx.restore()}
+function pill(s,x,y,a,o={}){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.font=`400 ${o.sz||24}px ${DISP}`;const w=ctx.measureText(s).width+36,h=(o.sz||24)+20;
+ const X0=o.al==='right'?x-w:o.al==='center'?x-w/2:x;rr(X0+4,y+4,w,h,h/2);ctx.fillStyle=INK;ctx.fill();rr(X0,y,w,h,h/2);ctx.fillStyle=o.fill||INK;ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=INK;ctx.stroke();
+ ctx.fillStyle=o.c||WHITE;ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillText(s,X0+18,y+h/2+1);ctx.restore()}
+function badge(s,x,y,a,fill){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.fillStyle=INK;ctx.beginPath();ctx.arc(x+2,y+3,15,0,Math.PI*2);ctx.fill();ctx.fillStyle=fill||YEL;ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fill();ctx.lineWidth=2.4;ctx.strokeStyle=INK;ctx.stroke();
+ ctx.fillStyle=INK;ctx.font=`700 16px ${MONO}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(s,x,y+1);ctx.restore()}
+function gauge(gx,gy,R,val,a,label,col){if(a<=0)return;
+ ctx.save();ctx.globalAlpha=a;const segs=[[-1,-.7,BLUE],[-.7,-.3,'#8fb4e8'],[-.3,.3,'#d8d2c2'],[.3,.7,'#f3a79c'],[.7,1,CORAL]];
+ segs.forEach(s=>{const a0=Math.PI+(s[0]+1)/2*Math.PI,a1=Math.PI+(s[1]+1)/2*Math.PI;ctx.beginPath();ctx.arc(gx,gy,R,a0,a1);ctx.lineWidth=22;ctx.strokeStyle=s[2];ctx.stroke()});
+ ctx.lineWidth=2.4;ctx.strokeStyle=INK;ctx.beginPath();ctx.arc(gx,gy,R+11,Math.PI,2*Math.PI);ctx.stroke();ctx.beginPath();ctx.arc(gx,gy,R-11,Math.PI,2*Math.PI);ctx.stroke();
+ const ang=Math.PI+(val+1)/2*Math.PI;ctx.strokeStyle=INK;ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(gx,gy);ctx.lineTo(gx+Math.cos(ang)*(R-6),gy+Math.sin(ang)*(R-6));ctx.stroke();
+ ctx.fillStyle=INK;ctx.beginPath();ctx.arc(gx,gy,9,0,Math.PI*2);ctx.fill();ctx.restore();
+ txt('−1',gx-R,gy+26,{sz:15,al:'center',f:MONO,a});txt('+1',gx+R,gy+26,{sz:15,al:'center',f:MONO,a});
+ txt(label,gx,gy-R-30,{sz:19,w:700,al:'center',a});txt(f3(val),gx,gy-26,{f:MONO,sz:24,w:700,al:'center',c:col||CORAL,a})}
+
+function apt(x,y,s,fill,a=1){if(a<=0||s<=0)return;ctx.save();ctx.globalAlpha=a;ctx.translate(x,y);ctx.scale(s,s);ctx.lineJoin='round';ctx.lineWidth=2.6;
+ ctx.fillStyle='rgba(29,43,79,.28)';ctx.fillRect(-18+4,-28+4,36,56);
+ ctx.fillStyle=fill;ctx.strokeStyle=INK;ctx.beginPath();ctx.rect(-18,-28,36,56);ctx.fill();ctx.stroke();
+ ctx.fillStyle=WHITE;for(let r=0;r<4;r++)for(let c=0;c<3;c++)ctx.fillRect(-13+c*10,-22+r*12,6,7);
+ ctx.fillStyle=INK;ctx.fillRect(-5,18,10,10);ctx.restore()}
+
+/* ---------- 좌표 ---------- */
+const PL=150,PR=790,PT=130,PB=600;
+const pxr=r=>PL+r/9*(PR-PL),pyr=r=>PB-r/9*(PB-PT);
+const tx=r=>250+(r-1)*112,yT=250,yB=520;
+const items=RX.map((rx,i)=>({i,rx,ry:RY[i],col:colOf(RY[i])}));
+/* 교차점 (불일치쌍) */
+const CROSS=PAIRS.filter(p=>p.s<0).map(p=>{const a1=tx(RX[p.i]),b1=tx(RY[p.i]),a2=tx(RX[p.j]),b2=tx(RY[p.j]);const t=(a2-a1)/((b1-a1)-(b2-a2));const y0=yT+30,y1=yB-36;return{x:a1+t*(b1-a1),y:y0+t*(y1-y0),p}});
+const gx0=905,gy0=205,CS=41;
+const cell=p=>({x:gx0+(p.j-1)*CS,y:gy0+p.i*CS});
+
+/* ---------- 타임라인 ---------- */
+const S=[0,8,16,25,34,43,51,60],END=60;
+let T=0,playing=true,speed=1,level='mid',autoStop=true;
+const sceneIdx=t=>{let k=0;for(let i=0;i<S.length-1;i++)if(t>=S[i])k=i;return k};
+
+/* ---------- 화면 문구 ---------- */
+const pc=v=>Math.round(v*100);
+const TX={
+ mid:{sub:'아파트 단지 8곳 · 가상 데이터',
+  scenes:['켄달 τ란?','순위 산점도','두 곳씩 짝 짓기','같은 방향 · 반대 방향 세기','τ 계산하기','우연일까?','결과표와 쓰는 때'],
+  rowT:'전문가 순위',rowB:'가격 순위',cross:`선이 꼬인 곳 : ${Dn}군데`,q0:'두 순위는 얼마나 같은 방향일까?',
+  xl:'전문가 입지 순위',yl:'실거래가 순위',c1:['점 하나 = 단지 하나','(전문가 순위, 가격 순위)','두 순위가 같으면 대각선 위'],diag:'순위가 똑같은 선',
+  pairT:'두 곳씩 짝 짓기',pairN:`8 × 7 ÷ 2 = ${NPAIR}쌍`,ex1:'둘 다 올라가요 → 같은 방향',ex2:'하나만 올라가요 → 반대 방향',
+  cT:`같은 방향 짝 : `,dT:`반대 방향 짝 : `,crossNote:'반대 방향 짝 = 아까 꼬인 선',
+  f:[`τ = (같은 방향 − 반대 방향) ÷ 전체 짝`,`= (${C} − ${Dn}) ÷ ${NPAIR}`,`= ${f3(tau)}`],
+  fp:`같은 방향 ${pc(C/NPAIR)}%  −  반대 방향 ${pc(Dn/NPAIR)}%  =  ${f3(tau)}`,gT:'켄달 τ',gS:'스피어만 ρ',
+  h0:'질문 : 순위가 아무렇게나 섞여도 이 정도가 나올까?',hl:[`가능한 순서 : 8! = ${TOT.toLocaleString('ko-KR')}가지 전부 계산`,`차이(같은−반대)가 ±${Sk} 이상 : ${ext.toLocaleString('ko-KR')}가지`,`우연일 확률 p = ${f3(pExact)}`,`0.05보다 작아요`],
+  hx:'같은 방향 − 반대 방향 (S)',ours:'우리 단지',verdict:'→ 우연이라고 보기 어려워요',
+  tbT:'순위상관 결과표',tbRows:['켄달 τ','우연일 확률 p'],v1:'전문가',v2:'가격',
+  cmpT:'같은 자료, 두 가지 점수',cmp:`스피어만 ρ = ${f3(rho)}   ·   켄달 τ = ${f3(tau)}`,cmpS:'켄달 τ는 보통 스피어만보다 작게 나와요',
+  whenT:'켄달을 쓰는 때',when:['자료가 적을 때','같은 순위가 많을 때','"확률"로 설명할 때'],
+  whenS:['단지 몇 곳, 전문가 몇 명처럼 작은 자료','등급(상·중·하)처럼 겹치는 순위','같은 방향 짝이 몇 % 더 많은지']},
+ uni:{sub:'아파트 단지 n = 8 · 가상 데이터',
+  scenes:["켄달 순위상관 (τ)",'순위 산점도 (R(x), R(y))','쌍(pair) 구성 n(n−1)/2','일치쌍 C · 불일치쌍 D','τ = (C − D) / [n(n−1)/2]','정확 검정 · 정규근사',"Correlation Matrix (Kendall)"],
+  rowT:'R(X) 평가',rowB:'R(Y) 가격',cross:`교차 수 = 불일치쌍 D = ${Dn}`,q0:'순위의 일치(concordance) 정도는?',
+  xl:'R(X) : 전문가 입지평가 순위',yl:'R(Y) : 3.3㎡당 실거래가 순위',c1:['(R(xᵢ), R(yᵢ)),  i = 1 … 8','동점 없음 (no ties)','완전 일치 시 R(x) = R(y)'],diag:'R(x) = R(y)',
+  pairT:'모든 쌍 (i, j), i < j',pairN:`n(n−1)/2 = ${NPAIR}`,ex1:'(xⱼ−xᵢ)(yⱼ−yᵢ) > 0 → 일치쌍',ex2:'(xⱼ−xᵢ)(yⱼ−yᵢ) < 0 → 불일치쌍',
+  cT:'C (concordant) = ',dT:'D (discordant) = ',crossNote:'D = 순위 연결선의 교차 수',
+  f:['τₐ = (C − D) / [n(n−1)/2]',`= (${C} − ${Dn}) / ${NPAIR}  = ${Sk} / ${NPAIR}`,`= ${f3(tau)}   (동점 없음 → τ_b = τₐ)`],
+  fp:`τ = P(일치) − P(불일치) = ${f3(C/NPAIR)} − ${f3(Dn/NPAIR)}`,gT:"Kendall τ",gS:"Spearman ρ",
+  h0:'H₀ : τ = 0     H₁ : τ ≠ 0',hl:[`S = C − D = ${Sk},  8! = ${TOT.toLocaleString('ko-KR')} 순열 열거`,`P(|S| ≥ ${Sk}) = ${ext.toLocaleString('ko-KR')} / ${TOT.toLocaleString('ko-KR')}`,`정확 p = ${f3(pExact)} (양측)`,`정규근사 z = ${f2(zval)}, p = ${f3(pZ)}`],
+  hx:'H₀ 아래 S의 정확 분포',ours:`S = ${Sk}`,verdict:'→ α = .05에서 H₀ 기각',
+  tbT:'Correlation Matrix',tbRows:["Kendall's Tau B",'p-value'],v1:'평가 순위',v2:'가격 순위',
+  cmpT:'동일 자료 비교',cmp:`Spearman ρ = ${f3(rho)}  vs  Kendall τ = ${f3(tau)}`,cmpS:'일반적으로 |τ| < |ρ| (척도가 다름)',
+  whenT:'켄달을 쓰는 경우',when:['소표본','동점이 많은 서열자료','확률적 해석'],
+  whenS:['정확 분포 계산이 쉽고 안정적','τ_b가 동점을 보정','τ = P(일치) − P(불일치)']}
+};
+
+/* ---------- 배경 ---------- */
+function bgDeco(){ctx.fillStyle=BG;ctx.fillRect(0,0,LW,LH);
+ ctx.fillStyle='rgba(124,92,196,.12)';ctx.beginPath();ctx.arc(1240,40,150,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='rgba(43,179,154,.12)';ctx.beginPath();ctx.arc(30,700,130,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='rgba(245,194,66,.18)';ctx.beginPath();ctx.arc(1180,690,60,0,Math.PI*2);ctx.fill()}
+function header(k,lt,L){txt('켄달 순위상관분석',60,66,{f:DISP,sz:38,w:400});txt(L.sub,62,98,{sz:19,c:MUT});
+ const sl=reduce?1:back(clamp(lt/.55));pill(`${'①②③④⑤⑥⑦'[k]} ${L.scenes[k]}`,1224+(1-sl)*260,34,clamp(lt/.3),{al:'right',fill:PURP,sz:22})}
+
+/* ---------- 축 ---------- */
+function axes(a,p,L){if(a<=0)return;
+ ctx.save();ctx.globalAlpha=a*.5;ctx.strokeStyle='rgba(29,43,79,.12)';ctx.lineWidth=1.5;for(let r=1;r<=8;r++){ctx.beginPath();ctx.moveTo(PL,pyr(r));ctx.lineTo(PR,pyr(r));ctx.stroke()}ctx.restore();
+ line(PL,PB,PR,PB,{p,a,w:3.5});line(PL,PB,PL,PT,{p,a,w:3.5});const ta=a*clamp(p*2-1);
+ for(let r=1;r<=8;r++){txt(String(r),pxr(r),PB+30,{sz:17,al:'center',c:MUT,a:ta,f:MONO});txt(String(r),PL-12,pyr(r)+6,{sz:17,al:'right',c:MUT,a:ta,f:MONO})}
+ txt(L.xl,PR,PB+62,{sz:19,w:700,al:'right',a:ta});txt(L.yl,PL-6,PT-22,{sz:19,w:700,a:ta})}
+function diag(p,a,L){line(pxr(.5),pyr(.5),pxr(8.5),pyr(8.5),{p,a,c:PURP,w:3.5,dash:[12,9]});txt(L.diag,pxr(8.4),pyr(8.4)+34,{sz:17,w:700,al:'right',c:PURP,a:a*clamp(p*2-1)})}
+function label(it,x,y,a){txt(NM[it.i],x,y-36,{f:DISP,sz:18,w:400,al:'center',a,c:INK})}
+
+/* ---------- 두 줄 그림 ---------- */
+function rows(lt,a,L,full){if(a<=0)return;
+ pill(L.rowT,60,yT-24,a*clamp((lt-.3)/.3),{fill:WHITE,c:INK,sz:17});pill(L.rowB,60,yB-24,a*clamp((lt-1.4)/.3),{fill:WHITE,c:INK,sz:17});
+ items.forEach(it=>{const lp=full?1:clamp((lt-2.8-it.i*.12)/.5);if(lp<=0)return;line(tx(it.rx),yT+30,tx(it.ry),yB-36,{p:lp,a,c:INK,w:3})});
+ items.forEach(it=>{const s1=full?1:(reduce?1:back(clamp((lt-.5-it.i*.1)/.4))),s2=full?1:(reduce?1:back(clamp((lt-1.6-it.i*.1)/.4)));
+  apt(tx(it.rx),yT,s1,it.col,a);label(it,tx(it.rx),yT-6,a*clamp(s1));badge(String(it.rx),tx(it.rx)+22,yT-26,a*clamp(s1),WHITE);
+  apt(tx(it.ry),yB,s2,it.col,a);badge(String(it.ry),tx(it.ry)+22,yB-26,a*clamp(s2),YEL);txt(NM[it.i],tx(it.ry),yB+56,{f:DISP,sz:18,w:400,al:'center',a:a*clamp(s2)})})}
+
+/* ---------- 산점도 위 점 / 쌍 ---------- */
+function pts(a){items.forEach(it=>{dot(pxr(it.rx),pyr(it.ry),12,it.col,a);txt(NM[it.i],pxr(it.rx)-18,pyr(it.ry)-14,{f:DISP,sz:17,w:400,al:'right',a})})}
+function pairLine(p,pr,a,w){const A=items[p.i],B=items[p.j];line(pxr(A.rx),pyr(A.ry),pxr(B.rx),pyr(B.ry),{p:pr,a,c:p.s>0?CC:DC,w:w||2.6})}
+function grid(a,fillFn,L){if(a<=0)return;
+ for(let j=1;j<n;j++)txt(NM[j],gx0+(j-1)*CS+CS/2,gy0-12,{f:DISP,sz:17,w:400,al:'center',a});
+ for(let i=0;i<n-1;i++)txt(NM[i],gx0-14,gy0+i*CS+CS/2+7,{f:DISP,sz:17,w:400,al:'right',a});
+ PAIRS.forEach((p,k)=>{const c=cell(p),f=fillFn?fillFn(p,k):0;ctx.save();ctx.globalAlpha=a;
+  ctx.fillStyle=f>0?(p.s>0?CC:DC):WHITE;if(f>0&&f<1)ctx.globalAlpha=a*(.3+.7*f);ctx.fillRect(c.x+2,c.y+2,CS-4,CS-4);ctx.globalAlpha=a;ctx.lineWidth=2;ctx.strokeStyle=INK;ctx.strokeRect(c.x+2,c.y+2,CS-4,CS-4);
+  if(f>=1){ctx.fillStyle=WHITE;ctx.font=`700 20px ${MONO}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.s>0?'+':'−',c.x+CS/2,c.y+CS/2+1)}ctx.restore()})}
+
+/* ---------- 장면 ---------- */
+const EX1=PAIRS.find(p=>p.i===0&&p.j===2),EX2=PAIRS.find(p=>p.i===5&&p.j===6);
+const SC=[];
+SC[0]={front(lt,L){rows(lt,1,L,false);
+ CROSS.forEach((c,k)=>{const pp=reduce?clamp((lt-4.6)/.3):back(clamp((lt-4.6-k*.25)/.4));if(pp<=0)return;ctx.save();ctx.globalAlpha=clamp(pp);ctx.strokeStyle=CORAL;ctx.lineWidth=4;ctx.beginPath();ctx.arc(c.x,c.y,16*pp,0,Math.PI*2);ctx.stroke();ctx.restore()});
+ pill(L.cross,1220,yT+100,clamp((lt-5.8)/.4),{al:'right',fill:CORAL,sz:19});
+ const qa=clamp((lt-6.4)/.4);card(390,600,500,70,qa,{fill:YEL});txt(L.q0,640,645,{f:DISP,sz:L===TX.uni?22:24,w:400,al:'center',a:qa,p:clamp((lt-6.6)/1)})}};
+SC[1]={front(lt,L){const fa=1-ease(clamp(lt/1));if(fa>0){ctx.save();ctx.globalAlpha=fa;rows(9,1,L,true);ctx.restore()}
+ axes(clamp((lt-.6)/.5),clamp((lt-.6)/1.2),L);
+ items.forEach(it=>{const m=ease(clamp((lt-.8-it.i*.1)/1.3));if(m<=0)return;const x=lerp(tx(it.rx),pxr(it.rx),m),y=lerp(yT,pyr(it.ry),m)-Math.sin(m*Math.PI)*60;
+  if(m<1){apt(x,y,1-m,it.col,1-m);dot(x,y,12,it.col,m,.4+.6*m)}else{dot(x,y,12,it.col);txt(NM[it.i],x-18,y-14,{f:DISP,sz:17,w:400,al:'right'})}});
+ diag(clamp((lt-3.4)/1),1,L);
+ const ca=clamp((lt-4.4)/.4);card(850,160,385,200,ca);L.c1.forEach((s,i)=>txt(s,872,212+i*50,{sz:20,w:i===0?700:500,f:i===1&&level==='uni'?MONO:BODY,c:i===2?PURP:INK,a:ca,p:clamp((lt-4.6-i*.7)/.7)}))}};
+SC[2]={front(lt,L){axes(1,1,L);diag(1,.5,L);
+ const e1=clamp((lt-3)/.8),e2=clamp((lt-5.4)/.8);
+ if(e1>0){pairLine(EX1,e1,1,5);if(lt>3.8){const A=items[0],B=items[2];line(pxr(A.rx),pyr(A.ry),pxr(B.rx),pyr(A.ry),{c:CC,w:2,dash:[4,5],a:.8});line(pxr(B.rx),pyr(A.ry),pxr(B.rx),pyr(B.ry),{c:CC,w:2,dash:[4,5],a:.8})}}
+ if(e2>0){pairLine(EX2,e2,1,5);if(lt>6.2){const A=items[5],B=items[6];line(pxr(A.rx),pyr(A.ry),pxr(B.rx),pyr(A.ry),{c:DC,w:2,dash:[4,5],a:.8});line(pxr(B.rx),pyr(A.ry),pxr(B.rx),pyr(B.ry),{c:DC,w:2,dash:[4,5],a:.8})}}
+ pts(1);
+ const ca=clamp((lt-.3)/.4);card(840,112,400,548,ca);txt(L.pairT,862,156,{sz:20,w:700,a:ca});
+ grid(ca*clamp((lt-.6)/.6),(p,k)=>{if(p===EX1)return e1;if(p===EX2)return e2;return 0},L);
+ txt(L.pairN,1040,530,{f:MONO,sz:22,w:700,al:'center',c:PURP,a:clamp((lt-1.6)/.5),p:clamp((lt-1.6)/.9)});
+ txt(L.ex1,862,580,{sz:level==='uni'?16:18,w:700,c:CC,f:level==='uni'?MONO:BODY,p:clamp((lt-3.6)/.8)});
+ txt(L.ex2,862,622,{sz:level==='uni'?16:18,w:700,c:DC,f:level==='uni'?MONO:BODY,p:clamp((lt-6)/.8)})}};
+SC[3]={front(lt,L){axes(1,1,L);
+ PAIRS.forEach((p,k)=>{const pp=clamp((lt-.6-k*.16)/.4);if(pp>0)pairLine(p,pp,.75,2.6)});pts(1);
+ const ca=clamp(lt/.3);card(840,112,400,548,ca);txt(L.pairT,862,156,{sz:20,w:700,a:ca});
+ grid(ca,(p,k)=>clamp((lt-.6-k*.16)/.4),L);
+ const done=PAIRS.filter((p,k)=>lt-.6-k*.16>=.4),cN=done.filter(p=>p.s>0).length,dN=done.length-cN;
+ dot(874,530,11,CC,ca);txt(L.cT+cN,894,538,{sz:21,w:700,a:ca,f:level==='uni'?MONO:BODY});
+ dot(874,574,11,DC,ca);txt(L.dT+dN,894,582,{sz:21,w:700,a:ca,f:level==='uni'?MONO:BODY});
+ txt(L.crossNote,862,628,{sz:17,c:MUT,p:clamp((lt-6.2)/.8)})}};
+SC[4]={front(lt,L){const ca=clamp(lt/.4);card(80,120,1120,540,ca,{fill:WHITE});
+ const sq=31,g0=120;PAIRS.slice().sort((a,b)=>b.s-a.s).forEach((p,k)=>{const pp=reduce?clamp((lt-.5)/.3):back(clamp((lt-.5-k*.06)/.35));if(pp<=0)return;const x=g0+k*(sq+3)+sq/2,y=200;
+  ctx.save();ctx.globalAlpha=clamp(pp);ctx.translate(x,y);ctx.scale(pp,pp);ctx.fillStyle=INK;ctx.fillRect(-sq/2+3,-sq/2+3,sq,sq);ctx.fillStyle=p.s>0?CC:DC;ctx.fillRect(-sq/2,-sq/2,sq,sq);ctx.lineWidth=2;ctx.strokeStyle=INK;ctx.strokeRect(-sq/2,-sq/2,sq,sq);ctx.restore()});
+ const bxC=g0+C*(sq+3);txt(`${level==='mid'?'같은 방향':'C'} ${C}`,g0,252,{sz:19,w:700,c:CC,a:clamp((lt-2.4)/.4)});txt(`${level==='mid'?'반대 방향':'D'} ${Dn}`,bxC,252,{sz:19,w:700,c:DC,a:clamp((lt-2.4)/.4)});
+ L.f.forEach((s,i)=>txt(s,120,330+i*62,{sz:i===0?24:24,w:700,f:i===0&&level==='mid'?BODY:MONO,c:i===2?PURP:INK,p:clamp((lt-2.8-i*.9)/.8)}));
+ card(110,530,620,70,clamp((lt-5.4)/.4),{sh:4,r:12,fill:'#f4efe2'});txt(L.fp,130,574,{sz:level==='uni'?19:18,w:700,f:MONO,p:clamp((lt-5.6)/1)});
+ const ga=clamp((lt-4.6)/.4),k1=reduce?1:back(clamp((lt-4.8)/1.2)),k2=reduce?1:back(clamp((lt-5.3)/1.2));
+ gauge(860,590,95,tau*k1,ga,L.gT,PURP);gauge(1080,590,95,rho*k2,ga,L.gS,MINT)}};
+SC[5]={front(lt,L){const ca=clamp(lt/.4);card(80,120,1120,540,ca,{fill:WHITE});
+ txt(L.h0,120,176,{sz:level==='uni'?26:21,w:700,f:level==='uni'?MONO:BODY,a:ca,p:clamp((lt-.3)/1)});
+ L.hl.forEach((s,i)=>txt(s,120,250+i*54,{sz:level==='uni'?18:20,f:level==='uni'?MONO:BODY,w:i>=2?700:500,c:i===2?CORAL:INK,p:clamp((lt-1.2-i*.9)/.7)}));
+ const G0=620,G1=1160,base=540,H=280,NB=NPAIR+1,bw=(G1-G0)/NB,ga=clamp((lt-1)/.4);if(ga<=0)return;
+ for(let k=0;k<=NPAIR;k++){const Sv=NPAIR-2*k,j=(Sv+NPAIR)/2,g=ease(clamp((lt-1.2-j*.04)/.8)),h=M[k]/mMax*H*g;if(h<=0)continue;const ex=Math.abs(Sv)>=Math.abs(Sk);
+  ctx.save();ctx.globalAlpha=ga;const x=G0+j*bw;ctx.fillStyle=ex?CORAL:'#c9c1ad';ctx.fillRect(x+2,base-h,bw-4,h);ctx.lineWidth=1.6;ctx.strokeStyle=INK;ctx.strokeRect(x+2,base-h,bw-4,h);ctx.restore()}
+ line(G0,base,G1,base,{w:3,a:ga});[-28,-14,0,14,28].forEach(v=>txt(String(v),G0+((v+NPAIR)/2+.5)*bw,base+28,{sz:16,f:MONO,al:'center',c:MUT,a:ga}));
+ txt(L.hx,(G0+G1)/2,base+58,{sz:18,w:700,al:'center',a:ga});
+ const mp=clamp((lt-4.4)/1),xx=G0+((Sk+NPAIR)/2+.5)*bw;if(mp>0){const yy=lerp(base-H-60,base-M[(NPAIR-Sk)/2]/mMax*H-6,reduce?1:back(mp));ctx.save();ctx.globalAlpha=mp;ctx.fillStyle=PURP;ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx-12,yy-26);ctx.lineTo(xx+12,yy-26);ctx.closePath();ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=INK;ctx.stroke();ctx.restore();
+  pill(L.ours,xx+20,base-H-10,clamp((lt-5.2)/.4),{al:'right',fill:YEL,c:INK,sz:18})}
+ txt(level==='mid'?'빨간 막대 = 우리만큼 또는 더 치우친 경우':'빨간 영역 : |S| ≥ 관측값',G1,base-H-30,{sz:16,al:'right',c:CORAL,a:clamp((lt-3)/.5)});
+ txt(L.verdict,120,610,{f:DISP,sz:25,w:400,c:PURP,p:clamp((lt-5.8)/1)})}};
+SC[6]={front(lt,L){const ta=clamp(lt/.4);card(70,120,720,540,ta,{fill:WHITE});
+ txt(L.tbT,100,172,{f:DISP,sz:28,w:400,a:ta});line(100,190,760,190,{w:3,p:clamp((lt-.3)/.6)});
+ const cX=[100,250,540,690];
+ txt(L.v1,cX[2],224,{sz:19,w:700,al:'center',a:ta});txt(L.v2,cX[3],224,{sz:19,w:700,al:'center',a:ta});line(100,238,760,238,{w:1.6,c:MUT,a:ta*.6});
+ txt(L.v1,cX[0],270,{sz:19,w:700,a:clamp((lt-.6)/.4)});txt(L.tbRows[0],cX[1],270,{sz:18,a:clamp((lt-.6)/.4)});txt('—',cX[2],270,{sz:19,al:'center',f:MONO,a:clamp((lt-.6)/.4)});
+ line(100,288,760,288,{w:1.2,c:MUT,a:ta*.4});
+ const vals=[f3(tau),pTxt];
+ txt(L.v2,cX[0],330,{sz:19,w:700,a:clamp((lt-1)/.4)});txt('—',cX[3],330,{sz:19,al:'center',f:MONO,a:clamp((lt-1)/.4)});
+ L.tbRows.forEach((s,i)=>{const ry=330+i*50,pp=clamp((lt-1-i*.45)/.45);const h_=clamp((lt-2.6-i*.4)/.5);
+  if(h_>0){ctx.save();ctx.globalAlpha=.55;ctx.fillStyle=YEL;ctx.fillRect(cX[1]-12,ry-30,(cX[2]+70-cX[1]+12)*h_,42);ctx.restore()}
+  txt(s,cX[1],ry,{sz:18,a:pp});txt(vals[i],cX[2],ry,{sz:20,f:MONO,w:700,al:'center',a:pp,c:i===0?PURP:INK})});
+ line(100,410,760,410,{w:3,p:clamp((lt-2)/.6)});
+ txt(level==='mid'?'* 확률 p는 8! 가지 순서를 모두 따진 정확한 값':`Note. 정확 검정(exact), 동점 없음`,100,446,{sz:16,c:MUT,a:clamp((lt-2.2)/.5)});
+ const ca=clamp((lt-2.8)/.4);card(100,490,660,130,ca,{sh:4,r:12,fill:'#f4efe2'});
+ txt(L.cmpT,124,530,{sz:18,w:700,a:ca});txt(L.cmp,124,572,{sz:20,f:MONO,w:700,p:clamp((lt-3.1)/1)});txt(L.cmpS,124,604,{sz:16,c:MUT,a:clamp((lt-3.8)/.5)});
+ const wa=clamp((lt-4.6)/.4);card(830,120,380,540,wa,{fill:YEL});txt(L.whenT,858,172,{f:DISP,sz:26,w:400,a:wa});
+ L.when.forEach((s,i)=>{const pp=clamp((lt-5-i*.7)/.5),y=236+i*136;if(pp<=0)return;
+  ctx.save();ctx.globalAlpha=pp;ctx.fillStyle=INK;ctx.beginPath();ctx.arc(878,y-8,20,0,Math.PI*2);ctx.fill();ctx.restore();
+  txt(String(i+1),878,y-1,{f:DISP,sz:22,w:400,al:'center',c:YEL,a:pp});txt(s,912,y,{f:DISP,sz:23,w:400,a:pp});
+  const w=L.whenS[i];let cut=w.length;if(w.length>19){cut=w.lastIndexOf(' ',19);if(cut<=0)cut=19}
+  txt(w.slice(0,cut).trim(),860,y+38,{sz:17,a:pp});if(cut<w.length)txt(w.slice(cut).trim(),860,y+64,{sz:17,a:pp})})}};
+
+/* ---------- 프레임 ---------- */
+function frame(){
+ const t=T,k=sceneIdx(t),lt=t-S[k],L=TX[level];
+ ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);
+ bgDeco();
+ if(k>=4){const a=1-.82*ease(clamp(lt/.8));axes(a,1,L);pts(a)}
+ SC[k].front(lt,L);
+ header(k,lt,L);
+}
+
+/* ---------- 대본 ---------- */
+const SCRIPT={
+ mid:[
+  {s:()=>`아파트 단지 8곳이 있어요. 위 줄은 전문가가 매긴 입지 순위, 아래 줄은 실제 가격 순위예요. 같은 단지끼리 선으로 이었더니 선이 꼬인 곳이 ${Dn}군데 생겼어요. 두 순위가 완전히 같다면 선은 하나도 꼬이지 않아요. 켄달 순위상관분석은 이렇게 두 순위가 얼마나 같은 방향으로 맞는지를 보는 방법이에요.`,tip:'"선이 꼬인 곳"이 오늘의 핵심이라고 먼저 예고해 두면 뒤 장면이 쉽게 이어집니다.'},
+  {s:'단지를 그래프 위 점으로 옮겼어요. 옆으로는 전문가 순위, 위로는 가격 순위예요. 두 순위가 똑같은 단지는 보라색 대각선 위에 놓이고, 순위가 어긋날수록 대각선에서 멀어져요. 점들이 대체로 대각선을 따라 올라가고 있죠.',tip:'스피어만 편과 같은 순위 산점도라는 점을 짚고, 이번에는 "짝"을 본다고 예고해 주세요.'},
+  {s:()=>`켄달은 단지를 두 곳씩 짝지어 봐요. 8곳에서 2곳을 고르는 방법은 8 곱하기 7 나누기 2, 모두 ${NPAIR}쌍이에요. 예를 들어 A와 C를 보면 C가 전문가 순위도 높고 가격 순위도 높아요. 둘 다 올라가니 같은 방향 짝이에요. F와 G는 전문가 순위는 G가 높은데 가격 순위는 F가 높아요. 하나만 올라가니 반대 방향 짝이에요.`,tip:'두 점을 이은 선이 오른쪽 위로 가면 같은 방향, 오른쪽 아래로 가면 반대 방향이라고 정리해 주세요.'},
+  {s:()=>`이제 ${NPAIR}쌍을 모두 이어서 세어 봐요. 초록 선은 같은 방향 짝, 빨간 선은 반대 방향 짝이에요. 세어 보면 같은 방향이 ${C}쌍, 반대 방향이 ${Dn}쌍이에요. 반대 방향 짝 ${Dn}개는 처음 장면에서 선이 꼬였던 ${Dn}군데와 정확히 같아요.`,tip:'오른쪽 표의 칸 하나가 짝 하나라는 점을 손가락으로 짚어 가며 보여 주세요.'},
+  {s:()=>`켄달 τ(타우)는 같은 방향 짝에서 반대 방향 짝을 빼고 전체 짝 수로 나눠요. (${C} − ${Dn}) ÷ ${NPAIR} = ${f3(tau)}예요. 같은 방향 짝이 ${pc(C/NPAIR)}%, 반대 방향 짝이 ${pc(Dn/NPAIR)}%이니 그 차이라고 생각해도 돼요. 같은 자료로 구한 스피어만 ρ는 ${f3(rho)}로, 켄달 τ가 더 작게 나와요. 계산 방식이 달라서 생기는 차이예요.`,tip:'τ와 ρ의 숫자 크기를 직접 비교하면 안 되고, 각각의 기준으로 해석해야 한다고 덧붙여 주세요.'},
+  {s:()=>`이 정도 일치가 우연일 수도 있을까요? 단지 8곳의 가격 순서는 모두 ${TOT.toLocaleString('ko-KR')}가지가 가능해요. 이걸 전부 계산해서 그래프로 그렸어요. 우리처럼 차이가 ${Sk} 이상 치우친 경우는 ${ext.toLocaleString('ko-KR')}가지뿐이라, 우연일 확률 p는 ${f3(pExact)}예요. 0.05보다 작으니 우연이라고 보기 어려워요.`,tip:'자료가 작을 때는 가능한 경우를 전부 세는 "정확 검정"을 할 수 있다는 점이 켄달의 장점이라고 설명해 주세요.'},
+  {s:()=>`JAMOVI에서 켄달을 체크하면 이런 결과표가 나와요. τ는 ${f2(tau)}, 우연일 확률은 ${f3(pExact)}예요. 켄달은 자료가 적을 때, 상·중·하 등급처럼 같은 순위가 많을 때, 그리고 "같은 방향 짝이 몇 % 더 많다"처럼 쉽게 설명하고 싶을 때 특히 좋아요.`,tip:'예시 데이터는 설명용 가상 수치라는 점을 한 번 말해 주세요.'}
+ ],
+ uni:[
+  {s:()=>`켄달 순위상관계수 τ(Kendall's tau)는 두 순위 변수 사이의 일치(concordance) 정도를 측정하는 비모수 상관계수입니다. 예시는 아파트 단지 n = 8에 대한 전문가 입지평가 순위 R(X)와 3.3㎡당 실거래가 순위 R(Y)입니다. 두 순위를 선으로 연결했을 때의 교차 수 ${Dn}이 곧 불일치쌍의 수이며, 이것이 τ의 핵심 재료입니다.`,tip:'두 평가자의 순위 일치도(inter-rater agreement)를 볼 때도 자주 쓰인다는 점을 소개해 주세요.'},
+  {s:'순위쌍 (R(xᵢ), R(yᵢ))의 산점도입니다. 동점은 없으며, 완전 일치라면 모든 점이 대각선 R(x) = R(y) 위에 놓입니다. 스피어만은 각 점과 대각선의 거리(dᵢ)를 이용했지만, 켄달은 점들 사이의 상대적 순서를 비교합니다.',tip:'스피어만은 "거리", 켄달은 "순서 비교"라는 대비를 칠판에 적어 두면 좋습니다.'},
+  {s:()=>`모든 쌍 (i, j), i < j를 구성하면 n(n−1)/2 = ${NPAIR}쌍입니다. (xⱼ − xᵢ)(yⱼ − yᵢ) > 0이면 일치쌍(concordant), < 0이면 불일치쌍(discordant), = 0이면 동점쌍입니다. 예를 들어 (A, C)는 두 순위가 모두 증가하는 일치쌍, (F, G)는 방향이 엇갈리는 불일치쌍입니다.`,tip:'두 점을 잇는 선분의 기울기 부호로 일치·불일치를 판정할 수 있다고 설명해 주세요.'},
+  {s:()=>`${NPAIR}쌍을 모두 판정하면 C = ${C}, D = ${Dn}입니다. D는 두 순위 연결선의 교차 수, 즉 순열의 역순(inversion) 수와 같습니다. 동점이 있으면 동점쌍은 C와 D 어디에도 포함되지 않습니다.`,tip:'D가 정렬 알고리즘에서 말하는 inversion 수와 같다는 점을 언급하면 공학 계열 학생들이 흥미를 가집니다.'},
+  {s:()=>`τₐ = (C − D) / [n(n−1)/2] = (${C} − ${Dn}) / ${NPAIR} = ${f3(tau)}입니다. 이는 임의로 뽑은 한 쌍이 일치쌍일 확률 ${f3(C/NPAIR)}에서 불일치쌍일 확률 ${f3(Dn/NPAIR)}을 뺀 값으로 해석됩니다. 동점이 없으므로 τ_b = τₐ입니다. 같은 자료의 Spearman ρ = ${f3(rho)}이며, 일반적으로 |τ| < |ρ|입니다.`,tip:'동점이 있을 때 쓰는 τ_b = (C − D) / √[(n₀ − n₁)(n₀ − n₂)] 공식을 함께 소개할 수 있습니다.'},
+  {s:()=>`H₀: τ = 0에서 S = C − D의 정확 분포는 n! = ${TOT.toLocaleString('ko-KR')}개 순열의 역순 수 분포(Mahonian 수)로 구할 수 있습니다. P(|S| ≥ ${Sk}) = ${ext.toLocaleString('ko-KR')} / ${TOT.toLocaleString('ko-KR')} = ${f3(pExact)}이므로 α = .05에서 H₀를 기각합니다. 대표본에서는 Var(S) = n(n−1)(2n+5)/18을 이용한 정규근사를 쓰며, 이 자료에서 z = ${f2(zval)}, p = ${f3(pZ)}입니다.`,tip:'소표본에서는 정확 p와 근사 p가 꽤 다를 수 있다는 점을 숫자로 비교해 보여 주세요.'},
+  {s:()=>`JAMOVI Correlation Matrix에서 Kendall's tau-b를 선택한 결과 형식입니다. τ_b = ${f3(tau)}, p = ${f3(pExact)}입니다. 보고 예: "전문가 입지평가 순위와 실거래가 순위 사이에는 유의한 양의 순위상관이 있었다, τ_b = ${f2(tau)}, p = ${f3(pExact).replace(/^0/,'')}". 켄달은 소표본, 동점이 많은 서열자료, 확률적 해석이 필요한 경우에 적합합니다.`,tip:'JAMOVI가 켄달 p값을 정확 검정으로 내는지 근사로 내는지는 버전에 따라 다를 수 있으니, 실제 출력값과 비교해 보세요. 숫자는 가상 데이터로 계산했습니다.'}
+ ]};
+const sv=o=>typeof o.s==='function'?o.s():o.s;
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+const scBtns=TX.mid.scenes.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">장면 ${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);$('scenes').appendChild(b);return b});
+function setPlay(p){playing=p;$('play').textContent=p?'❚❚ 일시정지':'▶ 재생'}
+function goScene(i){T=S[i]+.001;setPlay(true)}
+function togglePlay(){if(!playing){if(T>=END-.01)T=0;else{const k=sceneIdx(T);if(S[k+1]-T<.03)T=S[k+1]+.001}}setPlay(!playing)}
+$('play').onclick=togglePlay;cv.onclick=togglePlay;
+$('rew').onclick=()=>{T=0;setPlay(true)};
+const jump=d=>{const k=sceneIdx(T);goScene(clamp(k+d,0,S.length-2))};
+$('prev').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);
+$('spd').onchange=e=>speed=+e.target.value;
+$('auto').onclick=()=>{autoStop=!autoStop;$('auto').setAttribute('aria-pressed',autoStop)};
+$('scrub').oninput=e=>{T=+e.target.value;setPlay(false)};
+$('fs').onclick=()=>{try{if(document.fullscreenElement)document.exitFullscreen();else stage.requestFullscreen().catch(()=>{})}catch(e){}};
+let hintT;function rec(){document.body.classList.toggle('rec');setTimeout(resize,50);const h=$('hint');if(document.body.classList.contains('rec')){h.classList.add('show');clearTimeout(hintT);hintT=setTimeout(()=>h.classList.remove('show'),2200)}else h.classList.remove('show')}
+$('rec').onclick=rec;
+function setLevel(lv){level=lv;$('lvMid').setAttribute('aria-pressed',lv==='mid');$('lvUni').setAttribute('aria-pressed',lv==='uni');scBtns.forEach((b,i)=>b.querySelector('.l').textContent=TX[lv].scenes[i]);uiK=-1;buildAll()}
+$('lvMid').onclick=()=>setLevel('mid');$('lvUni').onclick=()=>setLevel('uni');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+ if(e.code==='Space'){e.preventDefault();togglePlay()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H'||e.key==='ㅗ')rec()});
+function buildAll(){const ol=$('sAll');ol.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TX[level].scenes[i]}</b><br>${sv(o)}<br><small>강의 팁 · ${o.tip}</small>`;li.onclick=()=>goScene(i);ol.appendChild(li)})}
+let uiK=-1;
+function updUI(){const k=sceneIdx(T);$('scrub').value=T;const fm=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;$('time').textContent=`${fm(T)} / ${fm(END)}`;
+ if(k===uiK)return;uiK=k;scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...$('sAll').children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];$('sTag').textContent=`장면 ${k+1} / 7 · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;$('sTitle').textContent=TX[level].scenes[k];$('sNow').textContent=sv(o);$('sTip').textContent='강의 팁 · '+o.tip}
+$('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TX[level].scenes[i]}\n${sv(o)}\n(강의 팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ const done=()=>{btn.textContent='복사했습니다';setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+ try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(all).then(done,()=>{fb();done()});else{fb();done()}}catch(e){fb();done()}};
+buildAll();
+
+/* ---------- 루프 ---------- */
+let last=performance.now();
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+ if(playing){let nt=T+dt*speed;const k=sceneIdx(T);
+  if(nt>=END){nt=END-.001;setPlay(false)}
+  else if(autoStop&&nt>=S[k+1]){nt=S[k+1]-.002;setPlay(false)}
+  T=nt}
+ frame();updUI();requestAnimationFrame(loop)}
+if(document.fonts&&document.fonts.load){Promise.all([document.fonts.load('400 24px "Black Han Sans"'),document.fonts.load('500 20px "Noto Sans KR"'),document.fonts.load('700 20px "Roboto Mono"')]).catch(()=>{})}
+requestAnimationFrame(loop);
+window.__STATS={tau,rho,C,Dn,pExact,zval,pZ,ext,TOT};
+})();
+</script>

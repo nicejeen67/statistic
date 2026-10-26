@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상관행렬 히트맵이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 원자료 표 → 산점도 행렬 → r 숫자 → 색칸 → 삼각형 → 정렬 / 오른쪽 = 선택한 쌍의 산점도 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:560px;touch-action:manipulation}
+@media (max-width:560px){canvas{height:620px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.scale{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:10px;font-size:12px;text-align:center}
+.scale div{padding:6px 2px;border-radius:4px;color:var(--ink)}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:380px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 13 · 관계</div>
+    <h1>상관행렬 히트맵이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="다섯 변수의 상관계수를 산점도 행렬에서 색칸 히트맵으로 바꾸는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 칸에 마우스를 올리거나(휴대폰은 누르기) 하면 그 두 변수의 산점도가 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="표시 범위"><span>보기</span><button id="hT" type="button" aria-pressed="true">아래 삼각형</button><button id="hF" type="button" aria-pressed="false">전체</button></div>
+    <div class="grp seg" role="group" aria-label="변수 순서"><span>순서</span><button id="oO" type="button" aria-pressed="false">원래</button><button id="oS" type="button" aria-pressed="true">비슷한 것끼리</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="23" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>색과 r 읽는 법</h2>
+      <p id="scaleText"></p>
+      <div class="scale" id="scale"></div>
+    </div>
+    <div class="panel">
+      <h2>눈에 띄는 변수 쌍</h2>
+      <p class="note" id="pairNote"></p>
+      <div class="tbl"><table><thead><tr><th>변수 쌍</th><th>r</th><th>해석</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">상관행렬 히트맵을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 단지 자료는 설명용으로 생성한 예시 값(n = 40)이며 실제 자료가 아닙니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const N=40,TOTAL=23,T2=1.8,T3=5.2,T4=7.6,T5=10.2,T6=12.8,T7=15.6,T8=20.2;
+const VARS=['매매가','전용면적','준공연수','역 거리','층수'],UNIT=['억','㎡','년','m','층'];
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f2=v=>v.toFixed(2);
+const R=rng(4040),nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+// 예시 자료(열: 매매가, 면적, 연수, 역거리, 층수)
+const ROWS=Array.from({length:N},()=>{const area=Math.round(40+R()*95),age=Math.round(1+R()*34),dist=Math.round(100+R()*1400),floor=Math.round(clamp(4+(35-age)*.45+nrm()*4,1,35));
+  const price=Math.round(Math.max(2,2.2+.115*area-.075*age-.004*dist+.04*floor+nrm()*1.1)*10)/10;return[price,area,age,dist,floor]});
+const COL=k=>ROWS.map(r=>r[k]);
+function corr(a,b){const n=a.length,ma=a.reduce((s,v)=>s+v,0)/n,mb=b.reduce((s,v)=>s+v,0)/n;let sab=0,saa=0,sbb=0;for(let i=0;i<n;i++){sab+=(a[i]-ma)*(b[i]-mb);saa+=(a[i]-ma)**2;sbb+=(b[i]-mb)**2}return sab/Math.sqrt(saa*sbb)}
+const K=VARS.length,Rm=VARS.map((_,i)=>VARS.map((_,j)=>i===j?1:corr(COL(i),COL(j))));
+const MIN=VARS.map((_,k)=>Math.min(...COL(k))),MAX=VARS.map((_,k)=>Math.max(...COL(k)));
+// 비슷한 것끼리 정렬: 매매가와의 상관 순(양 → 음)
+const ORDER_S=[0,1,2,3,4].sort((a,b)=>Rm[0][b]-Rm[0][a]);
+const posO=VARS.map((_,i)=>i),posS=VARS.map((_,i)=>ORDER_S.indexOf(i));
+// 함정 시연: U자형 관계(r≈0)
+const UX=Array.from({length:40},(_,i)=>i/39*34+1),UY=UX.map(x=>4+.012*(x-17.5)**2*1.2+nrm()*.6),UR=corr(UX,UY);
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',triUser=1,triCur=1,ordUser=1,ordCur=1,ptr=null,sel=[1,0];
+try{const v=localStorage.getItem('heatLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640,lab=narrow?54:72,top=narrow?40:56;
+  const S=narrow?Math.min(W-lab-20,H*0.56):Math.min(W*.56-lab,H-top-60);
+  const mx=narrow?lab+(W-lab-S)/2-lab/2+lab/2:Math.max(lab+16,(W*.6-S-lab)/2+lab);
+  const ix=narrow?20:mx+S+40,iy=narrow?top+S+50:top+20,iw=narrow?W-40:W-ix-24,ih=narrow?H-iy-20:Math.min(S*.75,iw*.9);
+  L={W,H,narrow,lab,top,S,mx,cs:S/K,ix,iy,iw,ih}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return[n>>16&255,n>>8&255,n&255]}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4'),paper:col('--paper'),soft:col('--soft')};
+  const{W,H,narrow,lab,top,S,mx,cs,ix,iy,iw,ih}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  // 상태
+  const tbl=1-clamp((t-T2)/.8);                 // 원자료 표
+  const sc=clamp((t-T2-.4)/1.2);                // 산점도 행렬 등장
+  const rv=clamp((t-T3)/1.2);                   // r 숫자
+  const hm=ease(clamp((t-T4)/1.4));             // 색칸으로
+  let tri;if(t<T5)tri=0;else if(t<T8)tri=ease(clamp((t-T5)/1.2));else tri=triCur;
+  let ord;if(t<T6)ord=0;else if(t<T8)ord=ease(clamp((t-T6)/1.6));else ord=ordCur;
+  const pos=i=>lerp(posO[i],posS[i],ord);
+  const cellXY=(i,j)=>({x:mx+pos(j)*cs,y:top+pos(i)*cs});
+  // ── 1단계: 원자료 표
+  if(tbl>0){const cw=(narrow?W-30:S+lab)/K,x0=narrow?15:mx-lab;txt('원자료: 단지 40곳 × 변수 5개 (처음 10줄)',x0,top-18,C.muted,`500 12px ${SANS}`,'left',a0*tbl);
+    VARS.forEach((v,k)=>txt(`${v}(${UNIT[k]})`,x0+(k+.5)*cw,top+4,C.ink,`700 ${narrow?10:12}px ${SANS}`,'center',a0*tbl));
+    for(let r=0;r<10;r++)ROWS[r].forEach((v,k)=>txt(String(v),x0+(k+.5)*cw,top+28+r*22,C.ink,`${narrow?10:12}px ${MONO}`,'center',a0*tbl*(1-r*.04)));
+    txt('… 30줄 더',x0+cw*2.5,top+28+10*22,C.muted,`11px ${SANS}`,'center',a0*tbl)}
+  // ── 변수 이름(위·왼쪽)
+  const na=clamp((t-T2)/.6);
+  if(na>0)VARS.forEach((v,i)=>{const p=pos(i);txt(v,mx-8,top+(p+.5)*cs+4,C.ink,`700 ${narrow?11:13}px ${SANS}`,'right',na);
+    ctx.save();ctx.translate(mx+(p+.5)*cs,top-8);ctx.rotate(narrow?-Math.PI/5:0);txt(v,0,0,C.ink,`700 ${narrow?11:13}px ${SANS}`,narrow?'left':'center',na);ctx.restore()});
+  // ── 칸
+  const c1=hexToRgb(C.c1),c4=hexToRgb(C.c4);
+  const cellAlpha=(i,j)=>{const upper=pos(j)>pos(i)+.01;return upper?lerp(1,.0,tri):1};
+  for(let i=0;i<K;i++)for(let j=0;j<K;j++){const{x,y}=cellXY(i,j),r=Rm[i][j],ca=cellAlpha(i,j);
+    // 칸 배경
+    ctx.globalAlpha=sc*ca;ctx.fillStyle=C.soft;ctx.fillRect(x+1,y+1,cs-2,cs-2);ctx.globalAlpha=1;
+    if(hm>0&&i!==j){const rgb=r>=0?c1:c4;ctx.globalAlpha=sc*ca*hm*Math.abs(r)*.92;ctx.fillStyle=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;ctx.fillRect(x+1,y+1,cs-2,cs-2);ctx.globalAlpha=1}
+    if(i===j){ctx.globalAlpha=sc*hm*.25;ctx.fillStyle=C.muted;ctx.fillRect(x+1,y+1,cs-2,cs-2);ctx.globalAlpha=1}
+    // 작은 산점도
+    const pa=sc*ca*(1-hm*.9);
+    if(pa>0&&i!==j){const pad=cs*.12;ctx.globalAlpha=pa;ctx.fillStyle=C.ink;
+      for(let n=0;n<N;n++){const px=x+pad+(ROWS[n][j]-MIN[j])/(MAX[j]-MIN[j])*(cs-2*pad),py=y+cs-pad-(ROWS[n][i]-MIN[i])/(MAX[i]-MIN[i])*(cs-2*pad);ctx.fillRect(px-1,py-1,narrow?1.6:2.2,narrow?1.6:2.2)}ctx.globalAlpha=1}
+    // 대각선
+    if(i===j)txt(hm>.5?'1':VARS[i],x+cs/2,y+cs/2+4,C.ink,`700 ${narrow?10:12}px ${hm>.5?MONO:SANS}`,'center',sc*(hm>.5?hm:1-hm*2));
+    // r 숫자
+    if(rv>0&&i!==j){const strong=Math.abs(r)*hm>.55;const tc=strong?'#fff':C.ink;
+      if(hm<.5){ctx.globalAlpha=rv*ca*.85;ctx.fillStyle=C.paper;ctx.fillRect(x+cs/2-22,y+cs/2-10,44,18);ctx.globalAlpha=1}
+      txt(f2(r),x+cs/2,y+cs/2+5,tc,`700 ${narrow?11:Math.min(16,cs*.18)}px ${MONO}`,'center',rv*ca)}}
+  // 5단계 안내: 대칭
+  const p5=(t>=T5&&t<T6)?clamp((t-T5-.6)/.5)*(1-clamp((t-T6+.3)/.3)):0;
+  if(p5>0){const x=mx+S*.75,y=top+S*.18;txt('위쪽 = 아래쪽(같은 값)',x,y,C.c3,`700 13px ${SANS}`,'center',p5);ln(mx,top,mx+S,top+S,C.c3,2,[6,4],p5)}
+  // 색 범례(4단계 이후)
+  if(hm>0){const gx=narrow?20:mx,gy=top+S+18,gw=narrow?W-40:S;const g=ctx.createLinearGradient(gx,0,gx+gw,0);g.addColorStop(0,C.c4);g.addColorStop(.5,C.paper);g.addColorStop(1,C.c1);
+    ctx.globalAlpha=hm;ctx.fillStyle=g;ctx.fillRect(gx,gy,gw,10);ctx.strokeStyle=C.line;ctx.strokeRect(gx,gy,gw,10);ctx.globalAlpha=1;
+    [-1,-.5,0,.5,1].forEach((v,k)=>txt(String(v),gx+gw*(v+1)/2,gy+24,C.muted,`10px ${MONO}`,'center',hm));
+    txt('음(−)의 상관',gx,gy-4,C.c4,`700 11px ${SANS}`,'left',hm);txt('양(+)의 상관',gx+gw,gy-4,C.c1,`700 11px ${SANS}`,'right',hm)}
+  // ── 오른쪽: 선택한 쌍 / 함정 시연
+  const p7=(t>=T7&&t<T8)?clamp((t-T7)/.6)*(1-clamp((t-T8+.4)/.4)):0;
+  // 가리킨 칸 찾기(완성 후)
+  if(t>=T8&&ptr){for(let i=0;i<K;i++)for(let j=0;j<K;j++){if(i===j)continue;if(cellAlpha(i,j)<.3)continue;const{x,y}=cellXY(i,j);if(ptr.x>=x&&ptr.x<x+cs&&ptr.y>=y&&ptr.y<y+cs)sel=[i,j]}}
+  const showSel=(t>=T3&&t<T7)?clamp((t-T3)/.6):(t>=T8?clamp((t-T8)/.5):0);
+  function inset(xs,ys,xl,yl,r,color,a,title){if(a<=0)return;ctx.globalAlpha=a*.95;ctx.fillStyle=C.paper;ctx.fillRect(ix,iy,iw,ih);ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.strokeRect(ix,iy,iw,ih);ctx.lineWidth=1;ctx.globalAlpha=1;
+    txt(title,ix+12,iy+20,color,`700 13px ${SANS}`,'left',a);txt(`r = ${f2(r)}`,ix+iw-12,iy+20,color,`700 15px ${MONO}`,'right',a);
+    const px0=ix+40,py0=iy+34,pw=iw-56,ph=ih-62,x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+    ln(px0,py0+ph,px0+pw,py0+ph,C.muted,1,null,a);ln(px0,py0,px0,py0+ph,C.muted,1,null,a);
+    xs.forEach((v,n)=>{ctx.globalAlpha=a*.8;ctx.fillStyle=color;ctx.beginPath();ctx.arc(px0+(v-x0)/(x1-x0)*pw,py0+ph-(ys[n]-y0)/(y1-y0)*ph,narrow?2.4:3,0,7);ctx.fill();ctx.globalAlpha=1});
+    txt(xl,px0+pw,py0+ph+16,C.muted,`11px ${SANS}`,'right',a);ctx.save();ctx.translate(ix+14,py0+ph/2);ctx.rotate(-Math.PI/2);txt(yl,0,0,C.muted,`11px ${SANS}`,'center',a);ctx.restore()}
+  if(p7>0)inset(UX,UY,'준공연수(년)','매매가(억)',UR,C.c4,p7,'r ≈ 0인데 관계가 없을까?');
+  else if(showSel>0){const[i,j]=sel;const{x,y}=cellXY(i,j);if(t>=T8||t<T7){ctx.strokeStyle=C.c3;ctx.lineWidth=3;ctx.globalAlpha=showSel;ctx.strokeRect(x+1.5,y+1.5,cs-3,cs-3);ctx.lineWidth=1;ctx.globalAlpha=1}
+    inset(COL(j),COL(i),`${VARS[j]}(${UNIT[j]})`,`${VARS[i]}(${UNIT[i]})`,Rm[i][j],Rm[i][j]>=0?C.c1:C.c4,showSel,`${VARS[i]} × ${VARS[j]}`)}
+  if(p7>0&&!narrow){txt('U자 모양 관계: 직선으로는 못 잡아 r이 0에 가까움',ix,iy+ih+20,C.c4,`700 12px ${SANS}`,'left',p7)}
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:'단지 40곳 × 변수 5개',e:'아파트 단지 40곳의 매매가, 전용면적, 준공연수, 역까지 거리, 층수입니다. 숫자가 200개나 되어 표만 봐서는 무엇과 무엇이 관계있는지 알기 어렵습니다.',u:'n = 40, p = 5인 다변량 연속형 자료입니다. 변수 간 이변량 관계는 p(p−1)/2 = 10쌍이며, 이를 한 번에 요약하는 것이 목표입니다.'},
+ {t:T2,n:'두 개씩 짝지어 그리기',s:'산점도 행렬',e:'변수를 두 개씩 짝지어 작은 산점도를 칸마다 그립니다. 가로줄의 변수가 세로, 세로줄의 변수가 가로입니다. 대각선은 자기 자신이라 이름만 적었습니다.',u:'모든 변수 쌍의 산점도를 격자로 배열한 산점도 행렬(scatterplot matrix, SPLOM)입니다. i행 j열 칸은 (xⱼ, xᵢ) 산점도입니다.'},
+ {t:T3,n:'칸마다 r 계산',s:'산점도를 숫자 하나로',e:'칸마다 상관계수 r을 계산해 적습니다. 오른쪽에는 선택한 칸(매매가 × 전용면적)의 산점도를 크게 보여줍니다.',u:'각 쌍의 피어슨 상관계수를 계산해 상관행렬 R을 구성합니다. 대각원소는 1이며 R은 대칭행렬입니다.'},
+ {t:T4,n:'숫자를 색으로',s:'파랑 = +, 빨강 = −',e:'점은 지우고 r 값에 따라 칸을 칠합니다. 파랑은 같이 커지는 관계, 빨강은 반대로 움직이는 관계, 색이 진할수록 관계가 강합니다.',u:'r 값을 발산형(diverging) 색상 척도로 부호화합니다. 0을 중립색(흰색)으로 두고 양·음을 서로 다른 색상, 크기를 채도·명도로 표현합니다.'},
+ {t:T5,n:'반만 남기기',s:'위아래가 같은 값',e:'대각선을 기준으로 위쪽과 아래쪽은 똑같은 값입니다(매매가×면적 = 면적×매매가). 그래서 아래쪽 삼각형만 남겨 깔끔하게 만듭니다.',u:'R의 대칭성(rᵢⱼ = rⱼᵢ)으로 상삼각 또는 하삼각만 제시해도 정보 손실이 없습니다. 잉크 대비 정보량이 개선됩니다.'},
+ {t:T6,n:'비슷한 것끼리 정렬',s:'매매가와의 관계 순',e:'매매가와 같이 커지는 변수를 앞쪽에, 반대로 움직이는 변수를 뒤쪽에 놓도록 순서를 바꿉니다. 파란 칸과 빨간 칸이 덩어리로 모여 읽기 쉬워집니다.',u:'변수 순서를 재배열(seriation)해 유사한 상관 구조를 가진 변수를 인접시킵니다. 계층적 군집 순서나 기준변수와의 상관 순서가 흔히 쓰입니다.'},
+ {t:T7,n:'r = 0의 함정',s:'관계가 없다는 뜻일까?',e:'오른쪽 점들은 분명히 U자 모양의 관계가 있는데 r은 0에 가깝습니다. r은 "곧은 선 모양" 관계만 재기 때문입니다. 색이 옅은 칸도 꼭 산점도를 확인하세요.',u:'피어슨 r은 선형 연관성만 측정합니다. 비단조·비선형 관계(예: 재건축 기대로 노후 단지 가격이 다시 오르는 U자형)는 r ≈ 0으로 나타날 수 있으므로 SPLOM이나 스피어만 상관, 비선형 모형으로 확인해야 합니다.'},
+ {t:T8,n:'완성',s:'상관행렬 히트맵',e:'',u:''}];
+function strongest(){let best=null;for(let i=0;i<K;i++)for(let j=0;j<i;j++)if(!best||Math.abs(Rm[i][j])>Math.abs(best.r))best={i,j,r:Rm[i][j]};return best}
+function finalMsg(){const b=strongest();return lv==='e'?`완성입니다. 가장 진한 칸은 ${VARS[b.i]} × ${VARS[b.j]}(r = ${f2(b.r)})입니다. 칸을 가리키면 오른쪽에 그 두 변수의 산점도가 나옵니다. 위의 "보기"와 "순서" 버튼으로 모양을 바꿔 보세요.`
+  :`완성된 하삼각 상관행렬 히트맵입니다. 최대 |r|은 ${VARS[b.i]}–${VARS[b.j]}(${f2(b.r)}). 회귀모형에 함께 투입할 설명변수 간 |r|이 높으면 다중공선성을 의심하고 VIF로 확인합니다. jamovi에서는 Regression → Correlation Matrix에서 구할 수 있습니다(버전에 따라 메뉴 위치가 다를 수 있음).`}
+const LEDE={e:'상관행렬 히트맵은 여러 변수 사이의 관계를 한 장에 색으로 정리한 그림입니다. 변수를 두 개씩 짝지은 산점도가 숫자(r)가 되고, 숫자가 색칸이 되는 과정을 보여줍니다.',u:'상관행렬 히트맵(correlation heatmap)은 p개 변수의 상관행렬을 발산형 색상 척도로 부호화한 그래프입니다. 산점도 행렬에서 상관계수로의 요약, 색 부호화, 대칭성 활용, 변수 재배열, 선형 상관의 한계를 단계별로 보여줍니다.'};
+const SCALE={e:'r은 −1부터 +1 사이의 숫자입니다. +1에 가까우면 "하나가 크면 다른 것도 크다", −1에 가까우면 "하나가 크면 다른 것은 작다", 0에 가까우면 곧은 선 모양 관계가 거의 없다는 뜻입니다.',u:'|r| 크기에 대한 일반적 해석 기준(분야마다 다름)입니다. 표본 크기에 따라 같은 r이라도 통계적 유의성이 달라지므로 p값이나 신뢰구간을 함께 확인합니다.'};
+const SC=[[-1,'−0.7 이하','강한 음(−)'],[-.5,'−0.7~−0.3','뚜렷한 음(−)'],[0,'−0.3~0.3','약함·거의 없음'],[.5,'0.3~0.7','뚜렷한 양(+)'],[1,'0.7 이상','강한 양(+)']];
+const PC={
+ pro:[
+  {t:'여러 변수의 관계를 한 장에',e:'변수 5개면 짝이 10쌍인데, 산점도 10장 대신 그림 한 장으로 모두 볼 수 있습니다.',u:'p(p−1)/2개의 이변량 관계를 하나의 행렬로 압축해 전체 상관 구조를 조망합니다.',x:'매매가·면적·연수·역거리·층수의 <b>10쌍</b>을 한눈에.'},
+  {t:'강한 관계를 색으로 바로 찾는다',e:'진한 파랑, 진한 빨강 칸만 찾으면 관계가 강한 짝이 바로 보입니다.',u:'색 부호화는 탐색적 분석에서 주목할 변수 쌍을 신속히 선별하게 합니다(pre-attentive processing).',x:'매매가와 가장 진한 칸 = <b>가격을 가장 잘 설명할 후보</b>.'},
+  {t:'회귀분석 준비에 꼭 필요하다',e:'가격을 예측할 때 어떤 변수를 넣을지, 서로 너무 비슷한 변수는 없는지 미리 확인할 수 있습니다.',u:'반응변수와의 상관으로 설명변수 후보를 선별하고, 설명변수 간 고상관으로 다중공선성을 사전 점검합니다.',x:'층수와 준공연수가 강하게 얽혀 있으면 <b>둘 다 넣을지</b> 고민.'},
+  {t:'변수가 많아도 정리된다',e:'변수가 20개가 되어도 순서를 잘 정렬하면 비슷한 변수끼리 덩어리로 보여 정리가 됩니다.',u:'재배열(seriation)과 군집화로 고차원 상관 구조의 블록 패턴을 드러낼 수 있습니다.',x:'상권 분석의 <b>업종 20개</b> 매출 상관 구조 파악.'}],
+ con:[
+  {t:'곧은 선 관계만 잰다',e:'U자 모양처럼 휘어진 관계는 r이 0에 가까워 "관계없음"처럼 보입니다.',u:'피어슨 r은 선형 연관만 포착해 비선형 관계를 놓칩니다. 스피어만·켄달 상관이나 산점도 행렬로 보완합니다.',x:'7단계처럼 <b>준공연수 U자형</b> 가격은 r ≈ 0.'},
+  {t:'원래 점들이 안 보인다',e:'색칸만 보면 튀는 값 하나 때문에 r이 커졌는지 작아졌는지 알 수 없습니다.',u:'요약 통계만 제시되어 이상치·군집·이분산성 같은 분포 정보가 사라집니다. Anscombe 사례처럼 같은 r이 전혀 다른 자료에서 나올 수 있습니다.',x:'칸을 <b>가리켜 산점도</b>를 꼭 확인하세요.'},
+  {t:'색만으로는 정확한 값을 모른다',e:'0.62와 0.71의 색 차이는 눈으로 구분하기 어렵습니다. 색을 잘 구분하지 못하는 사람도 있습니다.',u:'색상·명도 판독은 정밀도가 낮고 색각 이상에 취약합니다. 칸 안에 숫자를 함께 표기하고 색각 친화적 팔레트를 사용합니다.',x:'이 그래프처럼 <b>칸 안에 r 숫자</b>를 함께 적기.'},
+  {t:'관계가 있다고 원인은 아니다',e:'두 변수가 진한 색이어도 하나가 다른 하나의 원인이라는 뜻은 아닙니다. 표본이 작으면 우연히 진하게 나올 수도 있습니다.',u:'상관은 인과를 함의하지 않으며, 히트맵에는 유의성 정보가 없습니다. n이 작으면 r의 표본변동이 커서 유의성 표시(별표)나 신뢰구간이 필요합니다.',x:'단지 <b>40곳</b>으로 구한 r 0.3은 우연일 수 있습니다.'},
+  {t:'이름으로 된 변수는 바로 넣을 수 없다',e:'자치구, 주택유형처럼 이름으로 된 정보는 r을 계산할 수 없어 이 그림에 그대로 넣을 수 없습니다.',u:'피어슨 상관은 연속형(또는 이분형) 변수에 정의됩니다. 범주형 변수는 크래머 V, 상관비(η) 등 별도 연관 측도가 필요합니다.',x:'<b>자치구</b>와 가격의 관계는 상자그림이나 분산분석으로.'}],
+ tip:{e:'<b>정리:</b> 상관행렬 히트맵은 여러 변수 중 "무엇과 무엇이 관계있나"를 빠르게 찾는 지도입니다. 진한 칸을 찾았다면 반드시 산점도로 직접 확인하고, 옅은 칸도 휘어진 관계가 숨어 있지 않은지 살펴보세요.',
+      u:'<b>권장 사용법:</b> ① 하삼각 + 칸 안 r 표기 ② 0 중심 발산형·색각 친화 팔레트 ③ 변수 재배열로 구조 강조 ④ n과 유의성(별표) 병기 ⑤ 주요 쌍은 SPLOM으로 확인 ⑥ 비선형 의심 시 스피어만 상관 ⑦ 설명변수 간 고상관은 VIF로 다중공선성 점검.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];$('scaleText').textContent=SCALE[lv];
+  const c1=hexToRgb(col('--c1')),c4=hexToRgb(col('--c4'));
+  $('scale').innerHTML=SC.map(([v,rg,n])=>{const rgb=v>=0?c1:c4,a=Math.abs(v)*.85;return `<div style="background:rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a});${a>.6?'color:#fff':''}"><b>${rg}</b><br>${n}</div>`}).join('');
+  const pairs=[];for(let i=0;i<K;i++)for(let j=0;j<i;j++)pairs.push({i,j,r:Rm[i][j]});pairs.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+  const interp=(p)=>{const a=Math.abs(p.r),s=p.r>0;if(lv==='e')return a>.7?(s?'강하게 같이 커짐':'강하게 반대로 움직임'):a>.3?(s?'같이 커지는 편':'반대로 움직이는 편'):'곧은 선 관계 약함';return a>.7?'강한 '+(s?'양':'음')+'의 선형 상관':a>.3?'중간 크기의 '+(s?'양':'음')+'의 상관':'약한 상관(비선형 여부 확인)'};
+  $('tbody').innerHTML=pairs.slice(0,6).map(p=>`<tr><td>${VARS[p.i]} × ${VARS[p.j]}</td><td style="font-family:var(--mono);font-weight:500;color:${p.r>=0?'var(--c1)':'var(--c4)'}">${f2(p.r)}</td><td>${interp(p)}</td></tr>`).join('');
+  $('pairNote').textContent=lv==='e'?'|r|이 큰 순서로 6쌍입니다. 숫자 앞의 −는 반대로 움직인다는 뜻입니다.':'절댓값 기준 상위 6쌍입니다(n = 40).';
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  triCur=Math.abs(triCur-triUser)<.003?triUser:lerp(triCur,triUser,.1);ordCur=Math.abs(ordCur-ordUser)<.003?ordUser:lerp(ordCur,ordUser,.08);draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+1;playing=false}lastPhase=-1}
+function setTri(v){triUser=v;$('hT').setAttribute('aria-pressed',v===1);$('hF').setAttribute('aria-pressed',v===0);toEnd()}
+function setOrd(v){ordUser=v;$('oS').setAttribute('aria-pressed',v===1);$('oO').setAttribute('aria-pressed',v===0);toEnd()}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;sel=[1,0];lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('hT').onclick=()=>setTri(1);$('hF').onclick=()=>setTri(0);$('oO').onclick=()=>setOrd(0);$('oS').onclick=()=>setOrd(1);
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('heatLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('heatLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

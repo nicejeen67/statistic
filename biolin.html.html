@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>바이올린 플롯이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 세 구의 세로 분포(점 → 상자 → 바이올린) */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6; --lo:#eef3f9;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:640px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 20 · 분포</div>
+    <h1>바이올린 플롯이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="세 자치구 아파트 매매가 점들이 상자그림을 거쳐 바이올린 플롯으로 바뀌는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 바이올린에 마우스를 올리거나(휴대폰은 누르기) 하면 그 구의 요약값과 봉우리 개수가 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><span>대역폭</span><select id="hSel" aria-label="대역폭"><option value="0">좁게(×0.4)</option><option value="1" selected>보통(×1)</option><option value="2">넓게(×2.5)</option></select></div>
+    <div class="grp"><span>폭 기준</span><select id="wSel" aria-label="바이올린 폭 기준"><option value="0" selected>같은 최대 폭</option><option value="1">표본 수에 비례</option></select></div>
+    <div class="grp"><span>점</span><select id="pSel" aria-label="원자료 점 표시"><option value="1" selected>보이기</option><option value="0">숨기기</option></select></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="27" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>상자그림 · 밀도곡선 · 바이올린 비교</h2>
+      <p class="note" id="cNote"></p>
+      <div class="tbl"><table><thead><tr><th>그래프</th><th>잘 보이는 것</th><th>안 보이는 것</th></tr></thead><tbody id="cBody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>바이올린 플롯 점검표</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">바이올린 플롯을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 매매가는 설명용으로 만든 예시 값이며 실제 통계가 아닙니다(노원은 저가 구축과 고가 신축·재건축 두 무리가 섞인 상황을 가정). 중앙값·사분위수·봉우리 개수는 이 예시 값으로 직접 계산했습니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+// 재현 가능한 난수
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261020);
+const nrm=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const logn=(m,s)=>Math.exp(Math.log(m)+s*nrm());
+let Y0=0,Y1=36,GRID=[];
+const quant=(s,p)=>{const i=(s.length-1)*p,lo=Math.floor(i);return s[lo]+(s[Math.ceil(i)]-s[lo])*(i-lo)};
+function mk(name,arr){const s=[...arr].sort((a,b)=>a-b),n=s.length,mean=s.reduce((a,b)=>a+b,0)/n,sd=Math.sqrt(s.reduce((a,v)=>a+(v-mean)**2,0)/(n-1));
+  const q1=quant(s,.25),q2=quant(s,.5),q3=quant(s,.75),iq=q3-q1,wl=s.find(v=>v>=q1-1.5*iq),wh=[...s].reverse().find(v=>v<=q3+1.5*iq);
+  const h0=.9*Math.min(sd,iq/1.34)*Math.pow(n,-.2);
+  const pts=s.map((v,i)=>({v,u:R()*2-1,dl:R()}));
+  return{name,s,n,mean,sd,q1,q2,q3,wl,wh,h0,pts}}
+const G=[mk('강남',Array.from({length:150},()=>logn(16,.28))),mk('마포',Array.from({length:130},()=>logn(11,.26))),
+ mk('노원',[...Array.from({length:70},()=>logn(6,.2)),...Array.from({length:50},()=>logn(12.5,.1))])];
+// 축 범위: 가장 큰 값을 덮는 6억 단위
+Y1=6*Math.ceil(Math.max(...G.map(g=>g.s[g.n-1]))/6);GRID=Array.from({length:145},(_,i)=>Y0+i*(Y1-Y0)/144);
+function dens(g,h){return GRID.map(y=>g.s.reduce((a,v)=>a+Math.exp(-.5*((y-v)/h)**2),0)/(g.n*h*Math.sqrt(2*Math.PI)))}
+function modes(d){const mx=Math.max(...d),out=[];for(let i=1;i<d.length-1;i++)if(d[i]>d[i-1]&&d[i]>=d[i+1]&&d[i]>mx*.1)out.push(GRID[i]);return out}
+G.forEach(g=>{g.m1=modes(dens(g,g.h0))});
+const HM=[.4,1,2.5];
+const TOTAL=27,T2=3.0,T3=5.4,T4=8.4,T5=13.0,T6=15.0,T7=17.4,T8=24.0;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',hUser=1,wUser=0,pUser=1,ptr=null,hCur=1,wCur=0,ptCur=1;
+try{const v=localStorage.getItem('violinLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640,ml=narrow?40:62,mr=narrow?10:24,pt=narrow?72:56,pb=H-48,cw=(W-ml-mr)/3;
+  L={W,H,narrow,ml,mr,pt,pb,cw,HW:cw*.42,cx:G.map((_,i)=>ml+cw*(i+.5))}}
+const sy=v=>L.pb-(v-Y0)/(Y1-Y0)*(L.pb-L.pt);
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c3:col('--c3'),c4:col('--c4'),c2:col('--c2'),c1:col('--c1')};
+  const GC=[C.c1,C.c2,C.c3];
+  const{W,H,narrow,ml,mr,pt,pb,cw,HW,cx}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const fin=t>=T8;
+  // 상단 안내문(휴대폰은 왼쪽 정렬, 두 줄 허용)
+  const msg=(m,c,a,x0)=>{const ls=m.split('\n');ls.forEach((l,k)=>txt(l,narrow?8:(x0||cx[1]),pt-(ls.length>1?24:12)+k*15,c,`700 ${narrow?11.5:12.5}px ${SANS}`,narrow?'left':'center',a))};
+  // 시연용 대역폭·폭 기준
+  let hT=1,wT=0;if(t>=T7&&t<T8){hT=t<T7+2.2?0:t<T7+4.4?2:1;wT=t>=T7+4.4?1:0}else if(fin){hT=hUser;wT=wUser}
+  // 축
+  const a0=clamp(t/.5);
+  for(let v=0;v<=Y1;v+=Y1>36?8:6){ln(ml,sy(v),W-mr,sy(v),C.line,1,null,a0);txt(String(v),ml-8,sy(v)+4,C.muted,`11px ${MONO}`,'right',a0)}
+  txt('매매가(억원)',ml-(narrow?34:54),narrow?18:pt-32,C.muted,`11px ${SANS}`,'left',a0);
+  G.forEach((g,i)=>{txt(g.name,cx[i],pb+20,C.ink,`700 13px ${SANS}`,'center',a0);txt(`n=${g.n}`,cx[i],pb+36,C.muted,`11px ${MONO}`,'center',a0)});
+  // 진행 값
+  const pBox=ease(clamp((t-T2)/1.4));
+  const pLim=fin?0:clamp((t-T3)/.6)*(1-clamp((t-T4+.3)/.3));
+  const pKer=fin?0:clamp((t-T4)/.8)*(1-clamp((t-T4-3.2)/.6));      // 노원 개별 언덕
+  const pSum=[clamp((t-T4-1.8)/1.2),clamp((t-T4-3.4)/.8),clamp((t-T4-2.6)/1.2)]; // 구별 밀도 반쪽(강남, 마포, 노원)
+  const pMir=ease(clamp((t-T5)/1.2));
+  const pShrink=ease(clamp((t-T6)/1.2));
+  const pFade=clamp((t-T5)/1);
+  const hm=hCur,wm=wCur;
+  const D=G.map(g=>dens(g,g.h0*hm)),dmx=D.map(d=>Math.max(...d)),cnt=G.map((g,i)=>dmx[i]*g.n),cmx=Math.max(...cnt);
+  const wid=(i,k)=>HW*lerp(D[i][k]/dmx[i],D[i][k]*G[i].n/cmx,wm);
+  // 바이올린
+  G.forEach((g,i)=>{const p=fin?1:pSum[i];if(p<=0)return;const lo=g.s[0],hi=g.s[g.n-1];const idx=GRID.map((y,k)=>k).filter(k=>GRID[k]>=lo-.01&&GRID[k]<=hi+.01);
+    const R_=idx.map(k=>[cx[i]+wid(i,k)*p,sy(GRID[k])]),Lf=idx.map(k=>[cx[i]-wid(i,k)*p*pMir,sy(GRID[k])]).reverse();
+    ctx.beginPath();[[cx[i],sy(lo)],...R_,[cx[i],sy(hi)],...Lf].forEach(([x,y],j)=>j?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();
+    ctx.globalAlpha=.28;ctx.fillStyle=GC[i];ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GC[i];ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1});
+  // 노원 개별 언덕(커널)
+  if(pKer>0){const g=G[2],h=g.h0*hm,step=Math.max(1,Math.floor(g.n/14));for(let j=0;j<g.n;j+=step){const v=g.s[j];ctx.globalAlpha=pKer*.8;ctx.strokeStyle=C.c4;ctx.beginPath();
+      for(let k=0;k<=40;k++){const y=v-3*h+6*h*k/40,x=cx[2]+Math.exp(-.5*((y-v)/h)**2)*HW*.35;k?ctx.lineTo(x,sy(y)):ctx.moveTo(x,sy(y))}ctx.stroke();ctx.globalAlpha=1}
+    txt('점마다 작은 언덕',cx[2],sy(g.s[g.n-1]+2*h)-8,C.c4,`700 12px ${SANS}`,'center',pKer)}
+  // 점
+  const pVis=fin?ptCur:1;
+  G.forEach((g,i)=>g.pts.forEach(q=>{const dl=i*.75+q.dl*.7,pf=ease(clamp((t-dl)/.55));if(pf<=0)return;
+    const k=Math.round((q.v-Y0)/(Y1-Y0)*144),wIn=wid(i,k)*(fin?1:pSum[i])*.85;
+    const x=cx[i]+q.u*lerp(HW*.38,wIn,pMir),y=lerp(pt-24,sy(q.v),pf);
+    ctx.globalAlpha=pf*lerp(.8,.35,pFade)*pVis;ctx.fillStyle=pLim>0&&i===2?C.c4:GC[i];ctx.beginPath();ctx.arc(x,y,narrow?1.8:2.3,0,7);ctx.fill();ctx.globalAlpha=1}));
+  // 상자그림
+  if(pBox>0)G.forEach((g,i)=>{const bw=lerp(HW*.55,narrow?7:10,pShrink),x=cx[i];const a=pBox,c=pShrink>0?C.ink:GC[i];
+    ln(x,sy(g.wh),x,sy(g.q3),C.ink,1.4,null,a);ln(x,sy(g.q1),x,sy(g.wl),C.ink,1.4,null,a);
+    if(pShrink<1){ln(x-bw/4,sy(g.wh),x+bw/4,sy(g.wh),C.ink,1.4,null,a*(1-pShrink));ln(x-bw/4,sy(g.wl),x+bw/4,sy(g.wl),C.ink,1.4,null,a*(1-pShrink))}
+    const yt=lerp(sy(g.q2),sy(g.q3),a),yb=lerp(sy(g.q2),sy(g.q1),a);ctx.globalAlpha=a*(pShrink>0?.9:.55);ctx.fillStyle=c;ctx.fillRect(x-bw/2,yt,bw,yb-yt);ctx.globalAlpha=a;ctx.strokeStyle=C.ink;ctx.lineWidth=1.4;ctx.setLineDash(pLim>0&&i===2?[4,3]:[]);ctx.strokeRect(x-bw/2,yt,bw,yb-yt);ctx.setLineDash([]);ctx.lineWidth=1;
+    if(pShrink<.5)ln(x-bw/2,sy(g.q2),x+bw/2,sy(g.q2),C.ink,2.5,null,a*(1-pShrink*2));
+    if(pShrink>0){ctx.globalAlpha=pShrink;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,sy(g.q2),narrow?3:3.8,0,7);ctx.fill();ctx.strokeStyle=C.ink;ctx.stroke()}ctx.globalAlpha=1;
+    g.s.filter(v=>v>g.wh||v<g.wl).forEach(v=>{ctx.globalAlpha=a*(1-pShrink*.6);ctx.strokeStyle=C.c4;ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(x,sy(v),3,0,7);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1});
+    if(!fin&&t<T3)txt(`${narrow?'':'중앙값 '}${g.q2.toFixed(1)}`,x+bw/2+6,sy(g.q2)+4,C.ink,`700 11px ${SANS}`,'left',clamp((t-T2-1.2)/.4))});
+  // 3단계: 한계
+  if(pLim>0){const g=G[2],x=cx[2]+HW*.5;g.m1.forEach((m,k)=>{ln(x-4,sy(m),x+10,sy(m),C.c4,2,null,pLim);txt(`${narrow?'':'무리 '}${k+1}`,x+14,sy(m)+4,C.c4,`700 12px ${SANS}`,'left',pLim)});
+    msg('상자 하나로는 두 무리가 보이지 않음',C.c4,pLim,cx[2])}
+  // 4단계 이후 안내
+  if(!fin&&t>=T4+1.8&&t<T5)msg('언덕들을 더하면 → 밀도곡선(반쪽)',C.c4,clamp((t-T4-1.8)/.4));
+  if(!fin&&t>=T5&&t<T6)msg('반대쪽에 거울처럼 복사 → 바이올린 모양',C.c4,1);
+  if(!fin&&t>=T6&&t<T7)msg('흰 점 = 중앙값 · 검은 막대 = Q1~Q3',C.ink,clamp((t-T6-.6)/.4));
+  if(!fin&&t>=T7){const m=t<T7+2.2?'대역폭 좁게(×0.4): 울퉁불퉁, 가짜 봉우리':t<T7+4.4?'대역폭 넓게(×2.5): 노원의 두 봉우리가 사라짐':'폭을 표본 수에 비례: 표본이 적은 노원이 좁아짐';msg(narrow?m.replace(': ',':\n'):m,C.c4,1)}
+  if(fin){const hm2=HM[hUser],mm=G.map((g,i)=>modes(D[i]).length);msg(`대역폭 ×${hm2} · 폭: ${wUser?'표본 수 비례':'같은 최대 폭'}${narrow?'\n':' · '}봉우리 수 ${G.map((g,i)=>g.name+' '+mm[i]).join(', ')}`,C.muted,1)}
+  // 가리키기
+  if(fin&&ptr){const i=G.findIndex((_,j)=>Math.abs(ptr.x-cx[j])<cw/2&&ptr.y>pt&&ptr.y<pb);if(i>=0){const g=G[i],mm=modes(D[i]);
+    const lines=[[`${g.name}구 · n=${g.n}`,`700 13px ${SANS}`,C.ink],[`중앙값 ${g.q2.toFixed(1)}억 · 평균 ${g.mean.toFixed(1)}억`,`12px ${SANS}`,C.ink],[`Q1~Q3 ${g.q1.toFixed(1)} ~ ${g.q3.toFixed(1)}억`,`12px ${SANS}`,C.ink],[`봉우리 ${mm.length}개 (${mm.map(m=>m.toFixed(1)+'억').join(', ')})`,`700 12px ${SANS}`,mm.length>1?C.c4:C.muted]];
+    const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=ptr.x+14,y0=ptr.y+14;if(x0+bw2>W-6)x0=ptr.x-14-bw2;if(x0<4)x0=4;if(y0+bh2>H-6)y0=ptr.y-14-bh2;
+    ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c],k)=>txt(s0,x0+10,y0+20+k*18,c,f,'left',1))}}
+  return{hT,wT}}
+
+const STEPS=[
+ {t:0,n:'원자료 찍기',s:'세 구의 매매가 점',e:'강남·마포·노원 아파트의 매매가를 점으로 찍습니다. 점 하나가 거래 한 건입니다. 점이 많이 몰린 높이가 흔한 가격대입니다.',u:'세 집단의 연속형 관측치를 지터(jitter)를 준 띠 그림(strip plot)으로 표시합니다. 집단 간 분포 비교가 목표입니다.'},
+ {t:T2,n:'상자그림 그리기',s:'중앙값과 사분위수',e:'앞에서 배운 상자그림을 그립니다. 가운데 굵은 선이 중앙값, 상자가 가운데 50% 범위입니다.',u:'Q1·중앙값·Q3와 1.5×IQR 수염으로 다섯 숫자 요약을 표현합니다. 위치·산포·이상치 비교에 효율적입니다.'},
+ {t:T3,n:'상자그림의 한계',s:'두 무리가 안 보임',e:'노원의 점을 보면 싼 집 무리와 비싼 집 무리, 두 덩어리로 나뉘어 있습니다. 그런데 상자그림은 상자 하나라서 이 사실이 전혀 보이지 않습니다.',u:'다섯 숫자 요약은 분포의 모양(다봉성)을 담지 못합니다. 노원은 이봉(bimodal) 분포지만 상자그림만으로는 단봉 분포와 구별되지 않습니다.'},
+ {t:T4,n:'밀도 만들기',s:'점마다 언덕 → 합치기',e:'밀도곡선 만들 때처럼 점 하나마다 작은 언덕을 세우고(분홍 선), 모두 더하면 매끄러운 곡선이 됩니다. 이 곡선을 세로로 세웠습니다. 폭이 넓은 곳이 집이 많이 거래된 가격대입니다.',u:'가우시안 커널밀도추정 f̂(y)=1/(nh)ΣK((y−yᵢ)/h)을 세로 방향으로 계산합니다. 대역폭 h는 실버만 규칙(0.9·min(s, IQR/1.34)·n^−1/5)을 썼습니다.'},
+ {t:T5,n:'좌우 대칭으로',s:'바이올린 모양 완성',e:'곡선을 반대쪽에 거울처럼 그대로 복사합니다. 그러면 악기 바이올린 같은 모양이 됩니다. 양쪽이 같으니 정보가 늘어난 것은 아니고, 보기 좋게 만든 것입니다.',u:'밀도를 대칭으로 반사해 폐곡선을 만듭니다. 대칭은 정보량을 늘리지 않으며 시각적 균형을 위한 관례입니다. 관측 범위 밖은 잘라냈습니다(trim).'},
+ {t:T6,n:'상자 넣기',s:'흰 점=중앙값',e:'상자그림을 가늘게 줄여 바이올린 안에 넣습니다. 흰 점이 중앙값, 검은 막대가 가운데 50% 범위입니다. 이제 요약값과 모양을 한 번에 봅니다.',u:'밀도 형태와 다섯 숫자 요약을 결합합니다. 바이올린 플롯 = 상자그림 + 회전된 대칭 밀도추정(Hintze & Nelson, 1998).'},
+ {t:T7,n:'바이올린의 함정',s:'대역폭, 폭 기준',e:'① 대역폭(언덕의 폭)을 좁히면 울퉁불퉁해져서 없는 봉우리가 생기고, 넓히면 노원의 두 봉우리가 사라집니다. ② 모든 바이올린을 같은 폭으로 그리면 자료가 몇 개인지 알 수 없습니다. 표본 수에 비례하게 그리면 노원이 좁아집니다.',u:'① 대역폭 과소는 과적합(가짜 봉우리), 과대는 과평활(봉우리 소실)을 일으킵니다. ② 폭 정규화 방식(동일 최대폭 vs 표본 수 비례, ggplot의 scale="width"/"count")에 따라 집단 크기 인상이 달라집니다.'},
+ {t:T8,n:'완성',s:'세 구의 바이올린 플롯',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 위의 "대역폭", "폭 기준", "점"을 바꿔 보세요. 대역폭을 넓히면 노원의 두 봉우리가 하나로 뭉개지는 것을 확인할 수 있습니다. 바이올린에 마우스를 올리면 봉우리 개수가 나옵니다.':'완성입니다. 대역폭·폭 정규화 방식을 바꿔 형태 민감도를 확인하세요. 보고 시 대역폭(규칙), 폭 기준, 집단별 n을 명시하고, 표본이 적으면 원자료 점을 함께 표시합니다.'}
+const LEDE={e:'바이올린 플롯은 상자그림 양옆에 밀도곡선을 붙인 그래프입니다. 상자그림으로는 안 보이는 "가격대가 두 덩어리로 나뉜 모습"까지 보여줍니다. 세 구의 아파트 매매가 점이 상자그림을 거쳐 바이올린으로 바뀌는 과정을 따라가 봅니다.',u:'바이올린 플롯은 집단별 커널밀도추정을 대칭 형태로 회전 배치하고 다섯 숫자 요약을 겹친 분포 비교 도구입니다. 상자그림의 다봉성 은폐 문제, 커널 합성, 대칭 반사, 대역폭과 폭 정규화 민감성을 단계별로 보여줍니다.'};
+const CMP=[['상자그림',{e:'중앙값, 가운데 50% 범위, 이상치',u:'다섯 숫자 요약, 이상치'},{e:'봉우리 개수, 모양',u:'다봉성, 분포 형태'}],['밀도곡선',{e:'봉우리 개수와 위치, 모양',u:'분포 형태, 다봉성'},{e:'중앙값·사분위수(따로 표시해야 함), 여러 집단이면 겹쳐서 복잡',u:'요약 통계, 다집단 비교 시 중첩'}],['바이올린 플롯',{e:'모양 + 중앙값 + 범위를 여러 집단 나란히',u:'형태와 요약의 결합, 다집단 병렬 비교'},{e:'표본 수(따로 적어야 함), 정확한 개별값',u:'n(폭 정규화에 따라), 개별 관측치'}]];
+const CHK={e:['구마다 자료 개수(n)를 적었나요?','대역폭을 바꿔 봐도 봉우리 모양이 비슷한가요?','자료가 적은(수십 개 이하) 구는 점을 함께 보여줬나요?','바이올린 폭이 "같은 최대 폭"인지 "개수 비례"인지 적었나요?','실제 자료가 없는 범위까지 곡선이 늘어나지 않았나요?'],
+ u:['집단별 표본 크기 n을 명시했는가','대역폭(규칙·배수)을 밝히고 민감도를 확인했는가','소표본 집단은 원자료(strip/jitter)를 병기했는가','폭 정규화 방식(width/count/area)을 명시했는가','관측 범위 밖 밀도를 잘라냈는가(trim)']};
+const PC={
+ pro:[
+  {t:'상자그림이 숨기는 모양을 보여준다',e:'노원처럼 싼 집과 비싼 집이 두 무리로 나뉜 모습이 바로 보입니다. 상자그림만 보면 놓칩니다.',u:'다봉성·비대칭·꼬리 형태 등 분포 형태 정보를 다섯 숫자 요약과 함께 제공합니다.',x:'노원 <b>봉우리 2개</b>(구축 vs 신축·재건축).'},
+  {t:'여러 집단을 나란히 비교하기 좋다',e:'밀도곡선 여러 개를 겹쳐 그리면 복잡하지만, 바이올린은 옆으로 나란히 세워 깔끔하게 비교합니다.',u:'다집단 밀도의 중첩 문제를 병렬 배치로 해결하며 공통 y축으로 위치 비교가 쉽습니다.',x:'자치구·평형·준공연도 구간별 가격 분포.'},
+  {t:'요약값도 함께 읽는다',e:'안에 넣은 흰 점(중앙값)과 막대(가운데 50%)로 상자그림의 정보도 그대로 볼 수 있습니다.',u:'중앙값·IQR을 내장해 형태와 위치·산포 통계를 동시에 해석합니다.',x:'강남 중앙값이 마포보다 높고 범위도 넓음.'},
+  {t:'JAMOVI 등에서 바로 그릴 수 있다',e:'JAMOVI의 기술통계 메뉴에서 체크 하나로 그릴 수 있어 실습하기 쉽습니다.',u:'JAMOVI(기술통계 → 도표 → 바이올린), R ggplot2(geom_violin), Python seaborn(violinplot) 등에서 지원됩니다.',x:'JAMOVI <b>기술통계 → 도표 → 바이올린</b>.'}],
+ con:[
+  {t:'대역폭에 따라 모양이 달라진다',e:'언덕 폭을 좁히면 없는 봉우리가 생기고, 넓히면 있는 봉우리가 사라집니다.',u:'커널밀도추정의 대역폭 선택에 민감합니다. 과소평활은 가짜 봉우리, 과대평활은 실제 다봉성을 숨깁니다.',x:'7단계 <b>×0.4 vs ×2.5</b> 비교.'},
+  {t:'자료 개수가 보이지 않는다',e:'자료가 10개든 1000개든 같은 크기 바이올린이 될 수 있어서, 적은 자료를 믿을 만해 보이게 합니다.',u:'동일 최대폭 정규화에서는 n 정보가 사라집니다. 소표본의 밀도추정은 불안정하므로 n 표기·원자료 병기가 필요합니다.',x:'폭 기준 <b>표본 수 비례</b>로 바꿔 보기.'},
+  {t:'없는 값까지 그려질 수 있다',e:'곡선을 매끄럽게 만들다 보면 실제로 거래가 없던 가격대(심지어 0 아래)까지 바이올린이 늘어날 수 있습니다.',u:'커널 꼬리가 관측 범위 밖으로 확장됩니다. 범위 절단(trim)이나 경계 보정이 필요합니다.',x:'이 페이지는 최솟값~최댓값에서 <b>잘라냄</b>.'},
+  {t:'처음 보는 사람에게 낯설다',e:'일반인에게는 상자그림보다 익숙하지 않아 읽는 법을 따로 설명해야 합니다.',u:'형태 판독에 학습이 필요하며 정밀한 값 비교에는 부적합합니다. 비전문가 보고서에는 히스토그램·상자그림이 더 안전할 수 있습니다.',x:'범례에 <b>흰 점=중앙값</b> 설명 넣기.'}],
+ tip:{e:'<b>정리:</b> 바이올린 = 상자그림 + 밀도곡선. 구마다 자료 개수를 적고, 대역폭을 바꿔도 봉우리가 그대로인지 확인하고, 자료가 적으면 점을 함께 보여주세요.',
+      u:'<b>권장 사용법:</b> ① 집단별 n 명시 ② 대역폭 규칙·민감도 확인 ③ 소표본은 원자료 병기 ④ 폭 정규화 방식 명시 ⑤ 관측 범위로 절단 ⑥ 다봉성이 보이면 하위집단(신축/구축 등)으로 나눠 원인 분석.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('cNote').textContent=lv==='e'?'세 그래프는 같은 자료를 다르게 요약합니다.':'표현 방식별 보존·손실 정보입니다.';
+  $('cBody').innerHTML=CMP.map(([n,a,b])=>`<tr><td><b>${n}</b></td><td>${a[lv]}</td><td>${b[lv]}</td></tr>`).join('');
+  $('chkNote').textContent=lv==='e'?'바이올린 플롯을 만들거나 읽을 때 다섯 가지를 확인하세요.':'작성·판독 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now(),snap=true;
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  const {hT,wT}=draw();const k=snap?1:Math.min(1,dt*4);snap=false;hCur=lerp(hCur,HM[hT],k);wCur=lerp(wCur,wT,k);ptCur=lerp(ptCur,t>=T8?pUser:1,k);ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.6;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;snap=true});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1;snap=true};
+$('speed').onchange=e=>speed=+e.target.value;
+$('hSel').onchange=e=>{hUser=+e.target.value;toEnd()};$('wSel').onchange=e=>{wUser=+e.target.value;toEnd()};$('pSel').onchange=e=>{pUser=+e.target.value;toEnd()};
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1;snap=true};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('violinLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('violinLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

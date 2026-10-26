@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>덤벨 차트가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 왼쪽 구별 줄(점 → 덤벨) / 오른쪽 읽기 패널 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6; --lo:#eef3f9;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:640px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 22 · 비교</div>
+    <h1>덤벨 차트가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="10개 구의 2024년과 2025년 평균 매매가 점을 선으로 이어 덤벨 차트를 만드는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 줄에 마우스를 올리거나(휴대폰은 누르기) 하면 그 구의 두 시점 값과 변화량·변화율이 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><span>정렬</span><select id="oSel" aria-label="정렬 기준"><option value="0" selected>변화량(억원)</option><option value="1">변화율(%)</option><option value="2">2025년 가격</option><option value="3">처음 순서</option></select></div>
+    <div class="grp"><span>변화 표시</span><select id="cSel" aria-label="변화 표시 단위"><option value="0" selected>억원</option><option value="1">%</option></select></div>
+    <div class="grp"><span>모양</span><select id="fSel" aria-label="그래프 모양"><option value="0" selected>덤벨</option><option value="1">묶음 막대</option></select></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="26" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>전후 비교 그래프 고르기</h2>
+      <p class="note" id="cNote"></p>
+      <div class="tbl"><table><thead><tr><th>그래프</th><th>잘 보이는 것</th><th>약한 점</th></tr></thead><tbody id="cBody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>덤벨 차트 점검표</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">덤벨 차트를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 구별 평균 매매가(각 연도 4분기 기준, 억원)와 분기별 흐름은 설명용으로 만든 예시 값이며 실제 통계가 아닙니다. 변화량·변화율은 이 값으로 직접 계산했습니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+// [구, 2024, 2025, 분기 흐름(24.4Q, 25.1Q~4Q)]
+const D=[['강남',25.8,27.4],['서초',25.3,25.9],['송파',18.9,19.8],['용산',20.4,21.3],['성동',13.2,15.1],['마포',12.9,14.2],['강서',9.0,9.3],['관악',7.4,7.2],['노원',6.6,6.4],['도봉',5.7,5.3]].map(([n,a,b],i)=>({n,a,b,i,d:b-a,p:(b-a)/a*100}));
+const PATH={'노원':[6.6,6.9,7.2,6.8,6.4],'성동':[13.2,13.4,14.0,14.6,15.1]};
+const ORD=[[...D].sort((x,y)=>y.d-x.d),[...D].sort((x,y)=>y.p-x.p),[...D].sort((x,y)=>y.b-x.b),[...D]].map(a=>{const o={};a.forEach((d,k)=>o[d.n]=k);return o});
+const TOTAL=26,T2=1.8,T3=3.4,T4=5.4,T5=7.6,T6=11.4,T7=14.6,T8=22.0;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',oUser=0,cUser=0,fUser=0,ptr=null,snap=true;
+let rowPos=D.map(d=>d.i),pctCur=0,barCur=0;
+try{const v=localStorage.getItem('dumbLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640;const ml=narrow?52:76,pr=narrow?W-58:W*.64,top=58,bot=narrow?H-250:H-44;
+  L={W,H,narrow,ml,pr,top,bot,rh:(bot-top)/D.length,px:narrow?16:W*.64+64,py:narrow?bot+60:top+4,pw:narrow?W-32:W-(W*.64+64)-20}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+// 시간표에 따른 목표 상태
+function target(){if(t>=T8)return{o:oUser,c:cUser,f:fUser};
+  if(t<T4)return{o:3,c:0,f:0};if(t<T5)return{o:0,c:0,f:0};
+  if(t<T6)return{o:0,c:0,f:(t>=T5+.6&&t<T6-1.0)?1:0};if(t<T7)return{o:t<T6+1.2?0:1,c:t<T6+1.2?0:1,f:0};return{o:1,c:1,f:0}}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4')};
+  const{W,H,narrow,ml,pr,top,bot,rh,px,py,pw}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const rr=(x,y,w,h,r)=>{r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()};
+  const X=v=>ml+v/30*(pr-ml);
+  const fin=t>=T8,a0=clamp(t/.5);
+  // 축
+  for(let v=0;v<=30;v+=5){ln(X(v),top-6,X(v),bot,C.line,1,null,a0);txt(String(v),X(v),bot+16,C.muted,`11px ${MONO}`,'center',a0)}
+  txt('평균 매매가(억원, 4분기 기준)',pr,bot+34,C.muted,`11px ${SANS}`,'right',a0);
+  // 범례
+  const lgx=narrow?ml:ml,lgy=top-30;ctx.globalAlpha=a0;ctx.fillStyle=C.paper;ctx.strokeStyle=C.muted;ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(lgx+6,lgy,5,0,7);ctx.fill();ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;txt('2024년',lgx+16,lgy+4,C.muted,`12px ${SANS}`,'left',a0);
+  const p25=clamp((t-T2)/.6)||(fin?1:0);ctx.globalAlpha=p25;ctx.fillStyle=C.c1;ctx.beginPath();ctx.arc(lgx+78,lgy,5.5,0,7);ctx.fill();ctx.globalAlpha=1;txt('2025년',lgx+88,lgy+4,C.ink,`12px ${SANS}`,'left',p25);
+  const pLine=fin?1:clamp((t-T3)/1),pCol=fin?1:clamp((t-T3-.8)/.6),pLab=fin?1:clamp((t-T4-.6)/.6);
+  if(pCol>0){txt('▲ 오름',lgx+160,lgy+4,C.c2,`700 12px ${SANS}`,'left',pCol);txt('▼ 내림',lgx+216,lgy+4,C.c4,`700 12px ${SANS}`,'left',pCol)}
+  // 줄
+  const hits=[];const pB=barCur,pc=pctCur;
+  D.forEach((d,k)=>{const y=top+rh*(rowPos[k]+.5),up=d.d>=0,cc=up?C.c2:C.c4;const pa=clamp((t-.15-k*.12)/.4)||(fin?1:0),pb=p25;
+    txt(d.n,ml-10,y+4,C.ink,`${narrow?12:13}px ${SANS}`,'right',pa);
+    ln(ml,y,pr,y,C.line,1,[2,3],pa*.6);
+    // 선
+    if(pLine>0&&pB<1){const xe=lerp(X(d.a),X(d.b),pLine);ln(X(d.a),y,xe,y,pCol>0?cc:C.muted,narrow?3:4,null,(1-pB))}
+    // 점 → 막대
+    const bh=rh*.34,r0=narrow?4.5:5.5;
+    const drawMark=(v,which,a)=>{if(a<=0)return;const off=lerp(0,which?bh*.55:-bh*.55,pB),h=lerp(2*r0,bh,pB),x0=lerp(X(v)-r0,X(0),pB),x1=X(v)+lerp(r0,0,pB);
+      rr(x0,y+off-h/2,x1-x0,h,lerp(r0,1.5,pB));ctx.globalAlpha=a;if(which){ctx.fillStyle=C.c1;ctx.fill()}else{ctx.fillStyle=pB>.3?C.line:C.paper;ctx.fill();ctx.strokeStyle=C.muted;ctx.lineWidth=1.8;ctx.stroke();ctx.lineWidth=1}ctx.globalAlpha=1};
+    drawMark(d.a,0,pa);drawMark(d.b,1,pb);
+    // 변화 라벨
+    if(pLab>0){const v=pc>.5?`${d.p>=0?'+':''}${d.p.toFixed(1)}%`:`${d.d>=0?'+':''}${d.d.toFixed(1)}`;txt(v,lerp(X(Math.max(d.a,d.b))+12,pr+10,pB),y+4,cc,`700 ${narrow?11:12}px ${MONO}`,'left',pLab)}
+    hits.push({d,y})});
+  if(pLab>0)txt(pctCur>.5?'변화율':'변화(억)',pr+10,top-10,C.muted,`11px ${SANS}`,'left',pLab*pB);
+  // 단계 안내(그래프 위)
+  const say=(m,c=C.c4)=>txt(m,narrow?8:ml,top-8+(narrow?0:0),c,`700 ${narrow?11:12.5}px ${SANS}`,'left',1);
+  if(!fin){if(t>=T4&&t<T5)say('변화량이 큰 순서로 다시 줄 세움');
+    if(t>=T5+.6&&t<T6-1.0)say('같은 자료를 묶음 막대로: 변화가 잘 안 보임');
+    if(t>=T6+1.2&&t<T7)say('변화율(%)로 바꾸면 순위가 달라짐');}
+  // 오른쪽 패널
+  let yy=py;const line_=(s,c,f,a=1)=>{txt(s,px,yy,c,f,'left',a);yy+=narrow?17:20};
+  if(!fin&&t<T5){line_('읽는 법',C.ink,`700 13px ${SANS}`,a0);line_('○ 빈 점 = 2024년',C.muted,`12px ${SANS}`,a0);line_('● 찬 점 = 2025년',C.c1,`12px ${SANS}`,p25);line_('선의 길이 = 변화량',C.ink,`12px ${SANS}`,pLine);line_('선의 색 = 오름 / 내림',C.ink,`12px ${SANS}`,pCol);
+    if(t>=T4){yy+=6;const up=D.filter(d=>d.d>0).length;line_(`오른 구 ${up}곳 · 내린 구 ${D.length-up}곳`,C.ink,`700 12px ${SANS}`);const mx=[...D].sort((a,b)=>b.d-a.d)[0];line_(`가장 많이 오른 구: ${mx.n} +${mx.d.toFixed(1)}억`,C.c2,`12px ${SANS}`)}}
+  else if(!fin&&t<T7){line_('억원 vs % 순위',C.ink,`700 13px ${SANS}`);const A=[...D].sort((a,b)=>b.d-a.d).slice(0,3),B=[...D].sort((a,b)=>b.p-a.p).slice(0,3);
+    line_('변화량(억원) 1~3위',C.muted,`12px ${SANS}`);line_(A.map(d=>`${d.n} +${d.d.toFixed(1)}`).join(' · '),C.c2,`12px ${MONO}`);yy+=4;
+    line_('변화율(%) 1~3위',C.muted,`12px ${SANS}`,clamp((t-T6-1.2)/.6));line_(B.map(d=>`${d.n} +${d.p.toFixed(1)}%`).join(' · '),C.c2,`12px ${MONO}`,clamp((t-T6-1.2)/.6));yy+=4;
+    const g=D.find(d=>d.n==='강남');line_(`강남: 억원 ${ORD[0]['강남']+1}위 → % ${ORD[1]['강남']+1}위`,C.c4,`700 12px ${SANS}`,clamp((t-T6-1.8)/.6))}
+  else if(!fin){// 7단계: 중간 흐름
+    const pa=clamp((t-T7)/.6);line_('두 점 사이에 숨은 흐름',C.ink,`700 13px ${SANS}`,pa);
+    const cw=narrow?(pw-10)/2:Math.min(pw-10,260),ch=narrow?64:90,yb=yy;['성동','노원'].forEach((nm,j)=>{const P=PATH[nm],lo=Math.min(...P)-.3,hi=Math.max(...P)+.3,x0=narrow?px+j*(cw+10):px,y0=(narrow?yb:yy)+6;const pj=clamp((t-T7-.4-j*2.2)/1.4);
+      ctx.globalAlpha=pa;ctx.strokeStyle=C.line;ctx.strokeRect(x0,y0,cw,ch);ctx.globalAlpha=1;txt(`${nm} 분기별`,x0+6,y0+14,C.ink,`700 11.5px ${SANS}`,'left',pa);
+      const XX=k=>x0+16+k*(cw-32)/4,YY=v=>y0+ch-10-(v-lo)/(hi-lo)*(ch-30);
+      ln(XX(0),YY(P[0]),XX(4),YY(P[4]),C.muted,1.5,[4,3],pa);
+      ctx.globalAlpha=pj;ctx.strokeStyle=C.c3;ctx.lineWidth=2.4;ctx.beginPath();P.forEach((v,k)=>{if(k/4<=pj+.01)k?ctx.lineTo(XX(k),YY(v)):ctx.moveTo(XX(k),YY(v))});ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      P.forEach((v,k)=>{if(k/4<=pj+.01){ctx.globalAlpha=pj;ctx.fillStyle=k===0?C.paper:k===4?C.c1:C.c3;ctx.beginPath();ctx.arc(XX(k),YY(v),3.4,0,7);ctx.fill();ctx.strokeStyle=C.muted;ctx.stroke();ctx.globalAlpha=1}});
+      ['24.4Q','25.1Q','2Q','3Q','4Q'].forEach((q,k)=>txt(narrow&&k%2?'':q,XX(k),y0+ch+12,C.muted,`9.5px ${MONO}`,'center',pa));
+      if(!narrow)yy+=ch+30});if(narrow)yy=yb+ch+30;
+    line_('점선 = 덤벨이 보여주는 것',C.muted,`11.5px ${SANS}`,pa);line_('노원: 중간에 7.2억까지 올랐다가 내림',C.c4,`700 11.5px ${SANS}`,clamp((t-T7-3.6)/.6))}
+  else{const o=['변화량(억원)','변화율(%)','2025년 가격','처음 순서'][oUser];line_(`정렬: ${o}`,C.ink,`700 13px ${SANS}`);line_(`모양: ${fUser?'묶음 막대':'덤벨'} · 변화 ${cUser?'%':'억원'}`,C.muted,`12px ${SANS}`);
+    const up=D.filter(d=>d.d>0);line_(`오른 구 ${up.length}곳 평균 ${(up.reduce((a,d)=>a+d.p,0)/up.length).toFixed(1)}%`,C.c2,`12px ${SANS}`);const dn=D.filter(d=>d.d<0);line_(`내린 구 ${dn.length}곳 평균 ${(dn.reduce((a,d)=>a+d.p,0)/dn.length).toFixed(1)}%`,C.c4,`12px ${SANS}`)}
+  // 가리키기
+  if(fin&&ptr&&ptr.x>ml-60&&ptr.x<pr+60){const h=hits.find(q=>Math.abs(ptr.y-q.y)<rh/2);if(h){const d=h.d;ctx.globalAlpha=.08;ctx.fillStyle=C.ink;ctx.fillRect(ml-60,h.y-rh/2,pr-ml+120,rh);ctx.globalAlpha=1;
+    const lines=[[`${d.n}구`,`700 13px ${SANS}`,C.ink],[`2024년 ${d.a.toFixed(1)}억 → 2025년 ${d.b.toFixed(1)}억`,`12px ${SANS}`,C.ink],[`변화 ${d.d>=0?'+':''}${d.d.toFixed(1)}억 (${d.p>=0?'+':''}${d.p.toFixed(1)}%)`,`700 12px ${SANS}`,d.d>=0?C.c2:C.c4],[`변화량 ${ORD[0][d.n]+1}위 · 변화율 ${ORD[1][d.n]+1}위`,`12px ${SANS}`,C.muted]];
+    const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=ptr.x+14,y0=h.y+rh/2+4;if(x0+bw2>W-6)x0=ptr.x-14-bw2;if(x0<4)x0=4;if(y0+bh2>H-6)y0=h.y-rh/2-4-bh2;
+    ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c],k)=>txt(s0,x0+10,y0+20+k*18,c,f,'left',1))}}}
+
+const STEPS=[
+ {t:0,n:'2024년 값 찍기',s:'빈 점',e:'10개 구의 2024년 4분기 평균 매매가를 빈 점(○)으로 찍습니다. 한 줄이 한 구입니다.',u:'범주(자치구)별 첫 시점 값을 점 부호(dot plot)로 배치합니다. 막대 대신 점을 쓰면 0 기준선 없이도 위치로 값을 읽을 수 있습니다.'},
+ {t:T2,n:'2025년 값 찍기',s:'찬 점',e:'같은 줄에 2025년 값을 찬 점(●)으로 찍습니다. 두 점이 가까우면 거의 안 변했고, 멀면 많이 변한 것입니다.',u:'두 번째 시점 값을 같은 축에 대응 배치합니다(paired observations). 같은 위치 척도에서 직접 비교가 가능합니다.'},
+ {t:T3,n:'선으로 잇기',s:'오름=청록, 내림=분홍',e:'두 점을 선으로 이으면 운동기구 덤벨 모양이 됩니다. 선의 길이가 변화량, 색이 오름(청록)과 내림(분홍)입니다.',u:'두 점을 연결해 차이(Δ)를 선분 길이로 부호화합니다. 방향은 색으로 이중 부호화해 판독을 돕습니다.'},
+ {t:T4,n:'변화량 순 정렬',s:'많이 오른 구부터',e:'많이 오른 구부터 차례로 줄을 다시 세우고, 오른쪽에 변화량(억원)을 적습니다. 성동이 +1.9억으로 가장 많이 올랐고, 관악·노원·도봉은 내렸습니다.',u:'Δ 기준 내림차순 정렬로 순위 구조를 드러냅니다. 범주형 축의 순서는 메시지에 맞춰 정렬하는 것이 원칙입니다.'},
+ {t:T5,n:'묶음 막대와 비교',s:'같은 자료, 다른 모양',e:'같은 자료를 묶음 막대로 바꿔 봅니다. 막대가 길어서 큰 값끼리는 비슷해 보이고 "얼마나 변했나"가 잘 안 보입니다. 다시 덤벨로 돌아옵니다.',u:'묶음 막대는 수준(level)을 길이로 표현해 잉크 대부분이 공통 부분에 쓰입니다. 차이 비교가 목적이면 덤벨이 데이터-잉크 비율이 높고 Δ 판독이 정확합니다.'},
+ {t:T6,n:'억원 vs %',s:'변화율로 바꾸기',e:'변화를 억원 대신 %로 바꾸면 순위가 달라집니다. 강남은 1.6억이나 올랐지만 원래 비싸서 %로는 6.2%이고, 성동은 14.4%로 훨씬 크게 오른 것입니다.',u:'절대 변화(Δ)와 상대 변화(Δ/기준값)는 기준 수준에 따라 순위가 달라집니다. 가격대가 다른 지역 비교에는 변화율(또는 로그 차이)이 적절한 경우가 많습니다.'},
+ {t:T7,n:'덤벨의 함정',s:'두 점 사이의 흐름',e:'덤벨은 처음과 끝 두 점만 보여줍니다. 노원은 2025년 중간에 7.2억까지 올랐다가 내렸는데, 덤벨에서는 "조금 내렸다"로만 보입니다.',u:'두 시점 비교는 경로 정보를 잃습니다(경로 의존성 무시). 중간 변동이 중요하면 선그래프·스파크라인을 병기하고, 시점 선택이 결론을 바꾸지 않는지 확인합니다.'},
+ {t:T8,n:'완성',s:'10개 구 덤벨 차트',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 위의 "정렬", "변화 표시", "모양"을 바꿔 보세요. 변화율(%)로 정렬하면 순위가 어떻게 바뀌는지, 묶음 막대로 바꾸면 변화가 얼마나 덜 보이는지 확인할 수 있습니다.':'완성입니다. 정렬 기준(Δ, Δ%, 수준)과 표현 형태를 바꿔 메시지 변화를 비교하세요. 보고 시 두 시점의 정의(분기·연평균), 절대/상대 변화 기준을 명시합니다.'}
+const LEDE={e:'덤벨 차트는 같은 줄에 "전" 값과 "후" 값을 점 두 개로 찍고 선으로 이은 그래프입니다. 선의 길이로 얼마나 변했는지, 색으로 올랐는지 내렸는지를 보여줍니다. 10개 구의 2024년과 2025년 평균 매매가로 만드는 과정을 따라가 봅니다.',u:'덤벨 차트(연결 점 그래프, connected dot plot)는 범주별 두 시점 또는 두 집단의 대응 값을 같은 위치 척도에 놓고 연결해 차이를 부호화합니다. 정렬, 묶음 막대 대비 효율, 절대·상대 변화의 순위 차이, 경로 정보 손실을 단계별로 보여줍니다.'};
+const CMP=[['덤벨 차트',{e:'얼마나 변했나, 오름·내림, 순위',u:'Δ와 방향, 정렬된 순위'},{e:'중간 흐름, 0부터의 크기',u:'경로, 비율 척도의 직관'}],['묶음 막대',{e:'각 해의 크기(0부터)',u:'수준(level) 비교'},{e:'변화량이 작으면 잘 안 보임, 복잡',u:'Δ 판독 부정확, 잉크 낭비'}],['선그래프',{e:'여러 시점의 흐름',u:'시계열 경로'},{e:'구가 많으면 선이 엉킴',u:'범주가 많으면 중첩'}],['슬로프 차트',{e:'두 시점 사이 순위 바뀜',u:'순위·기울기 비교'},{e:'값이 비슷하면 이름이 겹침',u:'라벨 중첩'}]];
+const CHK={e:['두 점이 무엇인지(언제와 언제인지) 범례에 적었나요?','변화가 큰 순서처럼 메시지에 맞게 줄을 세웠나요?','가격대가 많이 다른 지역이면 %(변화율)도 확인했나요?','오름과 내림을 색으로 구분했나요?','중간 흐름이 중요하면 선그래프를 함께 보여줬나요?'],
+ u:['두 시점(집단)의 정의와 집계 기준을 명시했는가','정렬 기준이 분석 질문(Δ, Δ%, 수준)과 일치하는가','기준 수준 차이가 크면 상대 변화를 병기했는가','방향을 색·기호로 이중 부호화했는가','경로 정보가 필요하면 시계열 그래프를 병기했는가']};
+const PC={
+ pro:[
+  {t:'변화량과 방향이 한눈에 보인다',e:'선의 길이로 얼마나 변했는지, 색으로 올랐는지 내렸는지 바로 보입니다.',u:'Δ를 선분 길이로, 방향을 색으로 이중 부호화해 차이 판독이 빠르고 정확합니다.',x:'<b>성동 +1.9억</b> vs <b>도봉 −0.4억</b>.'},
+  {t:'묶음 막대보다 깔끔하다',e:'막대 20개 대신 점 20개와 선 10개라서 화면이 덜 복잡합니다.',u:'데이터-잉크 비율이 높고, 0 기준선이 필요 없어 값의 범위에 맞춰 축을 쓸 수 있습니다.',x:'5단계 <b>덤벨 ↔ 묶음 막대</b> 비교.'},
+  {t:'정렬하면 순위가 드러난다',e:'많이 오른 구부터 줄을 세우면 "어디가 가장 많이 올랐나"가 바로 보입니다.',u:'Δ 또는 수준으로 정렬해 순위 구조와 분포(오른 구·내린 구 비율)를 함께 전달합니다.',x:'오른 구 <b>7곳</b>, 내린 구 <b>3곳</b>.'},
+  {t:'전후뿐 아니라 두 집단 비교에도 쓴다',e:'남자/여자, 아파트/오피스텔처럼 두 집단을 비교할 때도 쓸 수 있습니다.',u:'대응 표본뿐 아니라 집단 간 차이(예: 매매가 vs 전세가, 갭)의 범주별 비교에도 적용됩니다.',x:'구별 <b>매매가와 전세가</b> 차이(갭).'}],
+ con:[
+  {t:'두 시점 사이 흐름은 안 보인다',e:'처음과 끝만 보여주기 때문에 중간에 크게 올랐다 내린 것은 알 수 없습니다.',u:'경로 정보가 손실되며, 시작·끝 시점 선택에 따라 결론이 달라질 수 있습니다.',x:'노원: 중간 <b>7.2억</b> 후 하락.'},
+  {t:'억원과 %의 순위가 다르다',e:'비싼 구는 조금만 올라도 억원으로는 크게 보입니다. %로 보면 순위가 바뀝니다.',u:'절대 변화는 기준 수준에 비례하는 경향이 있어 가격대가 다른 지역 비교 시 상대 변화를 함께 봐야 합니다.',x:'강남 억원 <b>2위</b> → % <b>3위</b>, 마포가 앞섬.'},
+  {t:'0부터의 크기는 느끼기 어렵다',e:'막대와 달리 점만 있어서 "얼마나 큰 값인지"는 축 눈금을 읽어야 압니다.',u:'점 위치만으로는 비율 척도(몇 배인가)의 직관이 약합니다. 수준 비교가 목적이면 막대가 낫습니다.',x:'강남이 도봉의 <b>약 5배</b>라는 느낌은 막대가 강함.'},
+  {t:'변화가 아주 작으면 점이 겹친다',e:'거의 안 변한 구는 두 점이 겹쳐서 선이 보이지 않습니다.',u:'Δ가 점 크기보다 작으면 시각적으로 구분되지 않습니다. 수치 라벨로 보완합니다.',x:'<b>관악 −0.2억</b>은 점이 거의 겹침.'}],
+ tip:{e:'<b>정리:</b> 덤벨 차트는 "전과 후, 얼마나 변했나"를 보여줍니다. 변화가 큰 순서로 줄을 세우고, 가격대가 다르면 %도 확인하고, 중간 흐름이 중요하면 선그래프를 함께 보여주세요.',
+      u:'<b>권장 사용법:</b> ① 두 시점 정의 명시 ② 질문에 맞는 정렬(Δ/Δ%/수준) ③ 방향 색 구분 ④ 수준 차가 크면 상대 변화 병기 ⑤ 수치 라벨로 작은 Δ 보완 ⑥ 경로가 중요하면 선그래프 병기.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('cNote').textContent=lv==='e'?'"무엇을 보여주고 싶은가"에 따라 그래프를 고릅니다.':'전후·대응 비교 표현 방식별 특성입니다.';
+  $('cBody').innerHTML=CMP.map(([n,a,b])=>`<tr><td><b>${n}</b></td><td>${a[lv]}</td><td>${b[lv]}</td></tr>`).join('');
+  $('chkNote').textContent=lv==='e'?'덤벨 차트를 만들거나 읽을 때 다섯 가지를 확인하세요.':'작성·판독 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  const g=target(),k=snap?1:Math.min(1,dt*4);snap=false;rowPos=D.map((d,i)=>lerp(rowPos[i],ORD[g.o][d.n],k));pctCur=lerp(pctCur,g.c,k);barCur=lerp(barCur,g.f,k);
+  draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.6;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;snap=true});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1;snap=true};
+$('speed').onchange=e=>speed=+e.target.value;
+$('oSel').onchange=e=>{oUser=+e.target.value;toEnd()};$('cSel').onchange=e=>{cUser=+e.target.value;toEnd()};$('fSel').onchange=e=>{fUser=+e.target.value;toEnd()};
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1;snap=true};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('dumbLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('dumbLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

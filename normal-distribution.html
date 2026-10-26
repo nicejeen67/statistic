@@ -1,0 +1,499 @@
+<title>정규분포 영상 스튜디오</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위 16:9 칠판(녹화되는 영상) → 아래 재생 조작 / 축 변화 / 데이터 패널. 단일 칠판 테마 */
+:root{
+  --board:#1d3a32; --board-2:#16302a; --chalk:#ecebe3; --chalk-dim:#9fb3a9;
+  --yellow:#f1d473; --pink:#f0a0a0; --rule:rgba(236,235,227,.2);
+  --f-chalk:"Gaegu","Gowun Dodum",system-ui,sans-serif;
+  --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--board);color:var(--chalk)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 28px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+h1{font-family:var(--f-chalk);font-weight:700;font-size:clamp(26px,3.6vw,38px);line-height:1.1;margin:0}
+h1 small{font-size:.5em;color:var(--chalk-dim);font-weight:400;margin-left:8px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1.5px solid var(--rule);border-radius:999px;overflow:hidden}
+.seg button{all:unset;cursor:pointer;padding:6px 14px;font-size:14px;color:var(--chalk-dim)}
+.seg button[aria-pressed="true"]{background:var(--chalk);color:var(--board-2)}
+.btn{all:unset;cursor:pointer;padding:7px 14px;border:1.5px solid var(--rule);border-radius:999px;font-size:14px;color:var(--chalk)}
+.btn.main{background:var(--yellow);color:var(--board-2);border-color:var(--yellow);font-weight:700}
+.btn.rec{border-color:var(--pink);color:var(--pink)}
+.btn[aria-pressed="true"]{border-color:var(--yellow);color:var(--yellow)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+.stage{border:8px solid #5a4632;border-radius:6px;background:var(--board-2);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+canvas{display:block;width:100%;aspect-ratio:16/9;max-width:100%}
+.timeline{display:flex;flex-direction:column;gap:8px}
+#scrub{width:100%;accent-color:var(--yellow)}
+.steps{display:flex;flex-wrap:wrap;gap:6px}
+.steps button{all:unset;cursor:pointer;font-size:13.5px;padding:4px 10px;border-radius:6px;border:1px dashed var(--rule);color:var(--chalk-dim)}
+.steps button.on{border-style:solid;border-color:var(--yellow);color:var(--yellow)}
+.steps button.done{color:var(--chalk)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.box{border:1px dashed var(--rule);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.box h3{margin:0;font-family:var(--f-chalk);font-size:22px;color:var(--yellow)}
+.read{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.read span{color:var(--chalk-dim)}
+.read b{font-family:var(--f-num);font-weight:500;font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
+.read b.chg{color:var(--yellow)}
+.f{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center;font-size:13.5px}
+.f label{color:var(--chalk-dim)}
+select,input[type=file]{width:100%;min-width:0;background:var(--board-2);color:var(--chalk);border:1px solid var(--rule);border-radius:6px;padding:5px 6px;font:inherit;font-size:13.5px}
+.hint{font-size:13px;color:var(--chalk-dim);margin:0}
+.say{font-family:var(--f-chalk);font-size:21px;line-height:1.35;margin:0}
+.msg{font-size:13.5px;color:var(--pink);margin:0;min-height:1em}
+.chk{display:flex;gap:6px;align-items:center;font-size:13.5px;color:var(--chalk-dim)}
+body:not(.uni) .lv-uni{display:none!important}
+body.uni .lv-mid{display:none!important}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>정규분포 영상 스튜디오 <small>AI부동산통계기초</small></h1>
+    <div class="bar">
+      <div class="seg" role="group" aria-label="장면">
+        <button id="sc1" aria-pressed="true">① 하나일 때</button>
+        <button id="sc2" aria-pressed="false">② 여러 개일 때</button>
+      </div>
+      <div class="seg" role="group" aria-label="설명 수준">
+        <button id="lvMid" aria-pressed="true">중학생 수준</button>
+        <button id="lvUni" aria-pressed="false">대학 수준</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="stage"><canvas id="cv" width="1920" height="1080" aria-label="정규분포 애니메이션 영상 화면"></canvas></div>
+
+  <div class="timeline">
+    <div class="bar">
+      <button class="btn main" id="play">▶ 재생</button>
+      <button class="btn" id="prev">◀ 이전 단계</button>
+      <button class="btn" id="next">다음 단계 ▶</button>
+      <div class="seg" role="group" aria-label="속도">
+        <button data-sp="0.5" aria-pressed="false">0.5×</button>
+        <button data-sp="1" aria-pressed="true">1×</button>
+        <button data-sp="1.5" aria-pressed="false">1.5×</button>
+      </div>
+      <button class="btn rec" id="rec">● 이 장면 영상 저장(WebM)</button>
+    </div>
+    <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="재생 위치">
+    <div class="steps" id="steps"></div>
+    <p class="msg" id="msg"></p>
+  </div>
+
+  <div class="grid">
+    <div class="box">
+      <h3>축 변화</h3>
+      <div class="read">
+        <span>X축 범위</span><b id="rX"></b>
+        <span>X축 의미</span><b id="rXu"></b>
+        <span>Y축 범위</span><b id="rY"></b>
+        <span>Y축 의미</span><b id="rYu"></b>
+        <span>계급 폭</span><b id="rBw"></b>
+        <span>쌓인 데이터</span><b id="rN"></b>
+      </div>
+    </div>
+    <div class="box">
+      <h3>이 단계에서 말할 내용</h3>
+      <p class="say" id="say"></p>
+      <p class="hint">이 칸은 영상에 녹화되지 않습니다.</p>
+    </div>
+    <div class="box">
+      <h3>P값 설정</h3>
+      <div class="f"><label for="ptarget">P값 ① 가격</label><input type="number" id="ptarget" step="0.1" style="width:100%;min-width:0;background:var(--board-2);color:var(--chalk);border:1px solid var(--rule);border-radius:6px;padding:5px 6px;font:inherit"></div>
+      <div class="f"><label for="pair">P값 ② 비교</label><select id="pair"></select></div>
+      <div class="f"><label for="alpha">유의수준 α</label><select id="alpha"><option value="0.05" selected>0.05 (5%)</option><option value="0.01">0.01 (1%)</option><option value="0.1">0.10 (10%)</option></select></div>
+      <p class="hint">데이터: 가상 예시 — A구·B구·C구 아파트 매매가 740건(단위 억원)</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const cv=document.getElementById('cv'),g=cv.getContext('2d');
+const W=1920,H=1080,PL=180,PR=90,PT=170,PB=170,PW=W-PL-PR,PH=H-PT-PB;
+const K={bg:'#1d3a32',chalk:'#ecebe3',dim:'#9fb3a9',yellow:'#f1d473',pink:'#f0a0a0'};
+const GC=['#8ec5ee','#b5e3a1','#f0a0a0','#f5b97a'];
+const FT=s=>`700 ${s}px Gaegu, "Gowun Dodum", sans-serif`, FB=s=>`${s}px "Gowun Dodum", sans-serif`, FN=s=>`${s}px "IBM Plex Mono", monospace`;
+const $=id=>document.getElementById(id);
+let uni=false;
+
+/* ---------- 수학 도구 ---------- */
+const pdf=(x,m,s)=>Math.exp(-((x-m)**2)/(2*s*s))/(s*Math.sqrt(2*Math.PI));
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function erf(x){const s=Math.sign(x);x=Math.abs(x);const t=1/(1+0.3275911*x);return s*(1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x));}
+const Phi=z=>0.5*(1+erf(z/Math.SQRT2));
+function lgam(x){const c=[676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5)return Math.log(Math.PI/Math.abs(Math.sin(Math.PI*x)))-lgam(1-x);x-=1;let a=0.99999999999980993;const t=x+7.5;for(let i=0;i<8;i++)a+=c[i]/(x+i+1);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);}
+function betacf(a,b,x){let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;if(Math.abs(d)<1e-30)d=1e-30;d=1/d;let h=d;
+  for(let m=1;m<=200;m++){const m2=2*m;let aa=m*(b-m)*x/((qam+m2)*(a+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<3e-12)break;}return h;}
+function ibeta(x,a,b){if(x<=0)return 0;if(x>=1)return 1;const bt=Math.exp(lgam(a+b)-lgam(a)-lgam(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2)?bt*betacf(a,b,x)/a:1-bt*betacf(b,a,1-x)/b;}
+const tP2=(t,df)=>ibeta(df/(df+t*t),df/2,0.5); // 양측 P값
+const tpdf=(t,df)=>Math.exp(lgam((df+1)/2)-lgam(df/2)-0.5*Math.log(df*Math.PI)-(df+1)/2*Math.log(1+t*t/df));
+function invP(fn,alpha){let lo=0,hi=50;for(let i=0;i<80;i++){const m=(lo+hi)/2;fn(m)>alpha?lo=m:hi=m;}return (lo+hi)/2;}
+const pTxt=p=>p<0.001?'< 0.001':p.toFixed(3);
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+const sdv=(a,m)=>Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/Math.max(1,a.length-1))||1;
+function quant(sorted,p){const i=(sorted.length-1)*p,lo=Math.floor(i);return sorted[lo]+(sorted[Math.min(sorted.length-1,lo+1)]-sorted[lo])*(i-lo);}
+function niceStep(range,n){const raw=range/n,mag=Math.pow(10,Math.floor(Math.log10(raw))),r=raw/mag;return (r<1.5?1:r<3?2:r<7?5:10)*mag;}
+function fmt(v,step){const d=Math.max(0,-Math.floor(Math.log10(step)+1e-9));return (Math.abs(v)<step/1e6?0:v).toFixed(Math.min(d,4));}
+function rng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+function shuffle(n,seed){const r=rng(seed),a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+/* ---------- 데이터 ---------- */
+let source='가상 예시 데이터';
+let DATA=[]; // {v,g}
+let unitName='억원';
+function sampleData(){const r=rng(7),out=[];const gs=[['A구',8,1.2,240],['B구',11,1.5,300],['C구',14,2.2,200]];
+  gs.forEach(([n,m,s,c])=>{for(let i=0;i<c;i++){const u1=r()||1e-9,u2=r();out.push({v:+(m+s*Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)).toFixed(2),g:n});}});
+  return out;}
+
+/* ---------- 모델 계산 ---------- */
+let M1=null,M2=null;
+function binsSetup(vals){const s=[...vals].sort((a,b)=>a-b);const n=s.length;
+  let lo=n>=200?quant(s,.005):s[0],hi=n>=200?quant(s,.995):s[n-1];if(hi-lo<1e-9){lo-=1;hi+=1;}
+  const k=Math.round(clamp(Math.sqrt(n),12,36));const bw=(hi-lo)/k;return {lo,hi,k,bw};}
+function build(){
+  const vals=DATA.map(d=>d.v);const B=binsSetup(vals);const mu=mean(vals),sg=sdv(vals,mu);
+  const pts=[];DATA.forEach(d=>{const b=Math.floor((d.v-B.lo)/B.bw);const bi=d.v===B.hi?B.k-1:b;if(bi>=0&&bi<B.k)pts.push({v:d.v,b:bi,g:d.g});});
+  const counts=new Array(B.k).fill(0);pts.forEach(p=>counts[p.b]++);
+  const Nin=pts.length;
+  M1={...B,mu,sg,pts,order:shuffle(pts.length,11),counts,Nin,N:vals.length,maxC:Math.max(...counts),
+    w1:vals.filter(v=>Math.abs(v-mu)<=sg).length/vals.length,w2:vals.filter(v=>Math.abs(v-mu)<=2*sg).length/vals.length};
+  $('ptarget').value=(mu+2.3*sg).toFixed(sg<1?2:1);
+  if(!document.getElementById('pair'))return;$('pair').innerHTML='';
+  // 장면 2: 그룹
+  const gmax=3;const cnt={};DATA.forEach(d=>{if(d.g!=null&&d.g!=='')cnt[d.g]=(cnt[d.g]||0)+1;});
+  const names=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).slice(0,gmax).filter(n=>cnt[n]>=10);
+  if(names.length<2){M2=null;return;}
+  const sub=DATA.filter(d=>names.includes(d.g));const B2=binsSetup(sub.map(d=>d.v));
+  const G=names.map((n,i)=>{const v=sub.filter(d=>d.g===n).map(d=>d.v);const m=mean(v);return {name:n,mu:m,sg:sdv(v,m),n:0,counts:new Array(B2.k).fill(0),color:GC[i]};});
+  const p2=[];sub.forEach(d=>{const gi=names.indexOf(d.g);const b=d.v===B2.hi?B2.k-1:Math.floor((d.v-B2.lo)/B2.bw);if(b>=0&&b<B2.k){p2.push({v:d.v,b,gi});G[gi].counts[b]++;G[gi].n++;}});
+  const stack=new Array(B2.k).fill(0);G.forEach(gg=>gg.counts.forEach((c,i)=>stack[i]+=c));
+  const allv=p2.map(p=>p.v),amu=mean(allv),asg=sdv(allv,amu);
+  let maxDens=0,maxDensZ=0,Mz=3.5;G.forEach(gg=>{gg.counts.forEach(c=>{const d=c/(gg.n*B2.bw);maxDens=Math.max(maxDens,d);maxDensZ=Math.max(maxDensZ,d*gg.sg);});
+    Mz=Math.max(Mz,Math.min(6,Math.abs((B2.lo-gg.mu)/gg.sg)),Math.min(6,Math.abs((B2.hi-gg.mu)/gg.sg)));});
+  M2={...B2,G,pts:p2,order:shuffle(p2.length,23),stack,Nin:p2.length,amu,asg,
+    maxGC:Math.max(...G.flatMap(gg=>gg.counts)),maxStack:Math.max(...stack),maxDens,maxDensZ,Mz};
+  // 두 지역 평균 차이 Welch t검정 (전체 값 사용)
+  const full=names.map(n=>{const v=sub.filter(d=>d.g===n).map(d=>d.v);const m=mean(v);return {m,s:sdv(v,m),n:v.length};});
+  M2.tests=[];for(let i=0;i<names.length;i++)for(let j=i+1;j<names.length;j++){const a=full[i],b=full[j];
+    const va=a.s*a.s/a.n,vb=b.s*b.s/b.n,se=Math.sqrt(va+vb),t=(a.m-b.m)/se,df=(va+vb)**2/(va*va/(a.n-1)+vb*vb/(b.n-1));
+    M2.tests.push({i,j,ma:a.m,mb:b.m,diff:a.m-b.m,se,t,df,p:tP2(t,df)});}
+  const sel=$('pair');sel.innerHTML=M2.tests.map((T,k)=>`<option value="${k}">${names[T.i]} vs ${names[T.j]}</option>`).join('');
+  let best=0;M2.tests.forEach((T,k)=>{if(Math.abs(T.t)<Math.abs(M2.tests[best].t))best=k;});sel.value=best;
+}
+function curTest(){return M2&&M2.tests?M2.tests[+$('pair').value||0]:null;}
+const ALPHA=()=>+$('alpha').value;
+function targetZ(){const m=M1;const x=parseFloat($('ptarget').value);return isFinite(x)?(x-m.mu)/m.sg:2.3;}
+
+/* ---------- 라벨 ---------- */
+function L(){const lg=false;const u=lg?`ln(${unitName})`:unitName;
+  return uni?{x:`X (${u})`,xs:u,yc:'도수',yd:'밀도 f(x)',z:'Z = (X − μ) / σ',zs:'Z'}
+            :{x:`가격 (${u})`,xs:u,yc:'집 수(도수)',yd:'밀도(비율 ÷ 폭)',z:'평균에서 몇 칸(σ) 떨어졌나',zs:'칸(σ)'};}
+
+/* ---------- 뷰(축) ---------- */
+function view(x0,x1,y1,xu,yu,xs){return {x0,x1,y1,xu,yu,xs,sx:v=>PL+(v-x0)/(x1-x0)*PW,sy:v=>PT+PH-v/y1*PH};}
+function V1(st){const m=M1,l=L(),dF=1/(m.Nin*m.bw);
+  if(st==='count')return view(m.lo,m.hi,m.maxC*1.22,l.x,l.yc,l.xs);
+  if(st==='dens')return view(m.lo,m.hi,m.maxC*dF*1.22,l.x,l.yd,l.xs);
+  const zl=(m.lo-m.mu)/m.sg,zh=(m.hi-m.mu)/m.sg,Mx=Math.min(6,Math.max(3.5,Math.abs(zl),Math.abs(zh)));
+  return view(-Mx,Mx,m.maxC*dF*m.sg*1.22,l.z,l.yd,l.zs);}
+function R1(st,v,cnts){const m=M1,dF=1/(m.Nin*m.bw);return (cnts||m.counts).map((c,i)=>{let a=m.lo+i*m.bw,b=a+m.bw,h=c;
+  if(st!=='count')h=c*dF;if(st==='z'){a=(a-m.mu)/m.sg;b=(b-m.mu)/m.sg;h*=m.sg;}return [v.sx(a),v.sx(b),v.sy(0),v.sy(h)];});}
+function C1(st,v){const m=M1,out=[];for(let i=0;i<=240;i++){const x=m.lo+(m.hi-m.lo)*i/240;let y=pdf(x,m.mu,m.sg),xx=x;
+  if(st==='count')y*=m.Nin*m.bw;if(st==='z'){xx=(x-m.mu)/m.sg;y*=m.sg;}out.push([v.sx(xx),v.sy(y)]);}return out;}
+function V2(st){const m=M2,l=L();
+  if(st==='count')return view(m.lo,m.hi,m.maxGC*1.22,l.x,l.yc,l.xs);
+  if(st==='stack')return view(m.lo,m.hi,m.maxStack*1.22,l.x,l.yc,l.xs);
+  if(st==='dens')return view(m.lo,m.hi,m.maxDens*1.22,l.x,l.yd,l.xs);
+  return view(-m.Mz,m.Mz,Math.max(m.maxDensZ,.399)*1.22,l.z,l.yd,l.zs);}
+function R2(st,v,part){const m=M2,cum=new Array(m.k).fill(0);
+  return m.G.map((gg,gi)=>(part?part[gi]:gg.counts).map((c,i)=>{let a=m.lo+i*m.bw,b=a+m.bw,y0=0,y1=c;
+    if(st==='stack'){y0=cum[i];y1=cum[i]+c;cum[i]=y1;}
+    if(st==='dens'||st==='z')y1=c/(gg.n*m.bw);
+    if(st==='z'){a=(a-gg.mu)/gg.sg;b=(b-gg.mu)/gg.sg;y1*=gg.sg;}
+    return [v.sx(a),v.sx(b),v.sy(y0),v.sy(y1)];}));}
+function C2(st,v,gi){const m=M2,gg=m.G[gi],out=[];for(let i=0;i<=240;i++){const x=m.lo+(m.hi-m.lo)*i/240;let y=pdf(x,gg.mu,gg.sg),xx=x;
+  if(st==='count'||st==='stack')y*=gg.n*m.bw;if(st==='z'){xx=(x-gg.mu)/gg.sg;y*=gg.sg;}out.push([v.sx(xx),v.sy(y)]);}return out;}
+const lerpArr=(A,B,t)=>A.map((r,i)=>r.map((x,j)=>lerp(x,B[i][j],t)));
+
+/* ---------- 그리기 도구 ---------- */
+function bg(){g.fillStyle=K.bg;g.fillRect(0,0,W,H);const gr=g.createRadialGradient(W*.35,H*.25,50,W*.5,H*.5,W*.75);
+  gr.addColorStop(0,'rgba(255,255,255,0.05)');gr.addColorStop(1,'rgba(0,0,0,0.25)');g.fillStyle=gr;g.fillRect(0,0,W,H);}
+function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+function axisLines(){g.strokeStyle=K.chalk;g.lineWidth=3;g.beginPath();g.moveTo(PL,PT-20);g.lineTo(PL,PT+PH);g.lineTo(PL+PW+20,PT+PH);g.stroke();}
+function ticks(v,al){if(al<=0.01)return;g.save();g.globalAlpha=al;
+  const xs=niceStep(v.x1-v.x0,8);g.font=FN(26);g.fillStyle=K.dim;g.strokeStyle=K.chalk;g.lineWidth=2;g.textAlign='center';g.textBaseline='top';
+  for(let t=Math.ceil(v.x0/xs)*xs;t<=v.x1+1e-9;t+=xs){const p=v.sx(t);g.beginPath();g.moveTo(p,PT+PH);g.lineTo(p,PT+PH+10);g.stroke();g.fillText(fmt(t,xs),p,PT+PH+16);}
+  const ys=niceStep(v.y1,5);g.textAlign='right';g.textBaseline='middle';
+  for(let t=0;t<=v.y1+1e-12;t+=ys){const p=v.sy(t);g.strokeStyle='rgba(236,235,227,0.12)';g.beginPath();g.moveTo(PL,p);g.lineTo(PL+PW,p);g.stroke();
+    g.strokeStyle=K.chalk;g.beginPath();g.moveTo(PL-10,p);g.lineTo(PL,p);g.stroke();g.fillText(fmt(t,ys),PL-16,p);}
+  g.font=FB(30);g.fillStyle=K.chalk;g.textAlign='right';g.textBaseline='top';g.fillText(v.xu,PL+PW+20,PT+PH+64);
+  g.textAlign='left';g.textBaseline='bottom';g.fillText('↑ '+v.yu,PL-10,PT-30);g.restore();}
+function bars(R,color,fa,sa){g.fillStyle=rgba(color,fa);g.strokeStyle=rgba(color,sa);g.lineWidth=2;
+  R.forEach(([a,b,y0,y1])=>{if(Math.abs(y0-y1)<0.5)return;g.fillRect(a,y1,b-a,y0-y1);g.strokeRect(a+1,y1,b-a-2,y0-y1);});}
+function line(P,color,w,frac,dash){const n=Math.max(1,Math.floor(P.length*(frac==null?1:frac)));g.save();g.strokeStyle=color;g.lineWidth=w;g.lineJoin='round';g.setLineDash(dash||[]);
+  g.beginPath();for(let i=0;i<n;i++)i?g.lineTo(P[i][0],P[i][1]):g.moveTo(P[i][0],P[i][1]);g.stroke();g.restore();}
+function vl(x,y0,y1,color,w,dash){g.save();g.strokeStyle=color;g.lineWidth=w;g.setLineDash(dash||[]);g.beginPath();g.moveTo(x,y0);g.lineTo(x,y1);g.stroke();g.restore();}
+function txt(s,x,y,font,color,al,bl){g.font=font;g.fillStyle=color;g.textAlign=al||'left';g.textBaseline=bl||'alphabetic';g.fillText(s,x,y);}
+function clipOn(){g.save();g.beginPath();g.rect(PL,PT-60,PW+10,PH+60);g.clip();}
+let shown={v:null};
+function header(title,sub){txt(title,PL,80,FT(60),K.chalk);txt(sub,PL,124,FB(26),K.dim);}
+function readout(v,nTxt){shown.v=v;const xs=niceStep(v.x1-v.x0,8),ys=niceStep(v.y1,5);
+  txt(`X축  ${fmt(v.x0,xs/10)} ~ ${fmt(v.x1,xs/10)} ${v.xs}`,W-PR,70,FN(28),K.yellow,'right');
+  txt(`Y축  0 ~ ${fmt(v.y1,ys/10)}  ${v.yu}`,W-PR,108,FN(28),K.yellow,'right');
+  if(nTxt)txt(nTxt,W-PR,144,FN(24),K.dim,'right');}
+function legend(){if(!M2)return;let x=PL+PW;g.font=FB(28);M2.G.slice().reverse().forEach(gg=>{const s=`${gg.name} (n=${gg.n})`;const w=g.measureText(s).width;x-=w;
+  txt(s,x,PT-26,FB(28),gg.color,'left','bottom');g.fillStyle=gg.color;g.fillRect(x-28,PT-50,18,18);x-=60;});}
+
+/* ---------- 장면 정의 ---------- */
+const S1=[
+ {mid:'데이터 쌓기',uni:'표본 히스토그램',d:9},{mid:'평균과 퍼짐',uni:'μ, σ 추정',d:6},{mid:'종 모양 곡선',uni:'밀도 변환·정규곡선 적합',d:7},
+ {mid:'68·95 규칙',uni:'경험법칙 검증',d:8},{mid:'같은 자(Z)로 바꾸기',uni:'표준화 Z',d:7},{mid:'가설 세우기',uni:'가설 설정 (H₀, H₁, α)',d:11},{mid:'P값: 얼마나 드문가',uni:'P값(양측 Z검정)',d:10}];
+const S2=[
+ {mid:'지역별 쌓기',uni:'집단별 히스토그램',d:10},{mid:'지역별 종 모양',uni:'집단별 정규 적합',d:7},{mid:'모두 섞으면?',uni:'혼합분포(누적)',d:8},
+ {mid:'비율로 맞추기',uni:'밀도 정규화',d:6},{mid:'같은 자로 비교',uni:'집단별 표준화',d:8},{mid:'가설 세우기',uni:'가설 설정 (H₀, H₁, α)',d:11},{mid:'P값: 정말 다른가',uni:'P값(Welch t검정)',d:12}];
+const SAY={
+ 1:{mid:['집 한 채 가격이 점 하나예요. 점이 떨어질 때마다 그 가격 칸의 막대가 한 칸씩 올라갑니다. 데이터가 늘면서 X축 범위가 넓어지고, Y축 최댓값도 따라 커지는 걸 보세요.',
+   '가운데 선이 평균, 양옆 칸이 표준편차예요. 평균은 종의 위치, 표준편차는 종의 넓이입니다.',
+   'Y축을 집 수에서 밀도로 바꿔도 막대 모양은 그대로예요. 숫자만 바뀝니다. 그 위에 종 모양 곡선을 그려 봅니다.',
+   '평균에서 한 칸 안에 약 68%, 두 칸 안에 약 95%가 들어가요. 우리 데이터 비율과 비교해 보세요.',
+   'X축을 억원 대신 평균에서 몇 칸 떨어졌는지로 바꿉니다. 평균은 0, 한 칸은 1이 됩니다.',
+   '검정은 항상 가설부터 세워요. 먼저 질문을 정하고, “평범한 집이다”라고 일단 믿어 주는 것이 귀무가설 H₀예요. 우리가 확인하고 싶은 “특별한 가격이다”가 대립가설 H₁이고요. 그리고 얼마나 드물면 H₀를 버릴지 기준 α(보통 5%, 20번에 1번)를 미리 정해 둡니다. 결과를 보고 나서 기준을 바꾸면 안 돼요!',
+   'P값은 “평소대로라면 이런 일이 얼마나 자주 일어날까?”를 나타내는 숫자예요. 동전을 10번 던져 10번 다 앞면이 나오면 1,000번에 한 번꼴이라 동전을 의심하게 되죠. 집값도 같아요. 선이 가운데에서 멀어질수록 노란 꼬리(이 집보다 더 극단적인 집의 비율)가 줄어들어요. 이 꼬리 넓이가 P값이고, 5%(20번에 한 번)보다 작아지면 “아주 드문 가격”이라고 말해요.'],
+  uni:['표본이 누적되며 히스토그램이 형성됩니다. 축은 관측 범위와 최대 도수에 맞춰 동적으로 재조정됩니다.',
+   '표본평균 x̄로 μ를, 표본표준편차 s로 σ를 추정합니다.',
+   '도수를 n·h로 나누면 밀도 히스토그램이 되어 면적이 1이 되고, N(x̄, s²) 확률밀도함수와 직접 비교할 수 있습니다.',
+   '경험법칙 P(|Z|≤1)=0.683, P(|Z|≤2)=0.954와 표본 비율을 비교해 정규성을 시각적으로 점검합니다.',
+   'Z=(X−μ)/σ 선형변환: 위치는 0, 척도는 1로 바뀌고 분포의 모양은 보존됩니다.',
+   '연구 질문을 통계적 가설로 바꿉니다. H₀는 “효과·차이가 없다”는 기본 가정(등호 포함), H₁은 입증하려는 주장입니다. ≠이면 양측검정입니다. 유의수준 α(제1종 오류 허용 확률)와 검정통계량 Z=(x−μ)/σ를 데이터를 보기 전에 정합니다.',
+   'H₀: 이 관측값은 N(μ, σ²)에서 나왔다. 양측 P값 = 2·P(Z ≥ |z|). 임계값 ±z(α/2) 밖으로 나가면 p < α이므로 H₀를 기각합니다. P값은 “H₀가 참일 확률”이 아니라 “H₀가 참일 때 이만큼 극단적인 값이 나올 확률”입니다.']},
+ 2:{mid:['이번엔 지역마다 색이 달라요. 세 지역의 점이 동시에 떨어지며 각자의 막대가 쌓입니다. 축이 어떻게 넓어지는지 보세요.',
+   '지역마다 종이 하나씩! 위치가 다르면 옆으로, 퍼짐이 다르면 납작하거나 뾰족해요.',
+   '세 지역을 한 바구니에 쌓으면 Y축이 훨씬 커지고, 봉우리가 여러 개 생겨요. 점선 종 하나로는 설명이 안 됩니다.',
+   '지역마다 집 수가 달라서 집 수로는 비교가 불공평해요. 밀도로 바꾸면 막대 높이가 지역마다 다르게 변합니다.',
+   '각 지역을 자기 평균, 자기 표준편차로 재면 모두 같은 종으로 겹쳐요. X축이 억원에서 칸(σ)으로 바뀝니다.',
+   '이번 질문은 “두 동네 집값이 정말 다를까?”예요. 일단 “두 동네 평균은 같다, 차이는 우연이다”라고 믿어 주는 게 H₀, “평균이 다르다”가 H₁이에요. 기준은 똑같이 5%로 미리 정해 둡니다.',
+   '일단 “두 동네 가격은 사실 같은데 우연히 차이 났을 뿐”이라고 믿어 줘요. 그렇게 믿으면 평균 차이는 대부분 0 근처 종 안에 있어야 해요. 그런데 실제 차이가 종 밖으로 너무 멀리 나가서, 자(X축)를 늘려야 따라갈 정도예요. 이렇게 될 확률(P값)이 5%보다 작으면 “우연이 아니다, 두 동네 가격은 정말 다르다”고 말해요. 단, P값이 작다고 차이가 큰 건 아니니 몇 억 차이인지도 꼭 함께 보세요.'],
+  uni:['집단별 표본이 동시에 누적됩니다. 공통 계급 구간을 사용해 비교합니다.',
+   '집단별 Xᵢ ~ N(μᵢ, σᵢ²) 적합. 평균 차이는 t검정(2집단)·ANOVA(3집단 이상)로 검정합니다.',
+   '누적 히스토그램은 혼합분포 Σwᵢ·N(μᵢ, σᵢ²)입니다. 단일 정규 적합(점선)과 불일치 → 정규성 검정 전 집단을 분리해야 합니다.',
+   '표본 크기가 다른 집단은 도수/(nᵢ·h)로 밀도화해야 면적이 각각 1이 되어 비교 가능합니다.',
+   '집단별 표준화 Zᵢ=(X−μᵢ)/σᵢ 후 모두 N(0,1)에 수렴. 정규성 가정이 맞다면 곡선이 겹칩니다.',
+   '두 독립집단 평균 비교: H₀: μ₁ = μ₂, H₁: μ₁ ≠ μ₂(양측). 등분산을 가정하지 않는 Welch t검정을 검정통계량으로 정하고, α를 사전에 설정합니다. 정규성 가정은 앞의 히스토그램·곡선 적합으로 점검했습니다.',
+   'H₀: μ₁ = μ₂. Welch t = (x̄₁ − x̄₂) / √(s₁²/n₁ + s₂²/n₂)는 H₀ 아래에서 t(df)를 따릅니다. 관측 t가 임계값 밖이면 p < α → H₀ 기각. 표본이 크면 작은 차이도 유의해지므로 효과크기(평균 차이 억원)를 함께 보고해야 합니다. JAMOVI 독립표본 t검정에서 Welch 옵션과 같은 결과입니다.']}};
+
+/* ---------- 재생 상태 ---------- */
+let scene=1,step=0,u=0,playing=false,speed=1,last=0,cur=null,snap=true,rec=null;
+const STEPS=()=>scene===1?S1:S2;
+
+function dropPartial(m,order,pts,u,nG){const f=.07,N=order.length;const Kn=u<f?0:Math.min(N,Math.floor((u-f)/(1-f)*N)+1);
+  return {Kn,f,N};}
+
+function drawScene1(dt){const m=M1,l=L();bg();
+  header(uni?'정규분포: 한 집단':'가격 데이터가 그리는 종 모양',`${source} · n = ${m.N.toLocaleString()}`);
+  axisLines();
+  if(step===0){const {Kn,f,N}=dropPartial(m,m.order,m.pts,u);const part=new Array(m.k).fill(0);let mn=Infinity,mx=-Infinity;
+    for(let i=0;i<Kn;i++){const p=m.pts[m.order[i]];part[p.b]++;if(p.v<mn)mn=p.v;if(p.v>mx)mx=p.v;}
+    const pm=Math.max(0,...part);let t0,t1;
+    if(Kn<2){t0=m.mu-3*m.bw;t1=m.mu+3*m.bw;}else{t0=Math.max(m.lo,mn-2*m.bw);t1=Math.min(m.hi,mx+2*m.bw);if(t1-t0<6*m.bw){const c=(t0+t1)/2;t0=c-3*m.bw;t1=c+3*m.bw;}}
+    const tgt={x0:t0,x1:t1,y1:Math.max(4,pm*1.25)};
+    if(snap||!cur)cur={...tgt};else{const k=1-Math.exp(-dt*4);cur.x0=lerp(cur.x0,tgt.x0,k);cur.x1=lerp(cur.x1,tgt.x1,k);cur.y1=lerp(cur.y1,tgt.y1,k);}
+    const v=view(cur.x0,cur.x1,cur.y1,l.x,l.yc,l.xs);
+    clipOn();bars(R1('count',v,part),K.chalk,.22,.75);
+    const nf=Math.ceil(f/(1-f)*N),stride=Math.max(1,Math.ceil(nf/350));
+    for(let i=Kn;i<Math.min(N,Kn+nf);i+=stride){const li=f+(1-f)*i/N,q=clamp((u-(li-f))/f);if(q<=0)continue;const p=m.pts[m.order[i]];
+      const x=v.sx(p.v),yt=v.sy(part[p.b]+0.5);const y=lerp(PT-40,yt,q*q);g.fillStyle=K.yellow;g.beginPath();g.arc(x,y,7,0,7);g.fill();}
+    g.restore();ticks(v,1);readout(v,`쌓인 데이터 ${Kn.toLocaleString()} / ${N.toLocaleString()}`);return;}
+  if(step===1){const v=V1('count');clipOn();bars(R1('count',v),K.chalk,.22,.75);g.restore();ticks(v,1);
+    const a=ease(clamp(u/.4)),yTop=v.sy(m.maxC*1.08);vl(v.sx(m.mu),PT+PH,lerp(PT+PH,yTop,a),K.yellow,4,[12,8]);
+    if(a>.95)txt(uni?`x̄ = ${m.mu.toFixed(2)}`:`평균 ${m.mu.toFixed(2)}`,v.sx(m.mu),yTop-14,FT(44),K.yellow,'center');
+    const b=clamp((u-.45)/.4);if(b>0){g.save();g.globalAlpha=b;[1,2].forEach(kk=>{[-1,1].forEach(sg=>{const x=v.sx(m.mu+sg*kk*m.sg);
+      vl(x,PT+PH,PT+PH-40-kk*20,K.pink,3);txt(`${sg>0?'+':'−'}${kk}σ`,x,PT+PH-70-kk*20,FN(28),K.pink,'center');});});
+      const y=PT+PH-150;g.strokeStyle=K.pink;g.lineWidth=3;g.beginPath();g.moveTo(v.sx(m.mu),y);g.lineTo(v.sx(m.mu+m.sg),y);g.stroke();
+      txt(uni?`s = ${m.sg.toFixed(2)}`:`한 칸(σ) = ${m.sg.toFixed(2)}`,v.sx(m.mu+m.sg)+12,y+10,FT(40),K.pink);g.restore();}
+    readout(v);return;}
+  if(step===2){const A=V1('count'),B=V1('dens'),a=ease(clamp(u/.35));clipOn();bars(lerpArr(R1('count',A),R1('dens',B),a),K.chalk,.22,.75);
+    line(C1('dens',B),K.yellow,6,ease(clamp((u-.4)/.55)));g.restore();ticks(A,1-a);ticks(B,a);vl(B.sx(m.mu),PT+PH,B.sy(pdf(m.mu,m.mu,m.sg)),K.yellow,2,[10,8]);
+    if(u>.9)txt(uni?`N(${m.mu.toFixed(2)}, ${m.sg.toFixed(2)}²)`:'종 모양(정규분포) 곡선',B.sx(m.mu+m.sg*1.1),B.sy(pdf(m.mu+m.sg,m.mu,m.sg))-20,FT(44),K.yellow);
+    readout(a<.5?A:B);return;}
+  if(step===3){const v=V1('dens');clipOn();bars(R1('dens',v),K.chalk,.15,.5);
+    const P=C1('dens',v);const shade=(k,al,col)=>{const x0=v.sx(m.mu-k*m.sg),x1=v.sx(m.mu+k*m.sg);g.fillStyle=rgba(col,al);g.beginPath();g.moveTo(x0,PT+PH);
+      P.forEach(([x,y])=>{if(x>=x0&&x<=x1)g.lineTo(x,y);});g.lineTo(x1,PT+PH);g.closePath();g.fill();};
+    const a=clamp(u/.4),b=clamp((u-.5)/.4);if(b>0)shade(2,.18*b,K.pink);if(a>0)shade(1,.32*a,K.yellow);line(P,K.yellow,6);g.restore();ticks(v,1);
+    if(a>0){g.save();g.globalAlpha=a;txt(uni?`P(|Z| ≤ 1) = 68.3%   표본 ${(m.w1*100).toFixed(1)}%`:`±1칸 안: 이론 68.3% · 우리 데이터 ${(m.w1*100).toFixed(1)}%`,PL+30,PT+40,FT(42),K.yellow);g.restore();}
+    if(b>0){g.save();g.globalAlpha=b;txt(uni?`P(|Z| ≤ 2) = 95.4%   표본 ${(m.w2*100).toFixed(1)}%`:`±2칸 안: 이론 95.4% · 우리 데이터 ${(m.w2*100).toFixed(1)}%`,PL+30,PT+92,FT(42),K.pink);g.restore();}
+    readout(v);return;}
+  if(step===4){const A=V1('dens'),B=V1('z'),a=ease(clamp(u/.6));clipOn();bars(lerpArr(R1('dens',A),R1('z',B),a),K.chalk,.22,.75);
+    line(lerpArr(C1('dens',A),C1('z',B),a),K.yellow,6);g.restore();ticks(A,1-a);ticks(B,a);
+    const b=clamp((u-.65)/.3);if(b>0){g.save();g.globalAlpha=b;vl(B.sx(0),PT+PH,B.sy(.399/m.sg*m.sg*1.0),K.yellow,3,[10,8]);
+      txt(uni?'μ → 0,  σ → 1':'평균 → 0,  한 칸 → 1',B.sx(0),PT+40,FT(48),K.yellow,'center');
+      const y=PT+PH-120;g.strokeStyle=K.pink;g.lineWidth=3;g.beginPath();g.moveTo(B.sx(0),y);g.lineTo(B.sx(1),y);g.stroke();txt('1',B.sx(.5),y-10,FN(30),K.pink,'center');g.restore();}
+    readout(a<.5?A:B);return;}
+  if(step===5){const x=parseFloat($('ptarget').value),xs=isFinite(x)?x.toFixed(1):'-',al=ALPHA(),pc=(al*100)+'%';
+    drawHypo(uni?{q:`연구 질문: 관측값 x = ${xs} ${L().xs}는 이 지역 가격 분포 N(μ, σ²)에서 나온 값인가?`,
+      h0:`H₀ : X ~ N(${M1.mu.toFixed(2)}, ${M1.sg.toFixed(2)}²)  — 관측값은 이 분포에서 나왔다`,h1:'H₁ : 관측값은 이 분포에서 나온 값이 아니다  (양측검정)',
+      a:`α = ${al}   검정통계량 Z = (x − μ) / σ`}
+      :{q:`질문: ${xs}억 집, 이 동네에서 특별한 가격일까?`,h0:'귀무가설 H₀ : 평범한 집이다. 우연히 이 가격이 나왔을 뿐 (일단 믿어 주기)',
+      h1:'대립가설 H₁ : 평범하지 않은, 특별한 가격이다 (확인하고 싶은 것)',a:`기준 α = ${pc} : ${Math.round(1/al)}번에 1번보다 드물면 H₀를 버린다`});return;}
+  if(step===6){const v0=V1('z'),zT=targetZ(),al=ALPHA(),zc=invP(z=>2*(1-Phi(z)),al);
+    const s=ease(clamp((u-.25)/.5));const M=lerp(v0.x1,Math.max(v0.x1,Math.abs(zT)*1.15,zc+.5),s);
+    const v=view(-M,M,.48,L().z,uni?'밀도 φ(z)':'밀도',L().zs);const f=z=>pdf(z,0,1);
+    clipOn();const fa=1-clamp(u/.15);if(fa>0){g.save();g.globalAlpha=fa;bars(R1('z',v0),K.chalk,.22,.75);g.restore();}
+    const c=clamp((u-.08)/.2);if(c>0){shadeF(v,f,-M,-zc,rgba(K.pink,.22*c));shadeF(v,f,zc,M,rgba(K.pink,.22*c));}
+    const zm=lerp(0,zT,s),az=Math.abs(zm),p=2*(1-Phi(az));
+    if(s>0){shadeF(v,f,az,M,rgba(K.yellow,.5));shadeF(v,f,-M,-az,rgba(K.yellow,.5));}
+    line(curveF(v,f,-M,M),K.yellow,6);g.restore();ticks(v,1);
+    if(c>0){g.save();g.globalAlpha=c;[-zc,zc].forEach(z=>{vl(v.sx(z),PT+PH,PT+120,K.pink,3,[10,8]);txt((z<0?'−':'+')+zc.toFixed(2),v.sx(z),PT+108,FN(26),K.pink,'center');});
+      txt(uni?`임계값 ±z(α/2), α = ${al}`:`기준선 (양쪽 합 ${al*100}%)`,v.sx(zc)+12,PT+150,FB(26),K.pink);g.restore();}
+    if(s>0){const x=v.sx(zm);vl(x,PT+PH,PT+190,K.chalk,4);const price=M1.mu+zm*M1.sg;
+      txt(`${price.toFixed(2)} ${L().xs}  (z = ${zm.toFixed(2)})`,x+(zm>=0?12:-12),PT+215,FN(28),K.chalk,zm>=0?'left':'right');}
+    const sig=p<al,col=sig?K.pink:K.yellow;
+    txt(uni?`p = 2·P(Z ≥ |z|) = ${pTxt(p)}`:`더 극단적인 집의 비율(P값) = ${pTxt(p)}`,PL+30,PT+40,FT(46),col);
+    const d=clamp((u-.8)/.15);if(d>0){g.save();g.globalAlpha=d;
+      txt(uni?(sig?`p < α → H₀ 기각: 이 분포에서 나오기 어려운 값`:`p ≥ α → H₀ 기각 못함`):(sig?`기준(${al*100}%)보다 작아요 → 아주 드문 가격!`:`기준(${al*100}%)보다 커요 → 흔히 있을 수 있는 가격`),PL+30,PT+92,FT(42),col);g.restore();}
+    readout(v);return;}
+}
+function shadeF(v,f,a,b,col){if(b<=a)return;g.fillStyle=col;g.beginPath();g.moveTo(v.sx(a),v.sy(0));const n=160;
+  for(let i=0;i<=n;i++){const x=a+(b-a)*i/n;g.lineTo(v.sx(x),v.sy(f(x)));}g.lineTo(v.sx(b),v.sy(0));g.closePath();g.fill();}
+function curveF(v,f,a,b){const P=[];const n=900;for(let i=0;i<=n;i++){const x=a+(b-a)*i/n;P.push([v.sx(x),v.sy(f(x))]);}return P;}
+function drawHypo(T){g.fillStyle=K.bg;g.fillRect(0,PT-25,W,H-PT+25);const items=[['질문',T.q,K.chalk],['H₀',T.h0,K.yellow],['H₁',T.h1,K.pink],['α',T.a,'#8ec5ee']];
+  items.forEach(([tag,s,col],i)=>{const t0=.04+i*.17,a=clamp((u-t0)/.06),w=clamp((u-t0)/.14);if(a<=0)return;const y=PT+30+i*150;
+    g.save();g.globalAlpha=a;g.strokeStyle=rgba(col,.55);g.lineWidth=3;g.setLineDash([12,9]);g.strokeRect(PL,y,PW,118);g.setLineDash([]);
+    g.fillStyle=col;g.fillRect(PL,y,150,118);txt(tag,PL+75,y+59,FT(56),K.bg,'center','middle');
+    g.font=FB(40);let str=s.slice(0,Math.ceil(s.length*w));const maxW=PW-200;while(g.measureText(str).width>maxW&&str.length>4)str=str.slice(0,-2);
+    txt(str,PL+185,y+59,FB(40),col,'left','middle');g.restore();});
+  const fa=clamp((u-.78)/.12);if(fa<=0)return;const steps=uni?['① 가설 설정','② 검정통계량 계산','③ P값 구하기','④ α와 비교·판단']:['① 가설 세우기','② 얼마나 튀었나 재기','③ P값 구하기','④ 기준과 비교'];
+  const bw=(PW-3*60)/4,y=PT+30+4*150+20;g.save();g.globalAlpha=fa;
+  steps.forEach((s,i)=>{const x=PL+i*(bw+60),on=i===0;g.fillStyle=on?K.yellow:'rgba(236,235,227,0.08)';g.fillRect(x,y,bw,84);g.strokeStyle=on?K.yellow:K.dim;g.lineWidth=2;g.strokeRect(x,y,bw,84);
+    txt(s,x+bw/2,y+42,FT(40),on?K.bg:K.chalk,'center','middle');if(i<3)txt('→',x+bw+30,y+42,FT(48),K.dim,'center','middle');});
+  g.restore();}
+function drawScene2(dt){const l=L();bg();
+  if(!M2){header(uni?'정규분포: 여러 집단':'지역이 여러 개라면?','그룹 열이 필요합니다');axisLines();
+    txt('데이터 패널에서 “그룹 열”(예: 시군구)을 고르면 이 장면이 만들어집니다.',W/2,H/2,FB(40),K.dim,'center');return;}
+  const m=M2;header(uni?'정규분포: 여러 집단 비교':'지역이 여러 개라면?',`${source} · n = ${m.Nin.toLocaleString()}`);axisLines();legend();
+  if(step===0){const {Kn,f,N}=dropPartial(m,m.order,m.pts,u);const part=m.G.map(()=>new Array(m.k).fill(0));let mn=Infinity,mx=-Infinity,pm=0;
+    for(let i=0;i<Kn;i++){const p=m.pts[m.order[i]];const c=++part[p.gi][p.b];if(c>pm)pm=c;if(p.v<mn)mn=p.v;if(p.v>mx)mx=p.v;}
+    let t0,t1;const c0=(m.lo+m.hi)/2;if(Kn<2){t0=c0-3*m.bw;t1=c0+3*m.bw;}else{t0=Math.max(m.lo,mn-2*m.bw);t1=Math.min(m.hi,mx+2*m.bw);if(t1-t0<6*m.bw){const c=(t0+t1)/2;t0=c-3*m.bw;t1=c+3*m.bw;}}
+    const tgt={x0:t0,x1:t1,y1:Math.max(4,pm*1.25)};
+    if(snap||!cur)cur={...tgt};else{const k=1-Math.exp(-dt*4);cur.x0=lerp(cur.x0,tgt.x0,k);cur.x1=lerp(cur.x1,tgt.x1,k);cur.y1=lerp(cur.y1,tgt.y1,k);}
+    const v=view(cur.x0,cur.x1,cur.y1,l.x,l.yc,l.xs);clipOn();R2('count',v,part).forEach((R,gi)=>bars(R,m.G[gi].color,.2,.85));
+    const nf=Math.ceil(f/(1-f)*N),stride=Math.max(1,Math.ceil(nf/350));
+    for(let i=Kn;i<Math.min(N,Kn+nf);i+=stride){const li=f+(1-f)*i/N,q=clamp((u-(li-f))/f);if(q<=0)continue;const p=m.pts[m.order[i]];
+      const y=lerp(PT-40,v.sy(part[p.gi][p.b]+.5),q*q);g.fillStyle=m.G[p.gi].color;g.beginPath();g.arc(v.sx(p.v),y,7,0,7);g.fill();}
+    g.restore();ticks(v,1);readout(v,`쌓인 데이터 ${Kn.toLocaleString()} / ${N.toLocaleString()}`);return;}
+  if(step===1){const v=V2('count');clipOn();R2('count',v).forEach((R,gi)=>bars(R,m.G[gi].color,.16,.6));
+    m.G.forEach((gg,gi)=>{const t=ease(clamp((u-gi*.15)/.55));line(C2('count',v,gi),gg.color,6,t);});g.restore();ticks(v,1);
+    const b=clamp((u-.75)/.2);if(b>0){g.save();g.globalAlpha=b;m.G.forEach(gg=>{const x=v.sx(gg.mu),y=v.sy(pdf(gg.mu,gg.mu,gg.sg)*gg.n*m.bw);vl(x,PT+PH,y,gg.color,2,[8,8]);
+      txt(uni?`μ=${gg.mu.toFixed(1)}, σ=${gg.sg.toFixed(1)}`:`평균 ${gg.mu.toFixed(1)}`,x,y-16,FN(28),gg.color,'center');});g.restore();}
+    readout(v);return;}
+  if(step===2){const A=V2('count'),B=V2('stack'),a=ease(clamp(u/.5));const RA=R2('count',A),RB=R2('stack',B);
+    clipOn();RA.forEach((R,gi)=>bars(lerpArr(R,RB[gi],a),m.G[gi].color,lerp(.16,.45,a),.85));
+    g.save();g.globalAlpha=1-a;m.G.forEach((gg,gi)=>line(C2('count',A,gi),gg.color,5));g.restore();
+    const b=ease(clamp((u-.55)/.4));if(b>0){const P=[];for(let i=0;i<=240;i++){const x=m.lo+(m.hi-m.lo)*i/240;P.push([B.sx(x),B.sy(pdf(x,m.amu,m.asg)*m.Nin*m.bw)]);}line(P,K.yellow,6,b,[18,12]);}
+    g.restore();ticks(A,1-a);ticks(B,a);
+    if(u>.9)txt(uni?`단일 정규 적합 N(${m.amu.toFixed(1)}, ${m.asg.toFixed(1)}²) → 적합 불량`:'점선 종 하나로는 모양이 안 맞아요',PL+30,PT+40,FT(44),K.yellow);
+    readout(a<.5?A:B);return;}
+  if(step===3){const A=V2('stack'),B=V2('dens'),a=ease(clamp(u/.5));const RA=R2('stack',A),RB=R2('dens',B);
+    clipOn();RA.forEach((R,gi)=>bars(lerpArr(R,RB[gi],a),m.G[gi].color,lerp(.45,.16,a),.85));
+    const b=ease(clamp((u-.5)/.45));m.G.forEach((gg,gi)=>line(C2('dens',B,gi),gg.color,6,b));g.restore();ticks(A,1-a);ticks(B,a);
+    readout(a<.5?A:B);return;}
+  if(step===4){const A=V2('dens'),B=V2('z'),a=ease(clamp(u/.6));const RA=R2('dens',A),RB=R2('z',B);
+    clipOn();RA.forEach((R,gi)=>bars(lerpArr(R,RB[gi],a),m.G[gi].color,.13,.7));
+    m.G.forEach((gg,gi)=>line(lerpArr(C2('dens',A,gi),C2('z',B,gi),a),gg.color,5));
+    const b=clamp((u-.65)/.3);if(b>0){const P=[];for(let i=0;i<=240;i++){const z=-m.Mz+2*m.Mz*i/240;P.push([B.sx(z),B.sy(pdf(z,0,1))]);}g.save();g.globalAlpha=b;line(P,K.chalk,8,1,[4,10]);g.restore();}
+    g.restore();ticks(A,1-a);ticks(B,a);
+    if(b>0){g.save();g.globalAlpha=b;txt(uni?'모두 N(0, 1)로 수렴':'모두 같은 종으로 겹쳐요!',B.sx(0),PT+40,FT(50),K.chalk,'center');g.restore();}
+    readout(a<.5?A:B);return;}
+  if(step===5){const T=curTest();if(!T)return;const a=m.G[T.i].name,b=m.G[T.j].name,al=ALPHA(),pc=(al*100)+'%';
+    drawHypo(uni?{q:`연구 질문: ${a}와 ${b}의 평균 매매가는 다른가?`,h0:`H₀ : μ(${a}) = μ(${b})  — 두 모집단 평균은 같다`,h1:`H₁ : μ(${a}) ≠ μ(${b})  (양측검정)`,
+      a:`α = ${al}   검정통계량 Welch t = (x̄₁ − x̄₂) / √(s₁²/n₁ + s₂²/n₂)`}
+      :{q:`질문: ${a}와 ${b}, 집값이 정말 다를까?`,h0:'귀무가설 H₀ : 두 동네 평균 가격은 같다. 차이는 우연일 뿐',h1:'대립가설 H₁ : 두 동네 평균 가격은 다르다',
+      a:`기준 α = ${pc} : 이런 차이가 ${Math.round(1/al)}번에 1번보다 드물면 H₀를 버린다`});return;}
+  if(step===6){const T=curTest();if(!T)return;const al=ALPHA(),df=T.df,tc=invP(t=>tP2(t,df),al),ga=m.G[T.i],gb=m.G[T.j];
+    const s=ease(clamp((u-.3)/.45));const M=lerp(4,Math.max(4,Math.abs(T.t)*1.15+.5,tc+.5),s);
+    const v=view(-M,M,.46,uni?'t 통계량':'평균 차이가 표준오차 몇 개만큼인가',uni?'밀도 t(df)':'밀도','t');const f=t=>tpdf(t,df);
+    clipOn();const c=clamp((u-.06)/.2);if(c>0){shadeF(v,f,-M,-tc,rgba(K.pink,.22*c));shadeF(v,f,tc,M,rgba(K.pink,.22*c));}
+    const tm=lerp(0,T.t,s),at=Math.abs(tm),p=tP2(at,df);
+    if(s>0){shadeF(v,f,at,M,rgba(K.yellow,.5));shadeF(v,f,-M,-at,rgba(K.yellow,.5));}
+    line(curveF(v,f,-M,M),K.chalk,6);g.restore();ticks(v,1);
+    if(c>0){g.save();g.globalAlpha=c;[-tc,tc].forEach(t=>{vl(v.sx(t),PT+PH,PT+190,K.pink,3,[10,8]);txt((t<0?'−':'+')+tc.toFixed(2),v.sx(t),PT+178,FN(26),K.pink,'center');});g.restore();}
+    if(s>0){const x=v.sx(tm);vl(x,PT+PH,PT+240,K.yellow,4);g.fillStyle=K.yellow;g.beginPath();g.arc(x,PT+240,9,0,7);g.fill();
+      txt(`t = ${tm.toFixed(2)}`,x+(tm>=0?14:-14),PT+262,FN(30),K.yellow,tm>=0?'left':'right');}
+    txt(`${ga.name} ${T.ma.toFixed(2)}  vs  ${gb.name} ${T.mb.toFixed(2)}  →  ${uni?'x̄₁ − x̄₂':'차이'} ${T.diff>=0?'+':''}${T.diff.toFixed(2)} ${L().xs}`,PL+30,PT+40,FB(34),K.chalk);
+    if(uni)txt(`SE = ${T.se.toFixed(3)},  df = ${df.toFixed(1)}`,PL+30,PT+82,FN(26),K.dim);
+    const sig=p<al,col=sig?K.pink:K.yellow;
+    txt(uni?`p = ${pTxt(p)}  (α = ${al})`:`P값 = ${pTxt(p)}`,W-PR-10,PT+40,FT(50),col,'right');
+    const d=clamp((u-.82)/.15);if(d>0){g.save();g.globalAlpha=d;
+      txt(uni?(sig?'p < α → H₀(μ₁ = μ₂) 기각':'p ≥ α → H₀ 기각 못함'):(sig?`${al*100}%보다 작아요 → 두 지역 가격은 정말 달라요`:`${al*100}%보다 커요 → 우연한 차이일 수 있어요`),W-PR-10,PT+92,FT(42),col,'right');g.restore();}
+    readout(v);return;}
+}
+
+/* ---------- 루프 ---------- */
+function frame(ts){const dt=last?Math.min(.1,(ts-last)/1000):0;last=ts;
+  if(playing){const S=STEPS();u+=dt*speed/S[step].d;if(u>=1){if(step<S.length-1){step++;u=0;snap=true;cur=null;}else{u=1;setPlay(false);if(rec&&rec.state==='recording')setTimeout(()=>rec.stop(),600);}}}
+  try{scene===1?drawScene1(dt):drawScene2(dt);}catch(e){console.error(e);}
+  snap=false;ui();requestAnimationFrame(frame);}
+let lastUI='';
+function ui(){const S=STEPS();const tot=S.reduce((a,s)=>a+s.d,0);let el=0;for(let i=0;i<step;i++)el+=S[i].d;el+=u*S[step].d;
+  if(!scrubbing)$('scrub').value=Math.round(el/tot*1000);
+  const v=shown.v;if(v){const xs=niceStep(v.x1-v.x0,8),ys=niceStep(v.y1,5);
+    setR('rX',`${fmt(v.x0,xs/10)} ~ ${fmt(v.x1,xs/10)}`);setR('rXu',v.xu);setR('rY',`0 ~ ${fmt(v.y1,ys/10)}`);setR('rYu',v.yu);}
+  const m=scene===1?M1:M2;setR('rBw',m?`${fmt(m.bw,m.bw/100)} ${L().xs} (${m.k}칸)`:'-');
+  const key=scene+'|'+step+'|'+uni;if(key!==lastUI){lastUI=key;
+    $('steps').innerHTML=S.map((s,i)=>`<button data-i="${i}" class="${i===step?'on':i<step?'done':''}">${i+1}. ${uni?s.uni:s.mid}</button>`).join('');
+    $('say').textContent=SAY[scene][uni?'uni':'mid'][step];}
+  setR('rN',m?(step===0&&scene===scene?'쌓는 중… ':'')+(scene===1?m.N:m.Nin).toLocaleString()+'건':'-');}
+const prevVals={};function setR(id,t){const e=$(id);if(e.textContent!==t){e.textContent=t;e.classList.add('chg');clearTimeout(prevVals[id]);prevVals[id]=setTimeout(()=>e.classList.remove('chg'),400);}}
+
+/* ---------- 조작 ---------- */
+function setPlay(p){playing=p;$('play').textContent=p?'❚❚ 일시정지':'▶ 재생';}
+$('play').onclick=()=>{const S=STEPS();if(!playing&&step===S.length-1&&u>=1){step=0;u=0;snap=true;}setPlay(!playing);};
+$('prev').onclick=()=>{if(u>.15)u=0;else step=Math.max(0,step-1),u=0;snap=true;};
+$('next').onclick=()=>{const S=STEPS();if(step<S.length-1){step++;u=0;}else u=1;snap=true;};
+$('steps').onclick=e=>{const b=e.target.closest('button');if(!b)return;step=+b.dataset.i;u=0;snap=true;};
+let scrubbing=false;$('scrub').addEventListener('input',()=>{scrubbing=true;const S=STEPS(),tot=S.reduce((a,s)=>a+s.d,0);let t=$('scrub').value/1000*tot;
+  for(let i=0;i<S.length;i++){if(t<=S[i].d||i===S.length-1){step=i;u=clamp(t/S[i].d);break;}t-=S[i].d;}snap=true;});
+$('scrub').addEventListener('change',()=>{scrubbing=false;});
+document.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>{speed=+b.dataset.sp;document.querySelectorAll('[data-sp]').forEach(x=>x.setAttribute('aria-pressed',x===b));});
+function setScene(n){scene=n;step=0;u=0;snap=true;setPlay(false);$('sc1').setAttribute('aria-pressed',n===1);$('sc2').setAttribute('aria-pressed',n===2);lastUI='';}
+$('sc1').onclick=()=>setScene(1);$('sc2').onclick=()=>setScene(2);
+function setLv(x){uni=x;document.body.classList.toggle('uni',x);$('lvMid').setAttribute('aria-pressed',!x);$('lvUni').setAttribute('aria-pressed',x);lastUI='';}
+$('lvMid').onclick=()=>setLv(false);$('lvUni').onclick=()=>setLv(true);
+
+/* 영상 저장 */
+$('rec').onclick=()=>{const msg=$('msg');
+  if(!window.MediaRecorder||!cv.captureStream){msg.textContent='이 브라우저는 화면 녹화를 지원하지 않습니다. 크롬이나 엣지에서 열어 주세요.';return;}
+  try{const stream=cv.captureStream(30);const mt=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
+    const chunks=[];rec=new MediaRecorder(stream,mt?{mimeType:mt,videoBitsPerSecond:8e6}:{});
+    rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+    rec.onstop=async()=>{const blob=new Blob(chunks,{type:'video/webm'});const name=`정규분포_${scene===1?'하나':'여러개'}_${uni?'대학':'중학생'}.webm`;rec=null;
+      let dl=null;try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;}catch(_){dl=null;}
+      if(dl){try{await dl.save({filename:name,data:blob});msg.textContent='영상을 저장했습니다: '+name;}
+        catch(err){msg.textContent=err&&err.code==='declined'?'저장을 취소했습니다. 다시 녹화하려면 버튼을 누르세요.':'이 화면에서는 저장할 수 없습니다. 다운로드한 HTML 파일을 크롬에서 열어 녹화해 주세요.';}return;}
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();
+      msg.textContent='녹화가 끝났습니다: '+name+' (다운로드 폴더를 확인하세요)';};
+    step=0;u=0;snap=true;rec.start(500);setPlay(true);msg.textContent='녹화 중… 장면이 끝나면 자동으로 저장됩니다.';
+  }catch(e){msg.textContent='녹화를 시작하지 못했습니다: '+e.message;}};
+
+/* 시작 */
+DATA=sampleData();build();
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{snap=true;});
+requestAnimationFrame(frame);
+})();
+</script>

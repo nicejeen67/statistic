@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>원그래프가 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 거래 알갱이 → 유형별 무리 → 100% 띠 → 띠를 말아 원 → 조각 */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --soft:#e8eef6; --c5:#7a6aa8;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; --c5:#a99ad6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#6aa0e8; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --soft:#1d2a3d; --c5:#a99ad6; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:520px}
+@media (max-width:560px){canvas{height:560px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.formula{font:13.5px var(--mono);background:var(--soft);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:nowrap;margin:8px 0;line-height:1.8}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:360px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 14 · 구성</div>
+    <h1>원그래프가 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="주택유형별 거래 알갱이를 세어 100% 띠를 만들고 말아서 원그래프로 만드는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp seg" role="group" aria-label="보기 방식"><span>보기</span><button id="vP" type="button" aria-pressed="true">원그래프</button><button id="vS" type="button" aria-pressed="false">100% 띠</button></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="23" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>건수 → 비율 → 각도</h2>
+      <p id="angText"></p>
+      <div class="formula">비율(%) = 유형 건수 ÷ 전체 건수 × 100<br>각도(°) = 비율 ÷ 100 × 360</div>
+      <div class="tbl"><table><thead><tr><th>주택유형</th><th>건수</th><th>비율</th><th>각도</th></tr></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>원그래프를 써도 되는지 점검</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">원그래프를 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 거래 건수는 설명용으로 만든 예시 값이며 실제 통계가 아닙니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+const TYPES=['아파트','연립·다세대','오피스텔','단독·다가구'],CNT=[93,32,21,14],TOT=CNT.reduce((a,b)=>a+b,0);
+const PCT=CNT.map(c=>c/TOT*100),CUM=CNT.map((_,i)=>CNT.slice(0,i).reduce((a,b)=>a+b,0)/TOT);
+const SIM=[['강동',21],['마포',19],['성동',22],['광진',18],['동작',20]]; // 비슷한 크기 예시
+const TOTAL=23,T2=1.8,T3=4.6,T4=7.0,T5=9.6,T6=12.4,T7=15.0,T8=20.0;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+const f1=v=>v.toFixed(1);
+const R=rng(1600);
+const tok=[];CNT.forEach((c,g)=>{for(let k=0;k<c;k++)tok.push({g,k})});
+const shuffled=tok.map((_,i)=>i);for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]}
+tok.forEach((tk,i)=>{tk.pile=shuffled.indexOf(i);tk.idx=i}); // idx = 유형 순서대로 이어 붙였을 때의 위치
+
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',vUser=0,vCur=0;
+try{const v=localStorage.getItem('pieLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<560;const Rad=Math.min(narrow?W*.36:H*.34,170);
+  L={W,H,narrow,pad:narrow?16:40,Rad,cx:narrow?W/2:W*.36,cy:narrow?H*.42:H*.5,cell:narrow?9:12}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c3:col('--c3'),c4:col('--c4')};
+  const GC=[col('--c1'),col('--c2'),col('--c3'),col('--c4')],SC5=[col('--c1'),col('--c2'),col('--c3'),col('--c4'),col('--c5')];
+  const{W,H,narrow,pad,Rad,cx,cy,cell}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const a0=clamp(t/.5);
+  // 진행도
+  const pG=t<T2?0:ease(clamp((t-T2)/1.6));     // 유형별 무리
+  const pC=clamp((t-T3)/.6);                     // 비율 표시
+  const pS=t<T4?0:ease(clamp((t-T4)/1.6));      // 100% 띠
+  let pR;if(t<T5)pR=0;else if(t<T8)pR=ease(clamp((t-T5)/1.8));else pR=1-vCur; // 띠 → 원
+  const pF=t<T5+1.6?0:clamp((t-T5-1.6)/.8)*(t>=T8?1:1);   // 조각 채우기
+  const pL=clamp((t-T6)/.8);                     // 라벨
+  const p7=(t>=T7&&t<T8)?clamp((t-T7)/.6)*(1-clamp((t-T8+.5)/.5)):0;
+  // 배치 좌표
+  const cols=narrow?16:20,gx0=(narrow?W/2:cx)-cols*cell/2,gy0=narrow?50:70;
+  const grpW=narrow?(W-2*pad)/4:Math.min(170,(W*.72-2*pad)/4),gpc=narrow?5:8;
+  const stripX0=narrow?pad:cx-Math.min(W*.33,330),stripW=narrow?W-2*pad:Math.min(W*.66,660),stripY=cy-6,perCol=2,ncol=Math.ceil(TOT/perCol),sw=stripW/ncol;
+  txt(t<T2?`원자료: 주택 매매 거래 ${TOT}건 (색 = 주택유형)`:t<T4?'주택유형별로 모아서 세기':pR<.5?'이어 붙여 만든 100% 띠':'띠를 말아서 만든 원',pad,26,C.muted,`500 12px ${SANS}`,'left',a0);
+  // 알갱이
+  const tokA=1-pF*.92;
+  if(tokA>0)tok.forEach(tk=>{const g=tk.g;
+    const p0={x:gx0+(tk.pile%cols)*cell,y:gy0+Math.floor(tk.pile/cols)*cell};
+    const gx=pad+grpW*g+(grpW-gpc*cell)/2,p1={x:gx+(tk.k%gpc)*cell,y:(narrow?120:150)+Math.floor(tk.k/gpc)*cell};
+    const c2=Math.floor(tk.idx/perCol),rw=tk.idx%perCol,p2={x:stripX0+c2*sw,y:stripY+rw*(cell+2)};
+    const f=(tk.idx+.5)/TOT,ang=-Math.PI/2+f*2*Math.PI,rr=Rad*(rw?.78:.9),p3={x:cx+Math.cos(ang)*rr-cell/2,y:cy+Math.sin(ang)*rr-cell/2};
+    const dl=tk.idx*.004;let x=lerp(p0.x,p1.x,ease(clamp((t-T2-tk.pile*.006)/1.2))),y=lerp(p0.y,p1.y,ease(clamp((t-T2-tk.pile*.006)/1.2)));
+    const s2=ease(clamp((t-T4-dl)/1.2));x=lerp(x,p2.x,s2);y=lerp(y,p2.y,s2);
+    const s3=t<T5?0:(t<T8?ease(clamp((t-T5-dl)/1.4)):pR);x=lerp(x,p3.x,s3);y=lerp(y,p3.y,s3);
+    const sz=lerp(cell-2,s2>0?Math.min(sw-1,cell-2):cell-2,s2);
+    ctx.globalAlpha=a0*tokA;ctx.fillStyle=GC[g];ctx.fillRect(x,y,Math.max(2,sz),cell-2);ctx.globalAlpha=1});
+  // 2~3단계: 무리 이름과 건수/비율
+  const gl=pG*(1-pS);
+  if(gl>0)TYPES.forEach((n,g)=>{const gx=pad+grpW*(g+.5);txt(n,gx,(narrow?110:138),GC[g],`700 ${narrow?11:13}px ${SANS}`,'center',gl);
+    const rows=Math.ceil(CNT[g]/gpc),yb=(narrow?120:150)+rows*cell+18;txt(`${CNT[g]}건`,gx,yb,C.ink,`700 ${narrow?13:15}px ${MONO}`,'center',gl);
+    if(pC>0){txt(`÷ ${TOT} = ${f1(PCT[g])}%`,gx,yb+20,C.c4,`700 ${narrow?11:13}px ${MONO}`,'center',gl*pC)}});
+  // 4단계: 띠 눈금
+  const sa=pS*(1-pR);
+  if(sa>0){ln(stripX0,stripY-10,stripX0+stripW,stripY-10,C.muted,1,null,sa);[0,25,50,75,100].forEach(v=>{const x=stripX0+stripW*v/100;ln(x,stripY-14,x,stripY-6,C.muted,1,null,sa);txt(v+'%',x,stripY-18,C.muted,`10px ${MONO}`,'center',sa)});
+    TYPES.forEach((n,g)=>{const x0=stripX0+stripW*CUM[g],x1=x0+stripW*PCT[g]/100;txt(PCT[g]>10?`${n} ${f1(PCT[g])}%`:f1(PCT[g])+'%',(x0+x1)/2,stripY+2*(cell+2)+18,GC[g],`700 ${narrow?10:12}px ${SANS}`,'center',sa)});
+    txt('전체 = 100%',stripX0+stripW,stripY+2*(cell+2)+40,C.ink,`700 13px ${SANS}`,'right',sa)}
+  // 5~6단계: 조각
+  if(pF>0||vCur<1&&t>=T8){const fa=t>=T8?(1-vCur):pF;
+    TYPES.forEach((n,g)=>{const a1=-Math.PI/2+CUM[g]*2*Math.PI,a2=a1+PCT[g]/100*2*Math.PI;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,Rad,a1,a2);ctx.closePath();ctx.globalAlpha=fa*.92;ctx.fillStyle=GC[g];ctx.fill();ctx.globalAlpha=fa;ctx.strokeStyle=C.paper;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      // 라벨
+      const la=pL*fa,mid=(a1+a2)/2;if(la>0){const inR=Rad*.62;if(PCT[g]>9){txt(`${f1(PCT[g])}%`,cx+Math.cos(mid)*inR,cy+Math.sin(mid)*inR+5,'#fff',`700 ${narrow?13:16}px ${MONO}`,'center',la)}
+        const ox=cx+Math.cos(mid)*(Rad+14),oy=cy+Math.sin(mid)*(Rad+14),right=Math.cos(mid)>=0;ln(cx+Math.cos(mid)*Rad,cy+Math.sin(mid)*Rad,ox,oy,C.muted,1,null,la);
+        txt(n+(PCT[g]<=9?` ${f1(PCT[g])}%`:''),ox+(right?6:-6),oy+4,C.ink,`700 ${narrow?11:13}px ${SANS}`,right?'left':'right',la)}});
+    // 5단계: 각도 표시
+    const pa=(t>=T5+1.6&&t<T6+.8)?clamp((t-T5-2)/.5)*(1-clamp((t-T6)/.6)):0;
+    if(pa>0){const a2=-Math.PI/2+PCT[0]/100*2*Math.PI;ctx.globalAlpha=pa;ctx.strokeStyle=C.ink;ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(cx,cy,Rad*.32,-Math.PI/2,a2);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      txt(`${f1(PCT[0])}% × 360° = ${Math.round(PCT[0]*3.6)}°`,cx,cy-Rad-18,C.ink,`700 13px ${MONO}`,'center',pa)}}
+  // 완성 후 띠 보기(되돌리기)
+  if(t>=T8&&vCur>0){const sa2=vCur;TYPES.forEach((n,g)=>{const x0=stripX0+stripW*CUM[g],w=stripW*PCT[g]/100;ctx.globalAlpha=sa2*.92;ctx.fillStyle=GC[g];ctx.fillRect(x0,stripY,w,2*(cell+2));ctx.globalAlpha=1;
+      txt(PCT[g]>10?`${n} ${f1(PCT[g])}%`:f1(PCT[g])+'%',x0+w/2,stripY+2*(cell+2)+18,GC[g],`700 ${narrow?10:12}px ${SANS}`,'center',sa2)})}
+  // 7단계: 비슷한 크기 비교
+  if(p7>0){const bx=narrow?pad:W*.66,by=narrow?cy+Rad+30:70,bw=narrow?W-2*pad:W*.31,bh=narrow?H-by-10:H-140;
+    ctx.globalAlpha=.96*p7;ctx.fillStyle=C.paper;ctx.fillRect(bx,by,bw,bh);ctx.strokeStyle=C.c4;ctx.lineWidth=1.5;ctx.strokeRect(bx,by,bw,bh);ctx.lineWidth=1;ctx.globalAlpha=1;
+    txt('가장 큰 조각은 어느 구?',bx+12,by+22,C.c4,`700 13px ${SANS}`,'left',p7);
+    const tot=SIM.reduce((s,d)=>s+d[1],0),r2=Math.min(bw*.3,narrow?60:80),pcx=bx+bw/2,pcy=by+40+r2;let a=-Math.PI/2;
+    SIM.forEach(([n,v],k)=>{const a2=a+v/tot*2*Math.PI;ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.arc(pcx,pcy,r2,a,a2);ctx.closePath();ctx.globalAlpha=p7*.9;ctx.fillStyle=SC5[k];ctx.fill();ctx.strokeStyle=C.paper;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      const m=(a+a2)/2;txt(n,pcx+Math.cos(m)*(r2+14),pcy+Math.sin(m)*(r2+14)+4,C.ink,`11px ${SANS}`,'center',p7);a=a2});
+    const rv=clamp((t-T7-2)/.8)*p7;if(rv>0){const sorted=[...SIM].sort((p,q)=>q[1]-p[1]),y0=pcy+r2+48,bh2=narrow?14:18,maxW=bw-110;
+      txt('막대로 그리면 바로 보임',bx+12,y0-8,C.ink,`700 12px ${SANS}`,'left',rv);
+      sorted.forEach(([n,v],k)=>{const k0=SIM.findIndex(d=>d[0]===n),y=y0+k*(bh2+6);txt(n,bx+44,y+bh2-4,C.ink,`11px ${SANS}`,'right',rv);ctx.globalAlpha=rv*.9;ctx.fillStyle=SC5[k0];ctx.fillRect(bx+50,y,maxW*v/22*ease(rv),bh2);ctx.globalAlpha=1;
+        txt(`${v}%`,bx+54+maxW*v/22*ease(rv),y+bh2-4,C.ink,`700 11px ${MONO}`,'left',rv)})}}
+}
+
+const STEPS=[
+ {t:0,n:'원자료 준비',s:`거래 ${TOT}건`,e:`주택 매매 거래 ${TOT}건이 뒤섞여 있습니다. 네모 하나가 거래 1건이고, 색은 주택유형입니다.`,u:`범주형 변수(주택유형, 4수준)로 기록된 n = ${TOT}개 관측치입니다. 목표는 각 범주가 전체에서 차지하는 비율(구성비)을 표현하는 것입니다.`},
+ {t:T2,n:'유형별로 세기',s:'몇 건씩인가',e:'같은 유형끼리 모아서 셉니다. 아파트가 가장 많고 단독·다가구가 가장 적습니다.',u:'범주별 도수(frequency)를 집계합니다. 이 단계는 단위 막대그래프와 같습니다.'},
+ {t:T3,n:'비율로 바꾸기',s:'건수 ÷ 전체',e:`각 유형 건수를 전체 ${TOT}건으로 나눠 "전체 중 몇 %"로 바꿉니다. 네 비율을 모두 더하면 100%가 됩니다.`,u:'상대도수 pᵢ = nᵢ / n을 구합니다. Σpᵢ = 1이므로 원그래프는 반드시 합이 100%가 되는 상호배타적 범주에만 쓸 수 있습니다.'},
+ {t:T4,n:'100% 띠 만들기',s:'유형 순서대로 이어 붙이기',e:'모든 네모를 유형 순서대로 한 줄로 이어 붙입니다. 이 띠 전체의 길이가 100%이고, 색깔별 길이가 각 유형의 비율입니다.',u:'구성비를 길이로 부호화한 100% 누적 막대입니다. 원그래프는 이 띠를 극좌표로 변환한 것과 같습니다.'},
+ {t:T5,n:'띠를 말아 원으로',s:'비율 × 360°',e:'띠를 둥글게 말아 원을 만듭니다. 띠의 길이가 원의 각도로 바뀌어, 아파트 58%는 원의 약 209°를 차지합니다.',u:'선형 길이를 각도로 사상(θᵢ = 360° × pᵢ)합니다. 부채꼴의 각도, 호의 길이, 면적이 모두 pᵢ에 비례합니다.'},
+ {t:T6,n:'조각과 이름표',s:'12시 방향부터 큰 순서로',e:'조각에 색을 채우고 비율과 이름을 붙입니다. 12시 방향에서 시작해 큰 조각부터 시계 방향으로 놓으면 읽기 쉽습니다.',u:'관례적으로 12시 방향에서 시작해 크기 내림차순, 시계 방향으로 배치합니다. 직접 라벨을 붙이면 범례 대조 부담이 줄어듭니다.'},
+ {t:T7,n:'원그래프의 함정',s:'비슷한 조각은 비교가 어렵다',e:'자치구 다섯 곳의 비중처럼 조각 크기가 비슷하면 어느 것이 가장 큰지 알기 어렵습니다. 같은 자료를 막대로 그리면 바로 보입니다.',u:'인간의 각도·면적 판단은 길이 판단보다 정확도가 낮습니다(Cleveland & McGill, 1984). 비교가 목적이면 막대그래프가 낫고, 원그래프는 "부분과 전체" 메시지가 분명할 때 씁니다.'},
+ {t:T8,n:'완성',s:'주택유형별 거래 비중',e:'',u:''}];
+function finalMsg(){return lv==='e'?`완성입니다. 주택 거래의 ${f1(PCT[0])}%가 아파트로, 절반이 넘습니다. 위의 "보기" 버튼으로 원그래프와 100% 띠를 바꿔 보세요. 같은 정보인데 원은 "절반 이상"이, 띠는 "정확한 길이 차이"가 더 잘 보입니다.`
+  :`완성된 원그래프입니다. 아파트가 ${f1(PCT[0])}%로 과반입니다. 원그래프는 소수(2~4개) 범주의 부분-전체 관계, 특히 과반·소수 같은 단순 메시지 전달에 적합합니다. 정밀 비교나 시점 간 비교는 막대·100% 누적 막대를 사용합니다.`}
+const LEDE={e:'원그래프는 전체를 100%로 놓고 각 부분이 몇 %인지 보여주는 그래프입니다. 거래를 유형별로 세고, 비율로 바꾸고, 100% 띠로 이어 붙인 뒤, 그 띠를 둥글게 말아 원이 되는 과정을 보여줍니다.',u:'원그래프(pie chart)는 범주형 변수의 상대도수를 부채꼴의 각도로 부호화합니다. 도수 집계, 상대도수 변환, 100% 누적 막대(선형 부호화)에서 극좌표로의 변환, 배치 관례와 판독상 한계를 단계별로 보여줍니다.'};
+const ANG={e:'원 한 바퀴는 360°입니다. 그래서 비율에 360을 곱하면 그 조각의 각도가 나옵니다. 50%면 180°(반원), 25%면 90°(직각)입니다.',u:'θᵢ = 360° × nᵢ/n. 부채꼴 면적 = ½r²θ이므로 면적도 비율에 비례합니다. 반올림한 비율의 합이 100.0%가 되지 않을 수 있으므로 표기 시 주의합니다.'};
+const CHK={e:['모든 조각을 더하면 100%가 되나요? (한 거래가 두 유형에 들어가면 안 됨)','조각이 5개 이하인가요?','"가장 큰 것이 절반 이상" 같은 분명한 메시지가 있나요?','조각 크기가 서로 비슷하지는 않나요? (비슷하면 막대그래프로)','입체(3D)나 조각 떼어내기 효과를 쓰지 않았나요?'],
+ u:['범주가 상호배타적이고 망라적인가(Σpᵢ = 100%)','범주 수 ≤ 5 (작은 범주는 "기타"로 통합)','부분-전체 관계가 핵심 메시지인가','범주 간 비율 차이가 판별 가능할 만큼 큰가','3D 투시·분리(explode) 효과로 면적 왜곡이 없는가']};
+const PC={
+ pro:[
+  {t:'"전체 중 얼마"가 한눈에',e:'원 전체가 100%라서 "아파트가 전체의 절반이 넘는다"는 것이 바로 느껴집니다.',u:'부분-전체(part-to-whole) 관계를 직관적으로 전달합니다. 반원(50%), 사분원(25%) 같은 기준점으로 비율을 빠르게 가늠합니다.',x:'<b>주택 거래의 58%가 아파트</b>라는 메시지.'},
+  {t:'과반·소수 메시지가 강하다',e:'한 조각이 절반 이상이거나, 아주 작은 조각이 있을 때 그 차이가 강렬하게 보입니다.',u:'지배적 범주나 극소 범주를 강조하는 단순 메시지에 효과적입니다.',x:'<b>오피스텔은 13%에 불과</b>하다는 강조.'},
+  {t:'누구나 익숙하다',e:'설명 없이도 대부분의 사람이 읽을 수 있습니다.',u:'친숙도가 높아 비전문가 대상 보고서, 언론, 홍보물에서 학습 부담이 적습니다.',x:'주민 설명회 자료의 <b>거래 구성</b> 그림.'},
+  {t:'범주가 적으면 간결하다',e:'유형이 2~4개뿐이면 원그래프 하나로 깔끔하게 정리됩니다.',u:'소수 범주의 구성비를 축·눈금 없이 간결하게 제시할 수 있습니다.',x:'<b>매매 vs 전세 vs 월세</b> 3개 구성.'}],
+ con:[
+  {t:'비슷한 크기는 비교가 어렵다',e:'조각 크기가 18%, 20%, 22%처럼 비슷하면 어느 것이 큰지 눈으로 구분하기 어렵습니다.',u:'각도·면적 판단은 공통 기준선 위 길이 판단보다 정확도가 낮습니다. 순위 비교가 목적이면 정렬된 막대그래프를 씁니다.',x:'7단계의 <b>자치구 5곳</b> 비중 비교.'},
+  {t:'조각이 많으면 너무 작아진다',e:'유형이 8개, 10개면 작은 조각이 실처럼 가늘어져 이름도 붙이기 어렵습니다.',u:'범주가 많으면 소범주 판독과 라벨링이 불가능해집니다. 5개 이내로 제한하고 나머지는 "기타"로 묶습니다.',x:'<b>서울 25개 구</b> 거래 비중은 원그래프로 그리면 안 됩니다.'},
+  {t:'여러 개를 나란히 비교하기 어렵다',e:'2024년 원과 2025년 원을 나란히 놓으면 어느 조각이 커졌는지 알아보기 어렵습니다.',u:'다중 원그래프 간 비교는 위치가 달라진 부채꼴의 각도를 비교해야 해 오차가 큽니다. 100% 누적 막대가 적합합니다.',x:'<b>연도별 구성 변화</b>는 100% 누적 막대로.'},
+  {t:'합이 100%가 아니면 쓰면 안 된다',e:'"중복 선택 가능" 설문이나, 지역별 평균 가격처럼 더해서 100%가 되지 않는 자료는 원그래프로 그리면 안 됩니다.',u:'상호배타·망라적 범주의 상대도수에만 의미가 있습니다. 복수응답, 평균값, 증감률 등에 쓰면 해석이 성립하지 않습니다.',x:'<b>"선호 입지 요인(복수 응답)"</b>은 막대그래프로.'},
+  {t:'입체 효과는 크기를 속인다',e:'3D로 기울이거나 조각을 떼어내면 앞쪽 조각이 실제보다 커 보입니다.',u:'3D 투시는 앞쪽 부채꼴 면적을 과장하고 뒤쪽을 축소합니다. 분리 효과도 면적 지각을 왜곡하므로 평면 원그래프를 사용합니다.',x:'보고서 프로그램의 <b>3D 원형 차트</b> 기본값 주의.'}],
+ tip:{e:'<b>정리:</b> 원그래프는 "전체 중 얼마"를 보여줄 때만 씁니다. 조각은 5개 이하, 합은 100%, 큰 것부터 12시 방향에. 조각 크기가 비슷하거나 여러 해를 비교할 때는 막대그래프가 낫습니다.',
+      u:'<b>권장 사용법:</b> ① 상호배타·망라적 범주만 ② 범주 ≤ 5, 소범주는 "기타" ③ 12시 시작·내림차순·시계 방향 ④ 직접 라벨(비율) 표기 ⑤ 3D·분리 효과 금지 ⑥ 비교·시점 변화는 막대·100% 누적 막대로.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];$('angText').textContent=ANG[lv];
+  const GC=['--c1','--c2','--c3','--c4'];
+  $('tbody').innerHTML=TYPES.map((n,g)=>`<tr><td><i class="sw" style="background:var(${GC[g]})"></i>${n}</td><td>${CNT[g]}</td><td>${f1(PCT[g])}%</td><td>${Math.round(PCT[g]*3.6)}°</td></tr>`).join('')+`<tr><td><b>합계</b></td><td><b>${TOT}</b></td><td><b>100.0%</b></td><td><b>360°</b></td></tr>`;
+  $('chkNote').textContent=lv==='e'?'다섯 가지에 모두 "예"라면 원그래프를 써도 좋습니다.':'원그래프 사용 적합성 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  vCur=Math.abs(vCur-vUser)<.003?vUser:lerp(vCur,vUser,.08);draw();ui();requestAnimationFrame(frame)}
+function setV(v){vUser=v;$('vP').setAttribute('aria-pressed',v===0);$('vS').setAttribute('aria-pressed',v===1);if(t<T8){t=T8+.8;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;if(i<7){vCur=0;setV(0);t=s.t;playing=true}});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{vCur=0;setV(0);t=0;playing=true;lastPhase=-1};
+$('speed').onchange=e=>speed=+e.target.value;
+$('vP').onclick=()=>setV(0);$('vS').onclick=()=>setV(1);
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('pieLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('pieLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

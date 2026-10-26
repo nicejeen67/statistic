@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캘린더 히트맵이 만들어지는 과정</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 도면 모눈 바탕. 무대 = 시간축(점 → 막대) → 연도×월 격자(칸 → 색) */
+:root{
+  --bg:#f3f5f8; --paper:#ffffff; --ink:#16233a; --muted:#5b6678; --line:#d9dfe8; --gridc:#e6eaf0;
+  --c1:#1f4e8c; --c2:#138a83; --c3:#d98a1c; --c4:#b8506a; --c5:#7a6aa8; --soft:#e8eef6; --lo:#eef3f9;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --paper:#162030; --ink:#e4e9f1; --muted:#9aa6b8; --line:#2a3648; --gridc:#1c2738;
+  --c1:#7fb0f0; --c2:#3cc0b6; --c3:#f0aa48; --c4:#e07f97; --c5:#a99ad6; --soft:#1d2a3d; --lo:#223047; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;
+  background-image:linear-gradient(var(--gridc) 1px,transparent 1px),linear-gradient(90deg,var(--gridc) 1px,transparent 1px);background-size:24px 24px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:36px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--c2);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:4px 0 8px;text-wrap:balance}
+h1 span{color:var(--c1)}
+.lede{margin:0;color:var(--muted);max-width:68ch}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--paper)}
+.lv button{border:none;border-radius:0;padding:6px 14px}
+.lv button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stagebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.phase{font-weight:700;font-size:17px}
+.phase .k{font:500 13px var(--mono);color:var(--c3);margin-right:8px}
+canvas{display:block;width:100%;height:580px}
+@media (max-width:640px){canvas{height:640px}}
+.caption{padding:12px 16px 14px;border-top:1px solid var(--line);background:var(--soft);min-height:66px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grp>span{font:500 12px var(--mono);color:var(--muted);margin-right:2px}
+button,select{appearance:none;font:500 14px var(--sans);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+button.pri{background:var(--c1);border-color:var(--c1);color:#fff;min-width:96px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
+select{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.scrub{display:flex;gap:10px;align-items:center;flex:1 1 220px;min-width:0}
+.scrub input{flex:1;min-width:0;accent-color:var(--c1)}
+.scrub output{font:12px var(--mono);color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.steps li{min-width:0}
+.steps button{width:100%;text-align:left;display:grid;gap:2px;padding:10px 12px;font-weight:400;height:100%}
+.steps button b{font:500 12px var(--mono);color:var(--c3)}
+.steps button strong{font-weight:500}
+.steps button small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.steps button.on{border-color:var(--c1);box-shadow:inset 0 0 0 1px var(--c1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px}
+.panel p{margin:0}
+.tbl{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:380px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:500 11.5px var(--mono);color:var(--muted);background:var(--soft)}
+.chk{display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+.chk li{display:grid;grid-template-columns:22px 1fr;gap:6px}
+.chk li::before{content:"✓";font-weight:700;color:var(--c2)}
+.pc{display:grid;gap:12px}
+.pc-head h2{font-size:clamp(20px,2.4vw,24px);margin:0}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.pc-col{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.pc-col h3{margin:0;padding:10px 16px;font-size:16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.pc-col.pro h3{color:var(--c2)}.pc-col.con h3{color:var(--c4)}
+.pc-col .mk{font:700 15px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.pc-col.pro .mk{background:var(--c2)}.pc-col.con .mk{background:var(--c4)}
+.pc-col ol{list-style:none;margin:0;padding:4px 16px 12px;display:grid}
+.pc-col li{padding:10px 0;border-bottom:1px dashed var(--line);display:grid;gap:3px}
+.pc-col li:last-child{border-bottom:none}
+.pc-col li strong{font-weight:500}
+.pc-col li p{margin:0;font-size:14px;color:var(--muted)}
+.pc-col li .ex{font-size:13px}
+.pc-col li .ex b{font-weight:500;color:var(--c1)}
+.pc-tip{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AI부동산통계기초 · 그래프 도감 23 · 추이</div>
+    <h1>캘린더 히트맵이 <span>만들어지는 과정</span></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <div class="stage">
+    <div class="stagebar"><div class="phase" id="phase" aria-live="polite"></div>
+      <div class="lv" role="group" aria-label="설명 수준"><button type="button" id="lvE" aria-pressed="true">쉬운 설명</button><button type="button" id="lvU" aria-pressed="false">전공 설명</button></div></div>
+    <canvas id="cv" role="img" aria-label="5년치 아파트 거래 기록이 월별로 모이고 연도별 줄로 바뀌어 색칠된 캘린더 히트맵이 되는 애니메이션"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+  <p class="note" style="margin:-8px 0 0">완성 후 칸에 마우스를 올리거나(휴대폰은 누르기) 하면 그 달의 거래 건수와 전년 같은 달 대비 변화가 나옵니다.</p>
+
+  <div class="controls">
+    <div class="grp"><button class="pri" id="play" type="button">일시정지</button><button id="restart" type="button">처음부터</button></div>
+    <div class="grp"><span>속도</span><select id="speed" aria-label="재생 속도"><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option></select></div>
+    <div class="grp"><span>색 기준</span><select id="sSel" aria-label="색 기준"><option value="0" selected>5년 전체 기준</option><option value="1">연도별 기준</option></select></div>
+    <div class="grp"><span>색 단계</span><select id="kSel" aria-label="색 단계"><option value="0" selected>연속</option><option value="1">5단계</option></select></div>
+    <div class="grp"><span>숫자</span><select id="nSel" aria-label="칸 숫자 표시"><option value="1" selected>보이기</option><option value="0">숨기기</option></select></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="27" step="0.01" value="0" aria-label="재생 위치"><output id="tout">0.0초</output></div>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="two">
+    <div class="panel">
+      <h2>원자료가 그래프가 되기까지</h2>
+      <p class="note" id="fNote"></p>
+      <div class="tbl"><table><thead><tr><th>단계</th><th>자료 모양</th><th>하는 일</th></tr></thead><tbody id="fBody"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h2>캘린더 히트맵 점검표</h2>
+      <p class="note" id="chkNote"></p>
+      <ul class="chk" id="chk"></ul>
+    </div>
+  </div>
+
+  <section class="pc" aria-labelledby="pcTitle">
+    <div class="pc-head"><h2 id="pcTitle">캘린더 히트맵을 쓸 때의 장점과 단점</h2></div>
+    <div class="pc-grid">
+      <div class="pc-col pro"><h3><span class="mk">+</span>장점</h3><ol id="proList"></ol></div>
+      <div class="pc-col con"><h3><span class="mk">−</span>단점</h3><ol id="conList"></ol></div>
+    </div>
+    <p class="pc-tip" id="pcTip"></p>
+  </section>
+  <p class="note">※ 거래 기록과 월별 거래 건수는 설명용으로 만든 예시 값이며 실제 통계가 아닙니다(2022년 거래 급감, 봄·가을 이사철 패턴만 실제 경향을 흉내 냄). 화면의 점 하나는 거래 100건을 나타냅니다. 위 설명 수준 버튼으로 페이지 전체의 설명이 바뀝니다.</p>
+</div>
+
+<script>
+(function(){
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261021);
+const YRS=[2021,2022,2023,2024,2025],LVL=[4200,1000,2800,3800,4100],SEA=[.75,.8,1.15,1.1,1,.95,.85,.9,1.05,1.12,1,.85];
+// 월별 거래 건수(예시): 연도 수준 × 계절 계수 × 잡음
+const CNT=YRS.map((_,r)=>SEA.map(s=>Math.round(LVL[r]*s*(1+(R()-.5)*.12))));
+const ALL=CNT.flat(),MN=Math.min(...ALL),MX=Math.max(...ALL);
+// 점 하나 = 100건
+const GU=['노원','강서','송파','강남','마포','성북','구로','관악','은평','강동','양천','영등포','서초','동작','성동'];
+const DOTS=[];CNT.forEach((row,r)=>row.forEach((c,m)=>{const k=Math.round(c/100);for(let s=0;s<k;s++)DOTS.push({r,m,mi:r*12+m,s,day:R(),jy:R(),gu:GU[Math.floor(R()*GU.length)],a:[59,84,84,114,39][Math.floor(R()*5)],p:0})}));
+DOTS.sort((a,b)=>a.mi+a.day-(b.mi+b.day));
+const TOTAL=27,T2=3.4,T3=6.2,T4=8.8,T5=10.8,T6=13.2,T7=16.4,T8=22.6;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const lerp=(a,b,p)=>a+(b-a)*p;
+const MONO='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace',SANS='"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif';
+let t=0,playing=true,speed=1,L={},lastPhase=-1,lv='e',sUser=0,kUser=0,nUser=1,ptr=null,snap=true,sCur=0,kCur=0,nCur=1;
+try{const v=localStorage.getItem('calLv');if(v==='e'||v==='u')lv=v}catch(e){}
+function layout(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,narrow=W<640,ml=narrow?44:72,mr=narrow?10:24,top=narrow?86:78,cw=(W-ml-mr)/12,ch=Math.min(narrow?74:66,(H-top-(narrow?150:130))/5),gb=top+5*ch;
+  const sw=(W-ml-mr)/60,ds=narrow?2.6:4.6,q=Math.max(1,Math.floor((sw-.5)/ds));
+  L={W,H,narrow,ml,mr,top,cw,ch,gb,sw,ds,q,base:gb,stripTop:top+10}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function hx(s){s=s.replace('#','');if(s.length===3)s=s.split('').map(c=>c+c).join('');const n=parseInt(s,16);return[n>>16&255,n>>8&255,n&255]}
+function ramp(f){const a=hx(col('--lo')),b=hx(col('--c1'));return a.map((v,i)=>Math.round(lerp(v,b[i],f)))}
+const rgb=a=>`rgb(${a[0]},${a[1]},${a[2]})`,lum=a=>(.299*a[0]+.587*a[1]+.114*a[2])/255;
+// 색 비율: 전체 기준 / 연도별 기준, 연속 / 5단계
+function frac(r,m,s,k){const c=CNT[r][m];const lo=lerp(MN,Math.min(...CNT[r]),s),hi=lerp(MX,Math.max(...CNT[r]),s);let f=clamp((c-lo)/((hi-lo)||1));const fq=Math.min(4,Math.floor(f*5))/4;return lerp(f,fq,k)}
+function target(){if(t>=T8)return{s:sUser,k:kUser,n:nUser};if(t>=T7+.6&&t<T7+3.6)return{s:1,k:0,n:1};return{s:0,k:0,n:1}}
+
+function draw(){
+  const C={ink:col('--ink'),muted:col('--muted'),line:col('--line'),paper:col('--paper'),soft:col('--soft'),c1:col('--c1'),c2:col('--c2'),c3:col('--c3'),c4:col('--c4')};
+  const{W,H,narrow,ml,mr,top,cw,ch,gb,sw,ds,q,base}=L;ctx.clearRect(0,0,W,H);
+  const txt=(s,x,y,color,font,align='center',a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.fillStyle=color;ctx.font=font;ctx.textAlign=align;ctx.fillText(s,x,y);ctx.globalAlpha=1};
+  const ln=(x1,y1,x2,y2,color,w=1,dash=null,a=1)=>{if(a<=0)return;ctx.globalAlpha=a;ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;ctx.globalAlpha=1};
+  const fin=t>=T8;
+  const pRain=clamp(t/2.8),pStack=ease(clamp((t-T2)/1.8)),pSwap=clamp((t-T3)/.4),pRow=ease(clamp((t-T3-.4)/1.8)),pCell=ease(clamp((t-T4)/1.2)),pNum=clamp((t-T4-.6)/.6),pCol=ease(clamp((t-T5)/1.4)),pLeg=clamp((t-T5-1)/.6);
+  const sx=mi=>ml+mi*sw;
+  // 1~2단계: 시간축(60개월)
+  const pAxis=1-pRow;
+  if(pAxis>0){ln(ml,base,W-mr,base,C.muted,1.2,null,pAxis*clamp(t/.4));YRS.forEach((y,r)=>{ln(sx(r*12),base,sx(r*12),base+8,C.muted,1,null,pAxis);txt(String(y),sx(r*12)+2,base+20,C.muted,`11px ${MONO}`,'left',pAxis)});
+    if(pStack>.3&&!narrow)[0,3,6,9].forEach(m=>txt(`${m+1}월`,sx(m)+sw/2,base+34,C.muted,`9.5px ${SANS}`,'center',pAxis*.8))}
+  // 점(거래 100건)
+  const show=Math.floor(DOTS.length*pRain);
+  if(pSwap<1){const cntIn={};const H0=base-L.stripTop-10;
+    for(let j=0;j<show;j++){const d=DOTS[j];const k=(cntIn[d.mi]=(cntIn[d.mi]||0)+1)-1;
+      const x1=sx(d.mi)+d.day*sw,y1=L.stripTop+d.jy*H0;
+      const x2=sx(d.mi)+(k%q+.5)*(sw/q),y2=base-(Math.floor(k/q)+.5)*ds;
+      const pp=ease(clamp((pStack*1.4-(d.mi/60)*.4)));
+      ctx.globalAlpha=(1-pSwap)*(j>show-40?.5+.5*((show-j)/40):1)*.85;ctx.fillStyle=j>show-6&&t<2.8?C.c4:C.c1;ctx.beginPath();ctx.arc(lerp(x1,x2,pp),lerp(y1,y2,pp),narrow?1.1:1.8,0,7);ctx.fill()}ctx.globalAlpha=1}
+  // 원자료 표(1단계)
+  const pTab=clamp(t/.4)*(1-clamp((t-T2+.2)/.5));
+  if(pTab>0&&show>0){const n=narrow?4:6,bx=narrow?ml:W-mr-330,by=narrow?12:14,bw=narrow?W-ml-mr:330;ctx.globalAlpha=pTab*.96;ctx.fillStyle=C.paper;ctx.fillRect(bx,by,bw,(n+1)*15+8);ctx.strokeStyle=C.line;ctx.strokeRect(bx,by,bw,(n+1)*15+8);ctx.globalAlpha=1;
+    txt('계약일        구      면적   (점 1개 = 100건)',bx+8,by+14,C.muted,`10.5px ${MONO}`,'left',pTab);
+    for(let i=0;i<n;i++){const d=DOTS[Math.max(0,show-1-i)];if(!d)continue;const dd=1+Math.floor(d.day*28);txt(`${YRS[d.r]}-${String(d.m+1).padStart(2,'0')}-${String(dd).padStart(2,'0')}  ${d.gu.padEnd(3,'　')}  ${d.a}㎡`,bx+8,by+30+i*15,i===0?C.c4:C.ink,`${i===0?700:400} 10.5px ${MONO}`,'left',pTab*(1-i*.12))}}
+  // 막대(월별 건수) → 연도 줄 → 칸
+  const hits=[];
+  if(pSwap>0){const s=sCur,kq=kCur,nAlpha=nCur;
+    CNT.forEach((row,r)=>row.forEach((c,m)=>{const mi=r*12+m,k=Math.round(c/100);
+      // 줄무늬 막대(점 쌓인 높이)
+      const xA=sx(mi)+.5,wA=sw-1,hA=Math.ceil(k/q)*ds,bA=base;
+      // 연도 줄 안 작은 막대
+      const xB=ml+m*cw+2,wB=cw-4,bB=top+(r+1)*ch-2,hB=c/MX*(ch-6);
+      // 칸
+      const hC=ch-4;
+      let x=lerp(xA,xB,pRow),w=lerp(wA,wB,pRow),b=lerp(bA,bB,pRow),h=lerp(hA,hB,pRow);h=lerp(h,hC,pCell);
+      const f=frac(r,m,s,kq),cc=ramp(f*pCol),fill=pCol>0?rgb(cc):(pCell>0?C.soft:C.c1);
+      ctx.globalAlpha=pSwap*(pCell>0?1:.85);ctx.fillStyle=pCell>0||pCol>0?fill:C.c1;
+      if(pCell>0&&pCol<=0){ctx.fillStyle=C.soft;ctx.fillRect(x,b-h,w,h);ctx.globalAlpha=pSwap*(1-pCell)*.85;ctx.fillStyle=C.c1;const hb=lerp(hB,0,pCell);ctx.fillRect(x,b-hb,w,hb)}else ctx.fillRect(x,b-h,w,h);
+      ctx.globalAlpha=1;if(pCell>.5){ctx.strokeStyle=C.paper;ctx.lineWidth=2;ctx.strokeRect(x,b-h,w,h);ctx.lineWidth=1}
+      if(pNum>0){const dark=pCol>0&&lum(cc)<.52;txt((c/1000).toFixed(1),x+w/2,b-h/2+4,dark?'#fff':C.ink,`${narrow?(cw<30?8.5:10):12}px ${MONO}`,'center',pNum*(fin?nAlpha:1))}
+      hits.push({r,m,x,y:b-h,w,h})}));
+    // 줄 라벨
+    const pl=pRow;YRS.forEach((y,r)=>txt(String(y),ml-8,top+r*ch+ch/2+4,C.ink,`${narrow?11:12}px ${MONO}`,'right',pl));
+    for(let m=0;m<12;m++)txt(`${m+1}${narrow?'':'월'}`,ml+m*cw+cw/2,top-8,C.muted,`${narrow?10:11.5}px ${SANS}`,'center',pl);
+    if(pRow>0&&pRow<1)txt('12개월마다 줄 바꿈',W/2,base+30,C.c4,`700 12.5px ${SANS}`,'center',Math.sin(pRow*Math.PI))}
+  // 단위
+  txt(pNum>0?'칸 숫자 = 월 거래 건수(천 건)':pSwap>0?'막대 높이 = 그달 거래 건수':'점 하나 = 거래 100건',ml,narrow?top-30:top-30,C.muted,`11px ${SANS}`,'left',clamp(t/.5)*(pTab>.5&&narrow?0:1));
+  // 범례
+  if(pLeg>0){const lx=ml,ly=gb+(narrow?26:30),lw=Math.min(narrow?W-ml-mr:320,W-ml-mr);const n=40,s=sCur,kq=kCur;
+    for(let i=0;i<n;i++){const f=i/(n-1),fq=Math.min(4,Math.floor(f*5))/4;ctx.globalAlpha=pLeg;ctx.fillStyle=rgb(ramp(lerp(f,fq,kq)));ctx.fillRect(lx+i*lw/n,ly,lw/n+.5,12)}ctx.globalAlpha=1;
+    txt(s>.5?'그 해 최저':`${(MN/1000).toFixed(1)}천 건`,lx,ly+26,C.muted,`11px ${SANS}`,'left',pLeg);txt(s>.5?'그 해 최고':`${(MX/1000).toFixed(1)}천 건`,lx+lw,ly+26,C.muted,`11px ${SANS}`,'right',pLeg);
+    txt(s>.5?'색 기준: 연도별(각 줄 안에서 비교)':'색 기준: 5년 전체',lx+lw/2,ly+26,s>.5?C.c4:C.ink,`700 11.5px ${SANS}`,'center',pLeg)}
+  // 6단계: 패턴 강조
+  const p6=fin?0:clamp((t-T6)/.5)*(1-clamp((t-T7+.3)/.3));
+  if(p6>0){const a1=clamp((t-T6)/.5),a2=clamp((t-T6-1.6)/.5);
+    [[2,3],[8,9]].forEach(([m0,m1])=>{ctx.globalAlpha=p6*a1;ctx.strokeStyle=C.c3;ctx.lineWidth=3;ctx.strokeRect(ml+m0*cw+1,top+1,cw*2-2,5*ch-2);ctx.lineWidth=1;ctx.globalAlpha=1;txt(m0===2?'봄 이사철':'가을 이사철',ml+(m0+1)*cw,gb+(narrow?16:18),C.c3,`700 ${narrow?11:12}px ${SANS}`,'center',p6*a1)});
+    ctx.globalAlpha=p6*a2;ctx.strokeStyle=C.c4;ctx.lineWidth=3;ctx.strokeRect(ml+1,top+ch+1,12*cw-2,ch-2);ctx.lineWidth=1;ctx.globalAlpha=1;
+    txt(narrow?'2022 거래 급감':'2022년: 1년 내내 연함 = 거래 급감',W-mr,top-30,C.c4,`700 12.5px ${SANS}`,'right',p6*a2)}
+  if(!fin&&t>=T7)txt(t<T7+.6?'':t<T7+3.6?'연도별 기준: 2022년 안의 이사철도 보임 · 대신 연도 간 차이는 사라짐':'다시 5년 전체 기준: 2022년의 계절 차이는 거의 안 보임',narrow?8:ml,narrow?14:top-50,C.c4,`700 ${narrow?10.5:12.5}px ${SANS}`,'left',1);
+  // 가리키기
+  if(fin&&ptr){const h=hits.find(q=>ptr.x>=q.x&&ptr.x<q.x+q.w&&ptr.y>=q.y&&ptr.y<q.y+q.h);if(h){const c=CNT[h.r][h.m],pv=h.r>0?CNT[h.r-1][h.m]:null,av=CNT[h.r].reduce((a,b)=>a+b,0)/12;
+    ctx.strokeStyle=C.ink;ctx.lineWidth=3;ctx.strokeRect(h.x+1.5,h.y+1.5,h.w-3,h.h-3);ctx.lineWidth=1;
+    const lines=[[`${YRS[h.r]}년 ${h.m+1}월`,`700 13px ${SANS}`,C.ink],[`거래 ${c.toLocaleString()}건`,`12px ${SANS}`,C.ink],[pv?`전년 같은 달 대비 ${c>=pv?'+':''}${((c-pv)/pv*100).toFixed(0)}%`:'전년 자료 없음',`700 12px ${SANS}`,pv?(c>=pv?C.c2:C.c4):C.muted],[`그 해 월평균 대비 ${c>=av?'+':''}${((c-av)/av*100).toFixed(0)}%`,`12px ${SANS}`,C.muted]];
+    const bw2=Math.max(...lines.map(([s0,f])=>{ctx.font=f;return ctx.measureText(s0).width}))+20,bh2=lines.length*18+14;let x0=ptr.x+14,y0=ptr.y+14;if(x0+bw2>W-6)x0=ptr.x-14-bw2;if(x0<4)x0=4;if(y0+bh2>H-6)y0=ptr.y-14-bh2;
+    ctx.fillStyle=C.paper;ctx.globalAlpha=.97;ctx.fillRect(x0,y0,bw2,bh2);ctx.globalAlpha=1;ctx.strokeStyle=C.ink;ctx.strokeRect(x0,y0,bw2,bh2);lines.forEach(([s0,f,c2],k)=>txt(s0,x0+10,y0+20+k*18,c2,f,'left',1))}}}
+
+const SUM=ALL.reduce((a,b)=>a+b,0);
+const STEPS=[
+ {t:0,n:'원자료: 거래 기록',s:'한 줄 = 거래 한 건',e:`실거래가 자료는 거래 한 건이 한 줄인 긴 목록입니다(위 표). 5년 동안 약 ${Math.round(SUM/1000)}천 건이나 되어서 그대로는 흐름을 알 수 없습니다. 거래 100건을 점 하나로 바꿔 계약한 날짜 위치에 뿌려 봅니다.`,u:`원자료는 거래 단위 레코드(계약일·자치구·면적·금액)로 된 긴 형식(long format) 자료입니다(n≈${SUM.toLocaleString()}). 시각화를 위해 시간 단위로 집계해야 합니다. 화면의 점 1개는 100건입니다.`},
+ {t:T2,n:'월별로 모으기',s:'세기 = 집계',e:'같은 달에 계약한 점끼리 모아 위로 쌓습니다. 쌓인 높이가 그달 거래 건수입니다. 60개월짜리 긴 막대그래프가 되었습니다.',u:'계약일을 연-월로 묶어 건수를 셉니다(group by 연·월 → count). 결과는 60개 관측치의 월별 시계열입니다. 엑셀 피벗 테이블, 파이썬 groupby와 같은 작업입니다.'},
+ {t:T3,n:'12개월마다 줄 바꿈',s:'연도 × 월 표로',e:'긴 막대를 1년(12개월)마다 잘라서 아랫줄로 내립니다. 그러면 위아래로 같은 달끼리 줄이 맞춰집니다. 달력처럼 "연도 × 월" 표가 됩니다.',u:'1차원 시계열을 연도(행) × 월(열)의 2차원 배열로 재구성합니다(wide format, pivot). 같은 열 = 같은 계절 위상이므로 계절성 비교가 가능해집니다.'},
+ {t:T4,n:'숫자 표로',s:'칸마다 건수',e:'막대를 칸으로 바꾸고 그달 거래 건수(천 건)를 적습니다. 이것만으로도 표지만, 숫자 60개를 다 읽어야 패턴을 알 수 있습니다.',u:'5×12 분할표 형태의 집계표입니다. 수치 판독은 정확하지만 패턴 인지는 느립니다(직렬 탐색).'},
+ {t:T5,n:'숫자를 색으로',s:'많을수록 진하게',e:'건수가 많을수록 진한 파랑으로 칸을 칠합니다. 아래 범례가 색과 건수를 연결해 줍니다. 이제 숫자를 읽지 않아도 많고 적음이 보입니다.',u:'값을 순차형(sequential) 단색 명도 척도로 부호화합니다. 5년 전체의 최솟값~최댓값을 색 범위로 썼습니다(전역 정규화).'},
+ {t:T6,n:'패턴 읽기',s:'세로 = 계절, 가로 = 해',e:'세로로 보면 해마다 3·4월과 9·10월이 진합니다. 봄·가을 이사철입니다. 가로로 보면 2022년은 1년 내내 연합니다. 그해 거래가 크게 줄었다는 뜻입니다.',u:'열 방향 반복은 계절성(seasonality), 행 방향 명도 차이는 연도별 수준(level) 변화입니다. 2022년은 수준 급락(거래 절벽)이 계절성을 압도합니다.'},
+ {t:T7,n:'색 기준의 함정',s:'전체 기준 vs 연도별',e:'색 기준을 "연도별"로 바꾸면 각 줄 안에서만 진하기를 비교합니다. 2022년 안에서도 이사철이 보이지만, 대신 2022년이 다른 해보다 훨씬 적었다는 사실은 사라집니다. 어떤 기준인지 꼭 적어야 합니다.',u:'정규화 기준(전역 vs 행별)에 따라 강조되는 성분이 달라집니다. 행별 정규화는 계절 패턴을, 전역 정규화는 수준 차이를 드러냅니다. 범례에 기준을 명시하고 필요하면 두 버전을 함께 제시합니다.'},
+ {t:T8,n:'완성',s:'연도 × 월 캘린더 히트맵',e:'',u:''}];
+function finalMsg(){return lv==='e'?'완성입니다. 위의 "색 기준", "색 단계", "숫자"를 바꿔 보세요. 연도별 기준으로 바꾸면 2022년의 이사철이 나타나고, 5단계로 바꾸면 색 구분이 쉬워지는 대신 작은 차이는 사라집니다.':'완성입니다. 정규화 기준(전역/행별)과 연속/계급 색상을 바꿔 계절성·수준 성분의 가시성을 비교하세요. 보고 시 집계 단위(월), 정규화 기준, 색 척도를 명시합니다.'}
+const LEDE={e:'캘린더 히트맵은 연도를 줄로, 월을 칸으로 놓고 값이 클수록 진하게 칠한 그래프입니다. 실거래가 원자료 한 줄 한 줄이 월별로 모이고, 12개월마다 줄이 바뀌어, 색칠된 달력이 되는 과정을 처음부터 보여줍니다.',u:'캘린더 히트맵은 시계열을 주기(연) × 위상(월) 격자로 재배열해 명도로 부호화한 그래프입니다. 레코드 단위 원자료의 집계(group by), 재구성(pivot), 색 부호화, 계절성·수준 판독, 정규화 기준의 영향을 단계별로 보여줍니다.'};
+const FLOW=[['① 원자료',{e:'거래 한 건 = 한 줄 (아주 긴 목록)',u:'레코드 단위 long format'},{e:'그대로는 흐름이 안 보임',u:`n≈${Math.round(SUM/1e4)}만 행`}],['② 월별 집계',{e:'월마다 1개 숫자 (60개)',u:'월별 시계열(60×1)'},{e:'같은 달 거래 수 세기',u:'group by 연·월 → count'}],['③ 줄 바꿈',{e:'연도 × 월 표 (5줄 × 12칸)',u:'wide format(5×12)'},{e:'12개월마다 아랫줄로',u:'pivot(행=연, 열=월)'}],['④ 색칠',{e:'칸 색의 진하기',u:'명도 부호화'},{e:'많을수록 진하게',u:'순차형 색상 척도 + 범례'}]];
+const CHK={e:['색 기준(5년 전체인지, 연도별인지)을 범례에 적었나요?','월별로 센 것인지, 계약일 기준인지 신고일 기준인지 적었나요?','가장 최근 달은 신고가 덜 들어와 적게 보이지 않나요?','높고 낮음만 있는 값에 한 가지 색의 진하기를 썼나요?','정확한 값이 필요하면 칸에 숫자를 함께 적었나요?'],
+ u:['정규화 기준(전역/행별)을 명시했는가','집계 단위·기준일(계약일 vs 신고일)을 정의했는가','최근 기간의 신고 지연(우측 절단) 효과를 점검했는가','순차형 단색 명도 척도를 사용했는가','정밀 판독이 필요하면 수치 라벨·선그래프를 병기했는가']};
+const PC={
+ pro:[
+  {t:'계절 패턴이 한눈에 보인다',e:'해마다 같은 달이 위아래로 줄을 서 있어서 "매년 봄·가을에 거래가 많다"가 바로 보입니다.',u:'주기 위상을 열로 정렬해 계절성을 시각적으로 즉시 판독할 수 있습니다.',x:'해마다 진한 <b>3·4월, 9·10월</b>.'},
+  {t:'긴 기간을 작은 공간에 담는다',e:'60개월짜리 긴 선그래프 대신 작은 네모 판 하나로 5년을 보여줍니다.',u:'긴 시계열을 2차원으로 접어 공간 효율이 높고, 수준 변화와 계절성을 동시에 표현합니다.',x:'5년 = <b>5줄 × 12칸</b>.'},
+  {t:'이상한 달을 찾기 쉽다',e:'다른 해와 달리 유난히 연하거나 진한 칸이 금방 눈에 띕니다.',u:'행·열 패턴에서 벗어나는 셀(이상치, 구조 변화)을 탐지하기 쉽습니다.',x:'<b>2022년</b> 1년 내내 연한 줄.'},
+  {t:'원자료에서 바로 만들 수 있다',e:'실거래가 목록을 월별로 세기만 하면 되어서 엑셀 피벗 테이블로도 만들 수 있습니다.',u:'group by + pivot의 단순 집계로 생성되며 엑셀 조건부 서식, 파이썬(seaborn heatmap) 등에서 구현이 쉽습니다.',x:'엑셀 <b>피벗 테이블 + 조건부 서식(색조)</b>.'}],
+ con:[
+  {t:'정확한 값은 읽기 어렵다',e:'비슷한 진하기의 칸은 어느 쪽이 더 많은지 구분하기 어렵습니다.',u:'명도 판독은 위치·길이보다 정밀도가 낮습니다. 수치 라벨이나 선그래프로 보완합니다.',x:'4.1천 vs 4.4천은 색만으로 구분 어려움.'},
+  {t:'색 기준에 따라 보이는 것이 다르다',e:'5년 전체 기준이면 해마다의 차이가, 연도별 기준이면 계절 차이가 강조됩니다.',u:'전역/행별 정규화 선택이 강조 성분을 바꿉니다. 기준을 명시하지 않으면 오해를 낳습니다.',x:'7단계 <b>2022년 이사철</b>이 나타났다 사라짐.'},
+  {t:'추세의 기울기는 잘 안 보인다',e:'"꾸준히 늘고 있다" 같은 흐름은 선그래프가 훨씬 잘 보여줍니다.',u:'연속적 추세·변화율은 격자 배열에서 끊겨 보이므로 선그래프가 더 적합합니다.',x:'2023→2025 회복 속도는 <b>선그래프</b>로.'},
+  {t:'최근 달은 적게 보일 수 있다',e:'실거래 신고는 계약 후 한 달 정도 늦게 들어오므로, 가장 최근 달은 아직 덜 모여 연하게 보일 수 있습니다.',u:'신고 지연에 따른 우측 절단(right truncation)으로 최근 셀이 과소 집계될 수 있습니다. 집계 기준일을 명시합니다.',x:'계약일 기준 <b>최근 1~2개월</b> 주의.'}],
+ tip:{e:'<b>정리:</b> 거래 기록을 월별로 세고, 12개월마다 줄을 바꾸고, 색칠하면 캘린더 히트맵입니다. 세로는 계절, 가로는 해마다의 차이입니다. 색 기준을 꼭 적으세요.',
+      u:'<b>권장 사용법:</b> ① 집계 단위·기준일 정의 ② 정규화 기준(전역/행별) 명시 ③ 순차형 단색 명도 ④ 수치 라벨 또는 선그래프 병기 ⑤ 최근 기간 신고 지연 점검 ⑥ 필요 시 계절 조정(X-13, STL) 결과와 비교.'}};
+
+function renderText(){$('lede').textContent=LEDE[lv];
+  $('fNote').textContent=lv==='e'?'애니메이션의 1~5단계가 아래 순서입니다.':'원자료→그래프 변환 파이프라인입니다.';
+  $('fBody').innerHTML=FLOW.map(([n,a,b])=>`<tr><td><b>${n}</b></td><td>${a[lv]}</td><td>${b[lv]}</td></tr>`).join('');
+  $('chkNote').textContent=lv==='e'?'캘린더 히트맵을 만들거나 읽을 때 다섯 가지를 확인하세요.':'작성·판독 점검 항목입니다.';
+  $('chk').innerHTML=CHK[lv].map(c=>`<li>${c}</li>`).join('');
+  const item=o=>`<li><strong>${o.t}</strong><p>${lv==='e'?o.e:o.u}</p><span class="ex">예: ${o.x}</span></li>`;
+  $('proList').innerHTML=PC.pro.map(item).join('');$('conList').innerHTML=PC.con.map(item).join('');$('pcTip').innerHTML=PC.tip[lv];
+  $('lvE').setAttribute('aria-pressed',lv==='e');$('lvU').setAttribute('aria-pressed',lv==='u');lastPhase=-1}
+function phaseIdx(){let p=0;STEPS.forEach((s,i)=>{if(t>=s.t)p=i});return p}
+function ui(){const p=phaseIdx();
+  if(p!==lastPhase){lastPhase=p;$('phase').innerHTML=`<span class="k">${p+1}/${STEPS.length}</span>${STEPS[p].n}`;$('caption').textContent=p===STEPS.length-1?finalMsg():STEPS[p][lv];
+    [...$('steps').querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('on',i===p))}
+  $('scrub').value=t;$('tout').textContent=t.toFixed(1)+'초';$('play').textContent=playing?'일시정지':(t>=TOTAL?'다시 재생':'재생')}
+let prev=performance.now();
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(playing){t+=dt*speed;if(t>=TOTAL){t=TOTAL;playing=false}}
+  const g=target(),k=snap?1:Math.min(1,dt*4);snap=false;sCur=lerp(sCur,g.s,k);kCur=lerp(kCur,g.k,k);nCur=lerp(nCur,g.n,k);draw();ui();requestAnimationFrame(frame)}
+function toEnd(){if(t<T8){t=T8+.6;playing=false}lastPhase=-1}
+
+$('steps').innerHTML=STEPS.map((s,i)=>`<li><button type="button" id="st${i}"><b>${i+1}단계</b><strong>${s.n}</strong><small>${s.s}</small></button></li>`).join('');
+STEPS.forEach((s,i)=>$('st'+i).onclick=()=>{t=s.t;playing=true;lastPhase=-1;snap=true});
+$('play').onclick=()=>{if(t>=TOTAL)t=0;playing=!playing;lastPhase=-1};
+$('restart').onclick=()=>{t=0;playing=true;lastPhase=-1;snap=true};
+$('speed').onchange=e=>speed=+e.target.value;
+$('sSel').onchange=e=>{sUser=+e.target.value;toEnd()};$('kSel').onchange=e=>{kUser=+e.target.value;toEnd()};$('nSel').onchange=e=>{nUser=+e.target.value;toEnd()};
+const setPtr=e=>{const r=cv.getBoundingClientRect();ptr={x:e.clientX-r.left,y:e.clientY-r.top}};cv.addEventListener('pointermove',setPtr);cv.addEventListener('pointerdown',setPtr);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ptr=null});
+$('scrub').oninput=e=>{t=+e.target.value;playing=false;lastPhase=-1;snap=true};
+$('lvE').onclick=()=>{lv='e';try{localStorage.setItem('calLv',lv)}catch(e){}renderText()};
+$('lvU').onclick=()=>{lv='u';try{localStorage.setItem('calLv',lv)}catch(e){}renderText()};
+window.addEventListener('resize',layout);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+layout();renderText();
+if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){t=TOTAL;playing=false}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
