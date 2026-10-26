@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI부동산통계기초 | 서울사이버대학교 AI부동산학과</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f6fa; --panel:#ffffff; --ink:#1d2433; --muted:#6b7385; --line:#e3e7ef;
+    --brand:#1f4e9c; --brand-2:#2f6fd6; --brand-soft:#e8f0fd;
+    --stat:#1f4e9c; --graph:#0f8a6a; --graph-soft:#e3f5ef;
+    --active:#ffb020;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column}
+
+  /* ===== 헤더 ===== */
+  header{background:linear-gradient(120deg,#163a78,#2f6fd6);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  .logo{width:42px;height:42px;border-radius:10px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-weight:900;font-size:18px}
+  header h1{font-size:20px;font-weight:900;letter-spacing:-.5px;cursor:pointer}
+  header p{font-size:13px;opacity:.85}
+  .menu-toggle{display:none;margin-left:auto;background:rgba(255,255,255,.2);border:0;color:#fff;font-size:20px;border-radius:8px;padding:6px 12px;cursor:pointer}
+
+  .layout{flex:1;display:flex;min-height:0}
+
+  /* ===== 사이드바 ===== */
+  aside{width:320px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;min-height:0}
+  .group-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px;border-bottom:1px solid var(--line)}
+  .group-btn{border:2px solid var(--line);background:#fff;border-radius:12px;padding:12px 6px;font-family:inherit;font-size:15px;font-weight:700;color:var(--muted);cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .group-btn .ico{font-size:22px}
+  .group-btn:hover{border-color:#c5cee0}
+  .group-btn.active[data-group="stat"]{background:var(--stat);border-color:var(--stat);color:#fff}
+  .group-btn.active[data-group="graph"]{background:var(--graph);border-color:var(--graph);color:#fff}
+
+  .accordion{flex:1;overflow-y:auto;padding:10px 12px 20px}
+  .acc-item{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;background:#fff}
+  .acc-head{width:100%;border:0;background:#fff;font-family:inherit;font-size:15px;font-weight:700;color:var(--ink);padding:13px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;text-align:left}
+  .acc-head:hover{background:#f7f9fc}
+  .acc-num{width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:12px;display:grid;place-items:center;flex-shrink:0}
+  body.g-graph .acc-num{background:var(--graph-soft);color:var(--graph)}
+  .acc-count{margin-left:auto;font-size:12px;color:var(--muted);font-weight:500}
+  .acc-arrow{transition:transform .25s;color:var(--muted);font-size:12px}
+  .acc-item.open .acc-arrow{transform:rotate(180deg)}
+  .acc-item.open .acc-head{background:var(--brand-soft)}
+  body.g-graph .acc-item.open .acc-head{background:var(--graph-soft)}
+  .acc-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .acc-body ul{list-style:none;padding:4px 8px 10px}
+  .acc-body li a{display:flex;align-items:center;gap:8px;padding:9px 12px 9px 16px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px;border-left:3px solid transparent}
+  .acc-body li a:hover{background:#f2f5fa}
+  .acc-body li a.current{background:#fff6e0;border-left-color:var(--active);font-weight:700}
+  .acc-body li a small{margin-left:auto;color:#a0a7b5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+
+  /* ===== 본문 ===== */
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .toolbar{display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .toolbar.show{display:flex}
+  .crumb{font-size:14px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .crumb b{color:var(--ink)}
+  .toolbar a{margin-left:auto;font-size:13px;color:var(--brand-2);text-decoration:none;border:1px solid var(--line);padding:6px 12px;border-radius:8px;white-space:nowrap}
+  .toolbar a:hover{background:var(--brand-soft)}
+  iframe{flex:1;width:100%;border:0;background:#fff;display:none}
+  iframe.show{display:block}
+
+  .welcome{flex:1;overflow-y:auto;padding:40px 32px}
+  .welcome.hide{display:none}
+  .hero{max-width:900px;margin:0 auto}
+  .hero .tag{display:inline-block;background:var(--brand-soft);color:var(--brand);font-size:13px;font-weight:700;padding:5px 12px;border-radius:20px;margin-bottom:12px}
+  .hero h2{font-size:32px;font-weight:900;letter-spacing:-1px;margin-bottom:10px}
+  .hero > p{color:var(--muted);line-height:1.7;margin-bottom:28px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;cursor:pointer;transition:.2s}
+  .card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(20,40,80,.08)}
+  .card h3{font-size:17px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .card p{font-size:13px;color:var(--muted);line-height:1.6}
+
+  footer{text-align:center;font-size:12px;color:var(--muted);padding:8px;background:var(--panel);border-top:1px solid var(--line);flex-shrink:0}
+
+  @media (max-width:820px){
+    .menu-toggle{display:block}
+    aside{position:fixed;top:70px;bottom:0;left:0;z-index:20;transform:translateX(-100%);transition:transform .25s;box-shadow:4px 0 20px rgba(0,0,0,.15);width:min(320px,88vw)}
+    aside.open{transform:none}
+    .welcome{padding:24px 16px}
+    .hero h2{font-size:24px}
+  }
+</style>
+</head>
+<body class="g-stat">
+
+<header>
+  <div class="logo">AI</div>
+  <div>
+    <h1 id="homeBtn">AI부동산통계기초</h1>
+    <p>서울사이버대학교 AI부동산학과</p>
+  </div>
+  <button class="menu-toggle" id="menuToggle" aria-label="메뉴">☰</button>
+</header>
+
+<div class="layout">
+  <aside id="sidebar">
+    <div class="group-tabs">
+      <button class="group-btn active" data-group="stat"><span class="ico">📊</span>통계분석</button>
+      <button class="group-btn" data-group="graph"><span class="ico">📈</span>그래프 생성과 이해</button>
+    </div>
+    <nav class="accordion" id="accordion"></nav>
+  </aside>
+
+  <main>
+    <div class="toolbar" id="toolbar">
+      <span class="crumb" id="crumb"></span>
+      <a id="newTab" href="#" target="_blank" rel="noopener">새 창으로 열기 ↗</a>
+    </div>
+    <iframe id="viewer" title="학습 콘텐츠"></iframe>
+
+    <section class="welcome" id="welcome">
+      <div class="hero">
+        <span class="tag">서울사이버대학교 AI부동산학과</span>
+        <h2 id="welcomeTitle">AI부동산통계기초</h2>
+        <p id="welcomeDesc"></p>
+        <div class="cards" id="cards"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>© 서울사이버대학교 AI부동산학과 · AI부동산통계기초</footer>
+
+<script>
+/* =========================================================
+   메뉴 데이터 — 항목 추가/수정은 여기만 바꾸면 됩니다.
+   [표시 이름, 연결 파일명]
+   ========================================================= */
+const MENU = {
+  stat: {
+    title: "통계분석",
+    desc: "기술통계부터 T-검정, 분산분석, 교차분석, 상관분석, 회귀분석까지 부동산 데이터 분석에 필요한 통계 기법을 단계별로 학습합니다.",
+    sections: [
+      { name: "기술통계", items: [
+        ["기술통계량", "descriptiv.html"],
+        ["정규분포란?", "normal-distribution.html"],
+        ["왜? 로그치환할까", "log.html"]
+      ]},
+      { name: "T-검정", items: [
+        ["일표본 T-검정", "One-sample t-test.html"],
+        ["독립표본 T-검정", "independence.html"],
+        ["대응표본 T-검정", "Paired-samples t-test.html"]
+      ]},
+      { name: "분산분석", items: [
+        ["일원분산분석", "oneway.html"],
+        ["이원분산분석", "twoway.html"],
+        ["반복측정분산분석", "repeat.html"]
+      ]},
+      { name: "교차분석", items: [
+        ["카이제곱 검정", "chi.html"]
+      ]},
+      { name: "상관분석", items: [
+        ["피어슨 상관분석", "pearson.html"],
+        ["스피어만 상관분석", "spear.html"],
+        ["켄달 순위 상관분석", "khendal.html"]
+      ]},
+      { name: "회귀분석", items: [
+        ["선형회귀분석", "linear.html"],
+        ["다항회귀분석", "polynomial.html"],
+        ["다중회귀분석", "regression.html"],
+        ["로지스틱 회귀분석", "logistic.html"]
+      ]}
+    ]
+  },
+  graph: {
+    title: "그래프 생성과 이해",
+    desc: "분포·비교·추이·관계·구성·공간의 6가지 관점에서 부동산 데이터를 시각화하고 해석하는 방법을 익힙니다.",
+    sections: [
+      { name: "분포", items: [
+        ["히스토그램", "histogram.html"],
+        ["밀도곡선", "density.html"],
+        ["상자그림", "boxgraph.html"],
+        ["바이올린플롯", "biolin.html"],
+        ["QQ플롯", "qqplot.html"],
+        ["로렌츠곡선·지니계수", "lorentz.html"]
+      ]},
+      { name: "비교", items: [
+        ["막대그래프", "barchart.html"],
+        ["묶음막대그래프", "groupchart.html"],
+        ["레이더 차트", "rader.html"],
+        ["덤벨차트", "dembelchart.html"]
+      ]},
+      { name: "추이", items: [
+        ["선 그래프", "linegraph.html"],
+        ["영역 그래프", "areagraph.html"],
+        ["콤보차트", "combochart.html"],
+        ["캘린더 히트맵", "calender.html"]
+      ]},
+      { name: "관계", items: [
+        ["산점도 행렬", "scatterplot.html"],
+        ["산점도 회귀선 그래프", "scatter-regression.html"],
+        ["버블차트", "boblechart.html"],
+        ["상관행렬 히트맵", "correlation matrix heatmap.html"]
+      ]},
+      { name: "구성", items: [
+        ["원그래프", "circle.html"],
+        ["도넛차트", "donut.html"],
+        ["누적막대", "stacked bar.html"],
+        ["트리맵", "trimap.html"]
+      ]},
+      { name: "공간", items: [
+        ["단계구분도", "choropleth map.html"],
+        ["경계지도 카토그램", "cartogram.html"]
+      ]}
+    ]
+  }
+};
+
+const $ = id => document.getElementById(id);
+let currentGroup = "stat";
+
+/* 파일명에 공백이 있어도 안전하게 연결 */
+const toUrl = file => encodeURI(file);
+
+function renderAccordion(group, openIndex = -1){
+  currentGroup = group;
+  document.body.className = "g-" + group;
+  document.querySelectorAll(".group-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.group === group));
+
+  const data = MENU[group];
+  $("accordion").innerHTML = data.sections.map((sec, i) => `
+    <div class="acc-item" data-idx="${i}">
+      <button class="acc-head">
+        <span class="acc-num">${i + 1}</span>${sec.name}
+        <span class="acc-count">${sec.items.length}</span>
+        <span class="acc-arrow">▼</span>
+      </button>
+      <div class="acc-body"><ul>
+        ${sec.items.map(([label, file]) => `
+          <li><a href="${toUrl(file)}" data-file="${file}" data-label="${label}" data-sec="${sec.name}">
+            ${label}<small>${file}</small></a></li>`).join("")}
+      </ul></div>
+    </div>`).join("");
+
+  document.querySelectorAll(".acc-head").forEach(h =>
+    h.addEventListener("click", () => toggleSection(h.parentElement)));
+  document.querySelectorAll(".acc-body a").forEach(a =>
+    a.addEventListener("click", e => { e.preventDefault(); openPage(a); }));
+
+  if (openIndex >= 0) toggleSection(document.querySelectorAll(".acc-item")[openIndex], true);
+  renderWelcome();
+}
+
+/* 아코디언: 한 번에 한 섹션만 펼침 */
+function toggleSection(item, forceOpen = false){
+  const willOpen = forceOpen || !item.classList.contains("open");
+  document.querySelectorAll(".acc-item").forEach(it => {
+    it.classList.remove("open");
+    it.querySelector(".acc-body").style.maxHeight = null;
+  });
+  if (willOpen){
+    item.classList.add("open");
+    const body = item.querySelector(".acc-body");
+    body.style.maxHeight = body.scrollHeight + "px";
+  }
+}
+
+function openPage(a){
+  document.querySelectorAll(".acc-body a").forEach(x => x.classList.remove("current"));
+  a.classList.add("current");
+  const url = toUrl(a.dataset.file);
+  $("viewer").src = url;
+  $("viewer").classList.add("show");
+  $("welcome").classList.add("hide");
+  $("toolbar").classList.add("show");
+  $("crumb").innerHTML = `${MENU[currentGroup].title} › ${a.dataset.sec} › <b>${a.dataset.label}</b>`;
+  $("newTab").href = url;
+  history.replaceState(null, "", "#" + currentGroup + "/" + encodeURIComponent(a.dataset.file));
+  $("sidebar").classList.remove("open");
+}
+
+function renderWelcome(){
+  const data = MENU[currentGroup];
+  $("welcomeTitle").textContent = data.title;
+  $("welcomeDesc").textContent = data.desc;
+  $("cards").innerHTML = data.sections.map((s, i) => `
+    <div class="card" data-idx="${i}">
+      <h3><span class="acc-num">${i + 1}</span>${s.name}</h3>
+      <p>${s.items.map(it => it[0]).join(" · ")}</p>
+    </div>`).join("");
+  document.querySelectorAll(".card").forEach(c =>
+    c.addEventListener("click", () => {
+      toggleSection(document.querySelectorAll(".acc-item")[c.dataset.idx], true);
+      $("sidebar").classList.add("open");
+    }));
+}
+
+function goHome(){
+  $("viewer").classList.remove("show");
+  $("viewer").removeAttribute("src");
+  $("welcome").classList.remove("hide");
+  $("toolbar").classList.remove("show");
+  document.querySelectorAll(".acc-body a").forEach(x => x.classList.remove("current"));
+  history.replaceState(null, "", location.pathname);
+}
+
+/* 이벤트 */
+document.querySelectorAll(".group-btn").forEach(b =>
+  b.addEventListener("click", () => { renderAccordion(b.dataset.group); goHome(); }));
+$("homeBtn").addEventListener("click", goHome);
+$("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
+
+/* 시작: 주소의 #그룹/파일 이 있으면 해당 페이지 복원 */
+(function init(){
+  const [g, f] = location.hash.slice(1).split("/");
+  if (g && MENU[g] && f){
+    const file = decodeURIComponent(f);
+    const idx = MENU[g].sections.findIndex(s => s.items.some(it => it[1] === file));
+    renderAccordion(g, idx);
+    const link = document.querySelector(`.acc-body a[data-file="${CSS.escape(file)}"]`);
+    if (link) openPage(link);
+  } else {
+    renderAccordion("stat");
+  }
+})();
+</script>
+</body>
+</html>
