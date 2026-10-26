@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
+<meta charset="utf-8">H
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>html{background:#1a1f1d;color-scheme:dark}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}*,*::before,*::after{box-sizing:border-box}</style>
 <title>대응표본 t검정 칠판 수업</title>
