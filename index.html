@@ -9,9 +9,11 @@
   :root{
     --bg:#f4f6fa; --panel:#ffffff; --ink:#1d2433; --muted:#6b7385; --line:#e3e7ef;
     --brand:#1f4e9c; --brand-2:#2f6fd6; --brand-soft:#e8f0fd;
-    --stat:#1f4e9c; --graph:#0f8a6a; --graph-soft:#e3f5ef;
+    --graph:#0f8a6a; --graph-soft:#e3f5ef;
+    --accent:#1f4e9c; --accent-soft:#e8f0fd;
     --active:#ffb020;
   }
+  body.g-graph{ --accent:var(--graph); --accent-soft:var(--graph-soft); }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column}
@@ -31,20 +33,18 @@
   .group-btn{border:2px solid var(--line);background:#fff;border-radius:12px;padding:12px 6px;font-family:inherit;font-size:15px;font-weight:700;color:var(--muted);cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;gap:4px}
   .group-btn .ico{font-size:22px}
   .group-btn:hover{border-color:#c5cee0}
-  .group-btn.active[data-group="stat"]{background:var(--stat);border-color:var(--stat);color:#fff}
+  .group-btn.active[data-group="stat"]{background:var(--brand);border-color:var(--brand);color:#fff}
   .group-btn.active[data-group="graph"]{background:var(--graph);border-color:var(--graph);color:#fff}
 
   .accordion{flex:1;overflow-y:auto;padding:10px 12px 20px}
   .acc-item{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;background:#fff}
   .acc-head{width:100%;border:0;background:#fff;font-family:inherit;font-size:15px;font-weight:700;color:var(--ink);padding:13px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;text-align:left}
   .acc-head:hover{background:#f7f9fc}
-  .acc-num{width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:12px;display:grid;place-items:center;flex-shrink:0}
-  body.g-graph .acc-num{background:var(--graph-soft);color:var(--graph)}
+  .num{width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;display:grid;place-items:center;flex-shrink:0}
   .acc-count{margin-left:auto;font-size:12px;color:var(--muted);font-weight:500}
   .acc-arrow{transition:transform .25s;color:var(--muted);font-size:12px}
   .acc-item.open .acc-arrow{transform:rotate(180deg)}
-  .acc-item.open .acc-head{background:var(--brand-soft)}
-  body.g-graph .acc-item.open .acc-head{background:var(--graph-soft)}
+  .acc-item.open .acc-head{background:var(--accent-soft)}
   .acc-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
   .acc-body ul{list-style:none;padding:4px 8px 10px}
   .acc-body li a{display:flex;align-items:center;gap:8px;padding:9px 12px 9px 16px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px;border-left:3px solid transparent}
@@ -56,24 +56,50 @@
   main{flex:1;display:flex;flex-direction:column;min-width:0}
   .toolbar{display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
   .toolbar.show{display:flex}
+  .toolbar button,.toolbar a{font-family:inherit;font-size:13px;color:var(--accent);background:#fff;text-decoration:none;border:1px solid var(--line);padding:6px 12px;border-radius:8px;white-space:nowrap;cursor:pointer}
+  .toolbar button:hover,.toolbar a:hover{background:var(--accent-soft)}
+  .toolbar a{margin-left:auto}
   .crumb{font-size:14px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .crumb b{color:var(--ink)}
-  .toolbar a{margin-left:auto;font-size:13px;color:var(--brand-2);text-decoration:none;border:1px solid var(--line);padding:6px 12px;border-radius:8px;white-space:nowrap}
-  .toolbar a:hover{background:var(--brand-soft)}
   iframe{flex:1;width:100%;border:0;background:#fff;display:none}
   iframe.show{display:block}
 
-  .welcome{flex:1;overflow-y:auto;padding:40px 32px}
-  .welcome.hide{display:none}
-  .hero{max-width:900px;margin:0 auto}
-  .hero .tag{display:inline-block;background:var(--brand-soft);color:var(--brand);font-size:13px;font-weight:700;padding:5px 12px;border-radius:20px;margin-bottom:12px}
-  .hero h2{font-size:32px;font-weight:900;letter-spacing:-1px;margin-bottom:10px}
-  .hero > p{color:var(--muted);line-height:1.7;margin-bottom:28px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  .content{flex:1;overflow-y:auto;padding:36px 32px 60px}
+  .content.hide{display:none}
+  .wrap{max-width:960px;margin:0 auto}
+  .tag{display:inline-block;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:700;padding:5px 12px;border-radius:20px;margin-bottom:12px}
+  .wrap h2{font-size:30px;font-weight:900;letter-spacing:-1px;margin-bottom:12px}
+  .lead{color:#3c4456;line-height:1.85;font-size:15.5px;margin-bottom:18px}
+  .keybox{background:#fff;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:10px;padding:16px 20px;margin-bottom:28px}
+  .keybox h4{font-size:14px;color:var(--accent);margin-bottom:8px}
+  .keybox ul{padding-left:18px;line-height:1.8;font-size:14.5px;color:#3c4456}
+
+  /* 그룹 개요 카드 */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
   .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;cursor:pointer;transition:.2s}
-  .card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(20,40,80,.08)}
+  .card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(20,40,80,.08);border-color:var(--accent)}
   .card h3{font-size:17px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
-  .card p{font-size:13px;color:var(--muted);line-height:1.6}
+  .card p{font-size:13.5px;color:var(--muted);line-height:1.65;margin-bottom:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{font-size:12px;background:var(--accent-soft);color:var(--accent);padding:3px 9px;border-radius:12px}
+  .more{font-size:13px;color:var(--accent);font-weight:700;margin-top:12px}
+
+  /* 항목 상세 설명 */
+  .topic{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:16px}
+  .topic-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+  .topic-head h3{font-size:20px;font-weight:900}
+  .topic-sum{font-size:15px;font-weight:500;color:var(--accent);margin-bottom:14px}
+  .topic p.desc{line-height:1.85;color:#3c4456;font-size:15px;margin-bottom:14px}
+  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+  .box{border-radius:10px;padding:13px 15px;font-size:14px;line-height:1.75}
+  .box b{display:block;font-size:13px;margin-bottom:4px}
+  .box.ex{background:#f3f7ff;border:1px solid #d9e5fb}
+  .box.ex b{color:#1f4e9c}
+  .box.tip{background:#fff8e8;border:1px solid #f6e2b3}
+  .box.tip b{color:#a86b00}
+  .go{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer}
+  .go:hover{filter:brightness(1.1)}
+  .go small{font-weight:400;opacity:.8}
 
   footer{text-align:center;font-size:12px;color:var(--muted);padding:8px;background:var(--panel);border-top:1px solid var(--line);flex-shrink:0}
 
@@ -81,8 +107,10 @@
     .menu-toggle{display:block}
     aside{position:fixed;top:70px;bottom:0;left:0;z-index:20;transform:translateX(-100%);transition:transform .25s;box-shadow:4px 0 20px rgba(0,0,0,.15);width:min(320px,88vw)}
     aside.open{transform:none}
-    .welcome{padding:24px 16px}
-    .hero h2{font-size:24px}
+    .content{padding:22px 14px 50px}
+    .wrap h2{font-size:23px}
+    .boxes{grid-template-columns:1fr}
+    .topic{padding:18px 16px}
   }
 </style>
 </head>
@@ -108,19 +136,12 @@
 
   <main>
     <div class="toolbar" id="toolbar">
+      <button id="backBtn">← 설명으로</button>
       <span class="crumb" id="crumb"></span>
       <a id="newTab" href="#" target="_blank" rel="noopener">새 창으로 열기 ↗</a>
     </div>
     <iframe id="viewer" title="학습 콘텐츠"></iframe>
-
-    <section class="welcome" id="welcome">
-      <div class="hero">
-        <span class="tag">서울사이버대학교 AI부동산학과</span>
-        <h2 id="welcomeTitle">AI부동산통계기초</h2>
-        <p id="welcomeDesc"></p>
-        <div class="cards" id="cards"></div>
-      </div>
-    </section>
+    <section class="content" id="content"><div class="wrap" id="wrap"></div></section>
   </main>
 </div>
 
@@ -128,196 +149,444 @@
 
 <script>
 /* =========================================================
-   메뉴 데이터 — 항목 추가/수정은 여기만 바꾸면 됩니다.
-   [표시 이름, 연결 파일명]
+   메뉴 + 설명 데이터 — 내용 수정은 여기만 바꾸면 됩니다.
+   t: 표시 이름, f: 연결 파일, s: 한 줄 요약, d: 자세한 설명,
+   e: 부동산 예시, c: 체크포인트(주의할 점)
    ========================================================= */
 const MENU = {
   stat: {
     title: "통계분석",
-    desc: "기술통계부터 T-검정, 분산분석, 교차분석, 상관분석, 회귀분석까지 부동산 데이터 분석에 필요한 통계 기법을 단계별로 학습합니다.",
+    desc: "통계분석은 데이터에서 ‘우연인지, 진짜 차이·관계인지’를 판단하는 도구입니다. 먼저 기술통계로 데이터의 모양을 확인하고, 평균 비교(T-검정·분산분석), 범주 비교(교차분석), 관계 파악(상관분석), 예측·설명(회귀분석) 순서로 학습합니다.",
+    keys: [
+      "p-값(p-value)이 0.05보다 작으면 ‘통계적으로 유의하다(우연이라 보기 어렵다)’고 판단합니다.",
+      "비교할 집단이 2개면 T-검정, 3개 이상이면 분산분석을 사용합니다.",
+      "변수가 범주형(예: 주택유형)이면 교차분석, 연속형(예: 가격)이면 상관·회귀분석을 사용합니다."
+    ],
     sections: [
-      { name: "기술통계", items: [
-        ["기술통계량", "descriptiv.html"],
-        ["정규분포란?", "normal-distribution.html"],
-        ["왜? 로그치환할까", "log.html"]
-      ]},
-      { name: "T-검정", items: [
-        ["일표본 T-검정", "One-sample t-test.html"],
-        ["독립표본 T-검정", "independence.html"],
-        ["대응표본 T-검정", "paired-samples t-test.html"]
-      ]},
-      { name: "분산분석", items: [
-        ["일원분산분석", "oneway.html"],
-        ["이원분산분석", "twoway.html"],
-        ["반복측정분산분석", "repeat.html"]
-      ]},
-      { name: "교차분석", items: [
-        ["카이제곱 검정", "chi.html"]
-      ]},
-      { name: "상관분석", items: [
-        ["피어슨 상관분석", "pearson.html"],
-        ["스피어만 상관분석", "spear.html"],
-        ["켄달 순위 상관분석", "khendal.html"]
-      ]},
-      { name: "회귀분석", items: [
-        ["선형회귀분석", "linear.html"],
-        ["다항회귀분석", "polynomial.html"],
-        ["다중회귀분석", "regression.html"],
-        ["로지스틱 회귀분석", "logistic.html"]
-      ]}
+      { name: "기술통계",
+        intro: "기술통계는 수많은 데이터를 몇 개의 숫자로 요약해 ‘이 데이터가 어떻게 생겼는지’ 보여주는 가장 첫 단계입니다. 아파트 실거래가 1,000건을 하나하나 볼 수는 없으므로 평균, 중앙값, 표준편차 같은 숫자로 특징을 정리합니다. 어떤 분석을 하든 기술통계로 데이터를 먼저 살펴보는 습관이 중요합니다.",
+        keys: ["중심(평균·중앙값) → 퍼짐(표준편차·범위) → 모양(왜도·첨도) 순서로 봅니다.", "부동산 가격은 대부분 오른쪽으로 꼬리가 긴 분포여서 정규분포·로그치환 개념이 함께 필요합니다."],
+        items: [
+          { t:"기술통계량", f:"descriptiv.html",
+            s:"데이터의 중심, 퍼짐, 모양을 숫자로 요약합니다.",
+            d:"중심을 나타내는 값에는 평균(모두 더해 개수로 나눈 값), 중앙값(크기순으로 줄 세웠을 때 가운데 값), 최빈값(가장 많이 나온 값)이 있습니다. 퍼짐 정도는 분산·표준편차(평균에서 얼마나 떨어져 있나), 범위(최댓값−최솟값), 사분위범위(가운데 50%의 폭)로 나타냅니다. 분포의 모양은 왜도(한쪽으로 치우친 정도)와 첨도(뾰족한 정도)로 표현합니다.",
+            e:"어느 구의 아파트 거래 100건 중 초고가 몇 건이 섞이면 평균은 크게 올라가지만 중앙값은 거의 변하지 않습니다. 그래서 부동산 통계에서는 ‘중위 매매가격’을 자주 발표합니다.",
+            c:"평균과 중앙값의 차이가 크면 이상치(극단값)나 치우친 분포를 의심하세요." },
+          { t:"정규분포란?", f:"normal-distribution.html",
+            s:"평균을 중심으로 좌우 대칭인 종 모양의 분포입니다.",
+            d:"정규분포는 가운데(평균)에 값이 가장 많이 몰려 있고 양쪽으로 갈수록 적어지는 종 모양입니다. 평균±1 표준편차 안에 약 68%, ±2 표준편차 안에 약 95%, ±3 표준편차 안에 약 99.7%의 자료가 들어갑니다(68-95-99.7 법칙). T-검정, 분산분석, 회귀분석 등 많은 통계기법이 ‘데이터가 정규분포를 따른다’는 가정 위에서 만들어졌기 때문에 꼭 이해해야 하는 개념입니다.",
+            e:"같은 단지·같은 평형(예: 전용 84㎡)의 실거래가는 비교적 종 모양에 가깝지만, 서울 전체 아파트 가격을 모으면 고가 쪽으로 꼬리가 길게 늘어집니다.",
+            c:"정규성은 히스토그램, QQ플롯, 샤피로-윌크(Shapiro-Wilk) 검정 등으로 확인합니다." },
+          { t:"왜? 로그치환할까", f:"log.html",
+            s:"한쪽으로 치우친 데이터를 대칭에 가깝게 바꾸는 방법입니다.",
+            d:"집값, 임대료, 소득처럼 대부분은 낮은 값에 몰려 있고 일부가 매우 큰 값을 가지는 데이터는 오른쪽 꼬리가 깁니다. 이런 값에 로그(log)를 취하면 큰 값은 많이 줄고 작은 값은 조금 줄어서 분포가 정규분포에 가까워집니다. 이상치의 영향도 줄어들고, 회귀분석에서는 계수를 ‘몇 % 변화’로 해석할 수 있다는 장점이 있습니다.",
+            e:"1억→2억과 10억→20억은 금액 차이(1억 vs 10억)는 크지만 둘 다 ‘2배’ 상승입니다. 로그를 취하면 두 변화가 같은 크기로 표현되어 비율 변화를 공정하게 비교할 수 있습니다.",
+            c:"0이나 음수에는 로그를 취할 수 없으므로 log(x+1)처럼 보정합니다. 결과를 해석할 때는 원래 단위로 되돌려(지수변환) 설명하세요." }
+        ]},
+      { name: "T-검정",
+        intro: "T-검정은 ‘두 평균의 차이가 우연인지, 의미 있는 차이인지’를 판단하는 방법입니다. 평균이 조금 다르다고 해서 바로 차이가 있다고 말할 수는 없습니다. 표본의 크기와 흩어짐을 함께 고려해 그 차이가 통계적으로 유의한지(p<0.05) 확인합니다.",
+        keys: ["비교 대상이 ‘기준값 1개’인지, ‘서로 다른 두 집단’인지, ‘같은 대상의 전·후’인지에 따라 세 종류로 나뉩니다.", "데이터의 정규성 가정을 확인하고, 만족하지 않으면 비모수 검정(윌콕슨, 만-위트니)을 고려합니다."],
+        items: [
+          { t:"일표본 T-검정", f:"One-sample t-test.html",
+            s:"한 집단의 평균이 특정 기준값과 다른지 검정합니다.",
+            d:"표본 하나의 평균을 이미 알려진 값(정책 기준, 전국 평균, 목표값 등)과 비교합니다. 귀무가설은 ‘표본 평균 = 기준값’이며, p-값이 0.05보다 작으면 기준값과 다르다고 결론 내립니다.",
+            e:"우리 지역 아파트 30개 단지의 평균 전세가율이 전국 평균 70%와 다른지 검정합니다.",
+            c:"기준값은 분석 전에 정해야 하며, 표본이 너무 작으면(약 30개 미만) 정규성을 더 꼼꼼히 확인합니다." },
+          { t:"독립표본 T-검정", f:"independence.html",
+            s:"서로 다른 두 집단의 평균을 비교합니다.",
+            d:"두 집단이 서로 겹치지 않는(독립적인) 경우 평균 차이를 검정합니다. 먼저 두 집단의 분산이 같은지(등분산성) 레빈(Levene) 검정으로 확인하고, 분산이 다르면 웰치(Welch) T-검정 결과를 사용합니다.",
+            e:"역세권(역 500m 이내) 아파트와 비역세권 아파트의 ㎡당 매매가 평균이 다른지 비교합니다.",
+            c:"같은 대상을 두 번 측정한 자료에는 사용하면 안 됩니다(→ 대응표본 T-검정)." },
+          { t:"대응표본 T-검정", f:"paired.html",
+            s:"같은 대상의 전·후 값을 비교합니다.",
+            d:"동일한 대상을 두 시점이나 두 조건에서 측정했을 때, 각 대상별 ‘차이값’의 평균이 0인지 검정합니다. 같은 대상을 비교하므로 개별 특성의 영향이 줄어 작은 차이도 잘 잡아냅니다.",
+            e:"GTX 노선 발표 전과 후, 같은 20개 단지의 평균 매매가가 달라졌는지 확인합니다.",
+            c:"전·후 자료가 같은 대상끼리 정확히 짝지어져 있어야 합니다." }
+        ]},
+      { name: "분산분석",
+        intro: "분산분석(ANOVA)은 세 개 이상의 집단 평균을 한 번에 비교하는 방법입니다. T-검정을 여러 번 반복하면 우연히 ‘차이가 있다’고 잘못 판단할 확률이 커지기 때문에, 집단 간 차이와 집단 내 차이의 비율(F값)로 한 번에 검정합니다.",
+        keys: ["F값이 크고 p<0.05이면 ‘적어도 한 집단은 평균이 다르다’는 뜻입니다.", "어느 집단끼리 다른지는 사후검정(Tukey, Scheffé 등)으로 확인합니다."],
+        items: [
+          { t:"일원분산분석", f:"oneway.html",
+            s:"영향 요인이 1개일 때 세 집단 이상의 평균을 비교합니다.",
+            d:"하나의 범주형 변수(요인)에 따라 나뉜 여러 집단의 평균이 같은지 검정합니다. 집단 간 변동이 집단 내 변동보다 충분히 크면 집단에 따라 평균이 다르다고 봅니다.",
+            e:"서울을 도심권·동북권·서북권·서남권·동남권 5개 권역으로 나누어 평균 아파트 매매가가 권역별로 다른지 비교합니다.",
+            c:"정규성, 등분산성, 독립성 가정을 확인하고, 유의하면 반드시 사후검정을 실시하세요." },
+          { t:"이원분산분석", f:"twoway.html",
+            s:"영향 요인 2개와 그 상호작용을 함께 분석합니다.",
+            d:"두 개의 요인이 결과에 각각 영향을 주는지(주효과)와, 두 요인이 함께 작용할 때 효과가 달라지는지(상호작용효과)를 동시에 검정합니다.",
+            e:"권역(강남·강북)과 주택유형(아파트·연립)에 따라 가격이 어떻게 다른지 분석합니다. 강남에서는 아파트와 연립의 가격 차이가 크고 강북에서는 작다면 ‘상호작용’이 있는 것입니다.",
+            c:"상호작용이 유의하면 주효과만 따로 해석하지 말고 조합별로 나누어 해석합니다." },
+          { t:"반복측정분산분석", f:"repeat.html",
+            s:"같은 대상을 세 번 이상 측정한 값을 비교합니다.",
+            d:"대응표본 T-검정을 세 시점 이상으로 확장한 방법입니다. 동일한 대상을 여러 번 측정하므로 시간에 따른 변화를 효과적으로 검정할 수 있습니다.",
+            e:"같은 30개 단지의 2022년·2023년·2024년 평균 매매가가 연도별로 달라졌는지 분석합니다.",
+            c:"구형성 가정을 모클리(Mauchly) 검정으로 확인하고, 위배되면 그린하우스-가이저 보정값을 사용합니다." }
+        ]},
+      { name: "교차분석",
+        intro: "교차분석은 두 범주형 변수(성별, 연령대, 주택유형처럼 숫자가 아닌 구분값)가 서로 관련이 있는지 알아보는 방법입니다. 두 변수를 가로·세로로 놓은 교차표(분할표)를 만들어 빈도를 비교합니다.",
+        keys: ["평균이 아니라 ‘빈도(몇 명, 몇 건)’를 비교합니다.", "관련이 있다는 것이 원인-결과를 의미하지는 않습니다."],
+        items: [
+          { t:"카이제곱 검정", f:"chi.html",
+            s:"관측된 빈도와 ‘관련이 없다면 기대되는 빈도’를 비교합니다.",
+            d:"두 변수가 서로 무관하다고 가정했을 때 각 칸에 나와야 할 기대빈도를 계산하고, 실제 관측빈도와 얼마나 차이가 나는지를 카이제곱(χ²) 값으로 나타냅니다. 차이가 크고 p<0.05이면 두 변수는 관련이 있다고 봅니다.",
+            e:"연령대(20·30대 / 40·50대 / 60대 이상)와 선호 주택유형(아파트 / 단독 / 오피스텔) 사이에 관련이 있는지 설문 결과로 검정합니다.",
+            c:"기대빈도가 5 미만인 칸이 전체의 20%를 넘으면 피셔(Fisher)의 정확검정을 사용합니다." }
+        ]},
+      { name: "상관분석",
+        intro: "상관분석은 두 변수가 함께 움직이는 정도를 -1에서 +1 사이의 상관계수로 나타냅니다. +1에 가까우면 한쪽이 커질 때 다른 쪽도 커지고, -1에 가까우면 반대로 움직이며, 0에 가까우면 관련이 거의 없습니다.",
+        keys: ["대략 |r| 0.1 약함, 0.3 중간, 0.5 이상 강한 상관으로 해석합니다.", "상관관계는 인과관계가 아닙니다. 아이스크림 판매와 익사 사고는 ‘여름’ 때문에 함께 늘 뿐입니다."],
+        items: [
+          { t:"피어슨 상관분석", f:"pearson.html",
+            s:"두 연속형 변수의 직선적 관계를 측정합니다.",
+            d:"가장 널리 쓰이는 상관계수(r)입니다. 두 변수가 모두 연속형이고, 관계가 직선 형태이며, 대체로 정규분포를 따를 때 사용합니다.",
+            e:"아파트 전용면적(㎡)과 매매가 사이의 상관계수를 구합니다.",
+            c:"이상치 하나가 상관계수를 크게 바꿀 수 있으니 산점도를 먼저 그려 확인하세요." },
+          { t:"스피어만 상관분석", f:"spear.html",
+            s:"값 대신 순위를 사용해 관계를 측정합니다.",
+            d:"자료를 크기 순위로 바꾼 뒤 순위끼리의 상관을 계산합니다. 정규분포를 따르지 않거나, 이상치가 있거나, 관계가 곡선이지만 한 방향(단조)으로 증가·감소할 때 적합합니다.",
+            e:"학군 평가 순위와 아파트 가격 순위가 얼마나 일치하는지 분석합니다.",
+            c:"서열척도(1등, 2등…) 자료나 치우친 부동산 가격 자료에 특히 유용합니다." },
+          { t:"켄달 순위 상관분석", f:"khendal.html",
+            s:"순위가 같은 방향인 쌍과 반대 방향인 쌍을 비교합니다.",
+            d:"모든 자료 쌍을 비교해 순서가 일치하는 쌍(일치쌍)과 엇갈리는 쌍(불일치쌍)의 비율로 상관계수(τ, 타우)를 계산합니다. 표본이 작거나 같은 순위(동순위)가 많을 때 스피어만보다 안정적입니다.",
+            e:"부동산 전문가 2명이 10개 입지를 평가한 순위가 얼마나 일치하는지 확인합니다.",
+            c:"켄달 τ 값은 같은 자료에서 스피어만 ρ보다 대체로 작게 나오는 것이 정상입니다." }
+        ]},
+      { name: "회귀분석",
+        intro: "회귀분석은 원인이 되는 변수(독립변수)가 결과 변수(종속변수)에 얼마나 영향을 주는지 수식으로 나타내고, 이를 이용해 값을 예측하는 방법입니다. 부동산에서는 집값을 결정하는 요인을 찾는 ‘헤도닉 가격모형’의 기본이 됩니다.",
+        keys: ["회귀계수: 독립변수가 1 증가할 때 종속변수가 변하는 양입니다.", "결정계수(R²): 모형이 결과를 얼마나 설명하는지(0~1)를 나타냅니다.", "선형회귀를 먼저 이해한 뒤 다항·다중·로지스틱으로 확장합니다."],
+        items: [
+          { t:"선형회귀분석", f:"linear.html",
+            s:"독립변수 1개로 결과를 설명하는 직선을 찾습니다.",
+            d:"자료를 가장 잘 대표하는 직선 y = a + bx를 찾습니다. a는 절편(x가 0일 때 y), b는 기울기(x가 1 증가할 때 y의 변화량)입니다. 점과 직선 사이 거리(잔차)의 제곱합이 가장 작도록 직선을 정하는데, 이를 최소제곱법이라고 합니다.",
+            e:"전용면적이 1㎡ 늘어날 때 아파트 가격이 평균적으로 얼마나 오르는지 추정합니다.",
+            c:"선형성·독립성·정규성·등분산성(LINE) 가정을 잔차 그래프로 확인합니다." },
+          { t:"다항회귀분석", f:"polynomial.html",
+            s:"x², x³ 항을 넣어 곡선 관계를 표현합니다.",
+            d:"관계가 직선이 아니라 휘어져 있을 때 독립변수의 제곱, 세제곱 항을 추가해 곡선으로 적합합니다. 형태는 곡선이지만 계산 방식은 선형회귀와 같습니다.",
+            e:"건축 연한이 늘수록 가격이 떨어지다가 30년 전후부터 재건축 기대감으로 다시 오르는 U자형 관계를 표현합니다.",
+            c:"차수를 너무 높이면 현재 자료에만 딱 맞고 예측력은 떨어지는 과적합이 생깁니다." },
+          { t:"다중회귀분석", f:"regression.html",
+            s:"여러 독립변수의 영향을 동시에 분석합니다.",
+            d:"독립변수를 여러 개 넣어 각 변수의 순수한 영향(다른 변수가 일정할 때의 효과)을 추정합니다. 집값을 면적, 층, 연식, 역까지 거리, 학군 등으로 설명하는 헤도닉 가격모형이 대표적입니다.",
+            e:"가격 = 면적 + 층수 + 건축연한 + 지하철역 거리 + 학교 수 모형으로 각 요인의 가격 영향을 추정합니다.",
+            c:"독립변수끼리 너무 비슷하면(다중공선성) 결과가 불안정합니다. VIF가 10 이상이면 변수를 조정하세요. 비교에는 수정된 R²를 사용합니다." },
+          { t:"로지스틱 회귀분석", f:"logistic.html",
+            s:"결과가 예/아니오(0/1)일 때 발생 확률을 예측합니다.",
+            d:"종속변수가 두 가지 범주일 때 사건이 일어날 확률을 0~1 사이로 예측합니다. 결과는 오즈비(Odds Ratio)로 해석하며, 오즈비가 1보다 크면 그 요인이 사건 발생 가능성을 높인다는 뜻입니다.",
+            e:"소득, 나이, 대출비율로 주택 구매 여부(구매=1, 미구매=0)나 경매 낙찰 여부를 예측합니다.",
+            c:"R² 대신 정확도, 혼동행렬, ROC 곡선(AUC) 등으로 모형 성능을 평가합니다." }
+        ]}
     ]
   },
   graph: {
     title: "그래프 생성과 이해",
-    desc: "분포·비교·추이·관계·구성·공간의 6가지 관점에서 부동산 데이터를 시각화하고 해석하는 방법을 익힙니다.",
+    desc: "좋은 그래프는 숫자 표보다 훨씬 빠르게 데이터의 특징을 보여줍니다. 무엇을 보여주고 싶은지(분포·비교·추이·관계·구성·공간)에 따라 알맞은 그래프가 다릅니다. 각 그래프의 목적과 읽는 법, 부동산 데이터 활용 사례를 함께 익힙니다.",
+    keys: [
+      "목적을 먼저 정하고 그래프를 고릅니다: 퍼짐→분포, 크기 비교→비교, 시간 변화→추이, 변수 간 연관→관계, 비중→구성, 지역 차이→공간.",
+      "축 단위, 제목, 범례, 출처를 반드시 표시합니다.",
+      "축을 0이 아닌 값에서 시작하거나 색을 과하게 쓰면 해석이 왜곡될 수 있습니다."
+    ],
     sections: [
-      { name: "분포", items: [
-        ["히스토그램", "histogram.html"],
-        ["밀도곡선", "density.html"],
-        ["상자그림", "boxgraph.html"],
-        ["바이올린플롯", "biolin.html"],
-        ["QQ플롯", "qqplot.html"],
-        ["로렌츠곡선·지니계수", "lorentz.html"]
-      ]},
-      { name: "비교", items: [
-        ["막대그래프", "barchart.html"],
-        ["묶음막대그래프", "groupchart.html"],
-        ["레이더 차트", "rader.html"],
-        ["덤벨차트", "dembelchart.html"]
-      ]},
-      { name: "추이", items: [
-        ["선 그래프", "linegraph.html"],
-        ["영역 그래프", "areagraph.html"],
-        ["콤보차트", "combochart.html"],
-        ["캘린더 히트맵", "calender.html"]
-      ]},
-      { name: "관계", items: [
-        ["산점도 행렬", "scatterplot.html"],
-        ["산점도 회귀선 그래프", "scatter-regression.html"],
-        ["버블차트", "boblechart.html"],
-        ["상관행렬 히트맵", "correlation matrix heatmap.html"]
-      ]},
-      { name: "구성", items: [
-        ["원그래프", "circle.html"],
-        ["도넛차트", "donut.html"],
-        ["누적막대", "stacked bar.html"],
-        ["트리맵", "trimap.html"]
-      ]},
-      { name: "공간", items: [
-        ["단계구분도", "choropleth map.html"],
-        ["경계지도 카토그램", "cartogram.html"]
-      ]}
+      { name: "분포",
+        intro: "분포 그래프는 하나의 변수 값들이 어디에 몰려 있고 얼마나 퍼져 있는지 보여줍니다. 평균만으로는 보이지 않는 치우침, 이상치, 봉우리 개수 등을 확인할 수 있어 통계분석 전에 반드시 그려보는 그래프입니다.",
+        keys: ["부동산 가격은 오른쪽 꼬리가 긴 경우가 많아 분포 확인이 중요합니다.", "분포 그래프는 정규성 판단과 로그치환 필요성 판단의 근거가 됩니다."],
+        items: [
+          { t:"히스토그램", f:"histogram.html",
+            s:"값을 일정한 구간으로 나눠 구간별 개수를 막대로 보여줍니다.",
+            d:"가로축은 값의 구간, 세로축은 그 구간에 속한 자료의 개수(빈도)입니다. 막대 사이에 간격이 없다는 점이 막대그래프와 다릅니다. 분포의 중심, 퍼짐, 치우침을 한눈에 볼 수 있습니다.",
+            e:"서울 아파트 매매가를 1억 원 단위 구간으로 나누어 어느 가격대 거래가 가장 많은지 확인합니다.",
+            c:"구간(bin)의 개수에 따라 모양이 크게 달라지므로 여러 구간 폭으로 그려 비교해 보세요." },
+          { t:"밀도곡선", f:"density.html",
+            s:"히스토그램을 부드러운 곡선으로 표현한 그래프입니다.",
+            d:"자료의 분포를 매끄러운 곡선으로 추정(커널 밀도 추정)합니다. 곡선 아래 면적의 합은 1이며, 여러 집단의 분포를 겹쳐 그려 비교하기 좋습니다.",
+            e:"강남 3구와 강북 지역의 아파트 가격 분포를 겹쳐서 어느 쪽이 더 넓게 퍼져 있는지 비교합니다.",
+            c:"평활 정도(대역폭)가 너무 크면 특징이 사라지고, 너무 작으면 울퉁불퉁해집니다." },
+          { t:"상자그림", f:"boxgraph.html",
+            s:"최솟값, 1사분위수, 중앙값, 3사분위수, 최댓값과 이상치를 보여줍니다.",
+            d:"상자는 가운데 50%의 자료(1사분위수~3사분위수)를, 상자 안의 선은 중앙값을 나타냅니다. 상자 밖 수염은 정상 범위, 그 밖의 점은 이상치입니다. 여러 집단을 나란히 놓고 비교하기에 좋습니다.",
+            e:"서울 25개 구의 전세가를 상자그림으로 나란히 그려 구별 수준과 편차, 이상 거래를 찾습니다.",
+            c:"일반적으로 상자 길이(IQR)의 1.5배를 벗어난 값을 이상치로 표시합니다." },
+          { t:"바이올린플롯", f:"biolin.html",
+            s:"상자그림에 밀도곡선을 더해 분포 모양까지 보여줍니다.",
+            d:"상자그림의 요약 정보와 함께 양옆으로 대칭인 밀도곡선을 그려 자료가 어느 값에 많이 몰려 있는지 보여줍니다. 봉우리가 두 개인 분포(쌍봉 분포)도 확인할 수 있습니다.",
+            e:"신축 아파트와 구축 아파트가 섞인 동네의 가격은 상자그림으로는 안 보이던 두 개의 봉우리가 바이올린플롯에서 드러납니다.",
+            c:"표본이 너무 적으면 밀도 모양이 부정확하므로 자료 수를 함께 표시하세요." },
+          { t:"QQ플롯", f:"qqplot.html",
+            s:"자료가 정규분포를 따르는지 점의 배열로 확인합니다.",
+            d:"가로축에는 정규분포라면 나와야 할 이론값을, 세로축에는 실제 자료값을 순서대로 찍습니다. 점들이 대각선 직선 위에 놓이면 정규분포에 가깝고, 끝부분이 휘어지면 꼬리가 두껍거나 치우친 분포입니다.",
+            e:"아파트 가격의 QQ플롯은 오른쪽 위가 위로 휘지만, 로그치환 후에는 직선에 가까워지는 것을 확인합니다.",
+            c:"T-검정·회귀분석 전 정규성 가정 확인과 회귀 잔차 진단에 활용합니다." },
+          { t:"로렌츠곡선·지니계수", f:"lorentz.html",
+            s:"소득·자산이 얼마나 고르게 나누어져 있는지(불평등)를 보여줍니다.",
+            d:"가로축은 하위부터 누적한 인구 비율, 세로축은 누적한 소득·자산 비율입니다. 완전히 평등하면 대각선이 되고, 불평등할수록 곡선이 아래로 처집니다. 지니계수는 대각선과 곡선 사이 면적으로 계산하며 0(완전 평등)~1(완전 불평등) 값을 가집니다.",
+            e:"가구별 주택 자산 보유 현황으로 지역별 주택 자산 불평등 정도를 비교합니다.",
+            c:"지니계수 0.4 이상이면 불평등이 상당히 큰 것으로 봅니다(분야마다 기준은 다를 수 있음)." }
+        ]},
+      { name: "비교",
+        intro: "비교 그래프는 여러 항목이나 집단의 값 크기를 나란히 보여줍니다. ‘어디가 더 높은가’, ‘얼마나 차이 나는가’를 직관적으로 전달할 때 사용합니다.",
+        keys: ["막대 길이로 비교하는 그래프는 세로축을 0에서 시작해야 왜곡이 없습니다.", "항목은 값의 크기순으로 정렬하면 읽기 쉬워집니다."],
+        items: [
+          { t:"막대그래프", f:"barchart.html",
+            s:"범주별 값을 막대 길이로 비교합니다.",
+            d:"가장 기본적인 비교 그래프입니다. 가로축에 범주(지역, 유형 등), 세로축에 값을 놓습니다. 항목 이름이 길거나 많으면 가로 막대가 더 읽기 좋습니다.",
+            e:"서울 25개 구의 평균 아파트 매매가를 높은 순으로 정렬해 비교합니다.",
+            c:"세로축을 0이 아닌 값에서 시작하면 작은 차이가 크게 과장됩니다." },
+          { t:"묶음막대그래프", f:"groupchart.html",
+            s:"하나의 범주 안에서 여러 하위 집단을 나란히 비교합니다.",
+            d:"각 범주마다 여러 개의 막대를 묶어 배치하고 색으로 하위 집단을 구분합니다. 범주 간 비교와 범주 내 비교를 동시에 할 수 있습니다.",
+            e:"구별로 아파트·연립·단독주택의 평균 가격을 나란히 놓고 비교합니다.",
+            c:"묶음 안 막대가 4~5개를 넘으면 복잡해지므로 그래프를 나누는 것이 좋습니다." },
+          { t:"레이더 차트", f:"rader.html",
+            s:"여러 평가 지표를 거미줄 모양 다각형으로 비교합니다.",
+            d:"중심에서 뻗어 나간 여러 축에 지표 값을 표시하고 점들을 이어 다각형을 만듭니다. 다각형의 모양으로 대상의 강점과 약점을 한눈에 볼 수 있습니다.",
+            e:"두 아파트 단지를 교통, 학군, 편의시설, 녹지, 가격 경쟁력 5개 지표로 비교합니다.",
+            c:"지표마다 단위가 다르면 0~100점 등으로 표준화한 뒤 그려야 공정한 비교가 됩니다." },
+          { t:"덤벨차트", f:"dembelchart.html",
+            s:"두 시점(또는 두 집단)의 값을 점과 선으로 연결해 변화폭을 보여줍니다.",
+            d:"각 항목마다 두 값을 점으로 찍고 선으로 이어 아령(덤벨) 모양을 만듭니다. 선의 길이가 변화의 크기이므로 어느 항목이 많이 변했는지 쉽게 알 수 있습니다.",
+            e:"서울 각 구의 2020년과 2024년 평균 매매가를 덤벨차트로 그려 상승폭이 큰 지역을 찾습니다.",
+            c:"변화폭 순으로 정렬하면 메시지가 더 분명해집니다." }
+        ]},
+      { name: "추이",
+        intro: "추이 그래프는 시간의 흐름에 따라 값이 어떻게 변해왔는지 보여줍니다. 상승·하락 추세, 계절성, 급격한 변화 시점을 파악할 때 사용하며 부동산 시장 동향 분석의 기본입니다.",
+        keys: ["가로축에는 항상 시간을 일정한 간격으로 놓습니다.", "정책 발표·금리 변경 같은 주요 사건을 함께 표시하면 해석력이 높아집니다."],
+        items: [
+          { t:"선 그래프", f:"linegraph.html",
+            s:"시간에 따른 값의 변화를 선으로 연결합니다.",
+            d:"시점별 값을 점으로 찍고 선으로 이어 흐름을 보여줍니다. 여러 지역을 색을 달리해 함께 그리면 추세를 비교할 수 있습니다.",
+            e:"2015년부터 현재까지 월별 서울·경기·인천 아파트 매매가격지수 변화를 비교합니다.",
+            c:"선이 5개를 넘으면 복잡해지므로 강조할 선만 색을 주고 나머지는 회색으로 처리합니다." },
+          { t:"영역 그래프", f:"areagraph.html",
+            s:"선 아래를 색으로 채워 양의 크기와 누적을 강조합니다.",
+            d:"선 그래프의 아래 영역을 채워 물량의 크기를 강조합니다. 여러 항목을 위로 쌓으면(누적 영역) 전체 합계와 구성의 변화를 함께 볼 수 있습니다.",
+            e:"월별 아파트·연립·단독 거래량을 쌓아 전체 거래량과 유형별 비중 변화를 함께 봅니다.",
+            c:"누적 영역에서는 맨 아래 항목을 제외하면 개별 변화를 정확히 읽기 어렵습니다." },
+          { t:"콤보차트", f:"combochart.html",
+            s:"막대와 선을 한 그래프에 함께 그립니다.",
+            d:"단위가 다른 두 지표를 왼쪽·오른쪽 두 개의 세로축(이중 축)으로 동시에 보여줍니다. 보통 양(量)은 막대, 비율이나 지수는 선으로 표현합니다.",
+            e:"월별 아파트 거래량(막대)과 매매가격지수(선)를 함께 그려 거래량과 가격의 관계를 살펴봅니다.",
+            c:"두 축의 범위를 어떻게 정하느냐에 따라 관계가 과장될 수 있으니 축 범위를 신중히 설정합니다." },
+          { t:"캘린더 히트맵", f:"calender.html",
+            s:"달력 모양의 칸에 날짜별 값을 색의 진하기로 표시합니다.",
+            d:"1년을 주·요일 단위의 달력 칸으로 나누고 값이 클수록 진한 색을 칠합니다. 요일별, 월별, 계절별 패턴과 특이한 날짜를 쉽게 찾을 수 있습니다.",
+            e:"일별 실거래 신고 건수를 캘린더 히트맵으로 그려 월말 집중, 연휴 감소, 대책 발표 직후 급증 등을 찾습니다.",
+            c:"색 단계는 5~7단계 정도가 적당하며, 범례를 꼭 표시합니다." }
+        ]},
+      { name: "관계",
+        intro: "관계 그래프는 두 개 이상의 변수가 서로 어떻게 연관되어 있는지 보여줍니다. 상관분석·회귀분석을 하기 전에 관계의 방향, 형태, 이상치를 눈으로 확인하는 데 필수적입니다.",
+        keys: ["점들이 오른쪽 위로 향하면 양(+)의 관계, 오른쪽 아래로 향하면 음(-)의 관계입니다.", "그래프에서 관계가 보여도 인과관계라고 단정하면 안 됩니다."],
+        items: [
+          { t:"산점도 행렬", f:"scatterplot.html",
+            s:"여러 변수 쌍의 산점도를 격자 형태로 한 번에 보여줍니다.",
+            d:"변수가 여러 개일 때 가능한 모든 두 변수 조합의 산점도를 행렬처럼 배치합니다. 대각선에는 각 변수의 분포를 표시하는 경우가 많습니다. 회귀분석 전 탐색 단계에서 유용합니다.",
+            e:"가격, 면적, 건축연한, 역까지 거리, 층수 5개 변수의 관계를 한 화면에서 살펴봅니다.",
+            c:"변수가 너무 많으면 칸이 작아지므로 5~6개 정도로 제한합니다." },
+          { t:"산점도 회귀선 그래프", f:"scatter-regression.html",
+            s:"산점도 위에 추세를 나타내는 회귀선을 함께 그립니다.",
+            d:"두 변수의 점들 위에 최소제곱법으로 구한 회귀직선(또는 곡선)과 신뢰구간을 표시합니다. 관계의 방향과 강도, 회귀식과 R²를 함께 보여줄 수 있습니다.",
+            e:"전용면적과 매매가의 산점도에 회귀선을 그려 ‘면적 1㎡당 가격 증가분’을 시각적으로 설명합니다.",
+            c:"회귀선에서 크게 벗어난 점(이상치)이 선의 기울기를 바꾸지 않는지 확인합니다." },
+          { t:"버블차트", f:"boblechart.html",
+            s:"산점도에 원의 크기(와 색)로 세 번째·네 번째 변수를 더합니다.",
+            d:"가로축과 세로축으로 두 변수를, 원(버블)의 크기로 세 번째 변수를, 색으로 네 번째 변수를 표현해 여러 정보를 한 그래프에 담습니다.",
+            e:"가로축 평균소득, 세로축 평균 아파트 가격, 원 크기 인구수, 색 권역으로 서울 각 구를 표현합니다.",
+            c:"사람은 원의 면적을 정확히 비교하기 어려우므로 크기 차이는 대략적인 정보로만 활용합니다." },
+          { t:"상관행렬 히트맵", f:"correlation matrix heatmap.html",
+            s:"여러 변수 간 상관계수를 색으로 표시한 표입니다.",
+            d:"변수를 가로·세로에 나열하고 각 칸에 두 변수의 상관계수를 색으로 칠합니다. 보통 양의 상관은 붉은색, 음의 상관은 푸른색, 무상관은 흰색으로 표현합니다.",
+            e:"10개의 주택 특성 변수 간 상관을 한눈에 보고, 다중회귀분석 전에 서로 너무 비슷한 변수(다중공선성)를 미리 찾아냅니다.",
+            c:"대각선은 항상 1이며, 위아래 삼각형이 같은 값이므로 한쪽만 표시하기도 합니다." }
+        ]},
+      { name: "구성",
+        intro: "구성 그래프는 전체를 100%로 보았을 때 각 부분이 차지하는 비중을 보여줍니다. 시장 점유율, 유형별 비율처럼 ‘전체 중 얼마나’를 설명할 때 사용합니다.",
+        keys: ["모든 부분의 합은 반드시 100%가 되어야 합니다.", "항목이 많으면 작은 항목은 ‘기타’로 묶어 표현합니다."],
+        items: [
+          { t:"원그래프", f:"circle.html",
+            s:"원을 부채꼴로 나눠 각 항목의 비율을 보여줍니다.",
+            d:"전체를 하나의 원으로 보고 각 항목의 비율만큼 각도를 나눕니다. 가장 직관적인 구성 그래프이지만 항목이 많으면 비교가 어려워집니다.",
+            e:"전국 주택 재고 중 아파트·단독·연립·다세대 주택의 비율을 보여줍니다.",
+            c:"항목은 5개 이하로, 큰 비율부터 12시 방향에서 시계방향으로 배치합니다." },
+          { t:"도넛차트", f:"donut.html",
+            s:"가운데가 빈 원그래프로, 중앙에 핵심 숫자를 넣을 수 있습니다.",
+            d:"원그래프와 같은 방식이지만 가운데를 비워 총합이나 핵심 지표를 표시합니다. 여러 개의 도넛을 나란히 놓아 비교하기에도 좋습니다.",
+            e:"아파트 매수자의 연령대별 비율을 도넛으로 그리고, 가운데에 ‘총 거래 12,345건’을 표시합니다.",
+            c:"고리 두께가 너무 얇으면 비율을 읽기 어려우므로 적당한 두께를 유지합니다." },
+          { t:"누적막대", f:"stacked bar.html",
+            s:"막대 하나를 여러 구성 요소로 나누어 쌓아 보여줍니다.",
+            d:"각 막대의 전체 길이는 합계를, 막대 안의 색 구간은 구성 요소를 나타냅니다. 모든 막대를 100%로 맞춘 ‘100% 누적막대’는 집단별 구성 비율을 비교하기 좋습니다.",
+            e:"서울 각 구의 아파트 매수자 연령대 구성을 100% 누적막대로 비교해 20·30대 매수 비중이 높은 지역을 찾습니다.",
+            c:"구성 요소가 많으면 중간 구간끼리 비교가 어려우므로 4~5개 이내로 유지합니다." },
+          { t:"트리맵", f:"trimap.html",
+            s:"사각형의 면적으로 비중을 표현하고 계층 구조를 보여줍니다.",
+            d:"전체 사각형을 항목의 크기에 비례하는 작은 사각형들로 나눕니다. 큰 범주 안에 작은 범주를 넣는 계층 구조를 표현할 수 있어 항목이 많을 때 원그래프보다 효과적입니다.",
+            e:"전국 아파트 거래금액을 시·도 → 시·군·구 계층으로 나누어 어느 지역이 거래금액 비중이 큰지 보여줍니다.",
+            c:"면적 비교는 정밀하지 않으므로 중요한 항목에는 수치 라벨을 함께 표시합니다." }
+        ]},
+      { name: "공간",
+        intro: "공간 그래프는 데이터를 지도 위에 표현해 지역별 차이와 공간적 패턴을 보여줍니다. 부동산은 ‘입지’가 핵심이므로 공간 시각화가 특히 중요하며, QGIS와 웹GIS 플랫폼으로 이어지는 출발점입니다.",
+        keys: ["인접한 지역끼리 비슷한 값을 가지는 경향(공간적 자기상관)을 지도에서 확인할 수 있습니다.", "행정구역의 크기 차이가 시각적 인상을 왜곡할 수 있음을 기억하세요."],
+        items: [
+          { t:"단계구분도", f:"choropleth map.html",
+            s:"행정구역을 값의 크기에 따라 색의 진하기로 구분한 지도입니다.",
+            d:"시·도, 시·군·구, 읍·면·동 같은 구역을 값의 단계별로 다른 색으로 칠합니다. 지역 간 차이와 공간적 군집을 가장 쉽게 보여주는 주제도입니다.",
+            e:"서울 시·군·구별 ㎡당 아파트 평균 매매가를 5단계 색으로 표현해 고가 지역의 공간 분포를 확인합니다.",
+            c:"인구·거래건수 같은 절대값보다 비율이나 밀도(㎡당 가격, 인구 1천 명당 거래 등)를 사용합니다. 분류 방법(등간격, 분위수, 자연단절)에 따라 지도 인상이 달라집니다." },
+          { t:"경계지도 카토그램", f:"cartogram.html",
+            s:"지역의 면적을 실제 크기 대신 데이터 값에 비례하게 바꾼 지도입니다.",
+            d:"땅의 넓이가 아니라 인구, 거래량, 가격 총액 등 값의 크기에 맞게 지역 모양을 늘리거나 줄입니다. 면적이 넓지만 인구가 적은 지역이 지도에서 과대 표현되는 문제를 보완합니다.",
+            e:"시·도별 아파트 거래량을 카토그램으로 그리면 서울·경기는 크게 부풀고 강원·전남 등은 작아져 실제 시장 규모가 드러납니다.",
+            c:"모양이 많이 변형되므로 원래 지도나 지역 이름 라벨을 함께 제공해 위치를 알아볼 수 있게 합니다." }
+        ]}
     ]
   }
 };
 
+/* ===================== 동작 코드 ===================== */
 const $ = id => document.getElementById(id);
-let currentGroup = "stat";
-
-/* 파일명에 공백이 있어도 안전하게 연결 */
 const toUrl = file => encodeURI(file);
+let currentGroup = "stat";
+let currentSection = -1;
 
-function renderAccordion(group, openIndex = -1){
+function renderAccordion(group){
   currentGroup = group;
   document.body.className = "g-" + group;
   document.querySelectorAll(".group-btn").forEach(b =>
     b.classList.toggle("active", b.dataset.group === group));
 
-  const data = MENU[group];
-  $("accordion").innerHTML = data.sections.map((sec, i) => `
+  $("accordion").innerHTML = MENU[group].sections.map((sec, i) => `
     <div class="acc-item" data-idx="${i}">
       <button class="acc-head">
-        <span class="acc-num">${i + 1}</span>${sec.name}
+        <span class="num">${i + 1}</span>${sec.name}
         <span class="acc-count">${sec.items.length}</span>
         <span class="acc-arrow">▼</span>
       </button>
       <div class="acc-body"><ul>
-        ${sec.items.map(([label, file]) => `
-          <li><a href="${toUrl(file)}" data-file="${file}" data-label="${label}" data-sec="${sec.name}">
-            ${label}<small>${file}</small></a></li>`).join("")}
+        ${sec.items.map((it, j) => `
+          <li><a href="${toUrl(it.f)}" data-sec="${i}" data-item="${j}">
+            ${it.t}<small>${it.f}</small></a></li>`).join("")}
       </ul></div>
     </div>`).join("");
 
   document.querySelectorAll(".acc-head").forEach(h =>
-    h.addEventListener("click", () => toggleSection(h.parentElement)));
+    h.addEventListener("click", () => {
+      const item = h.parentElement;
+      const idx = +item.dataset.idx;
+      const wasOpen = item.classList.contains("open");
+      setOpen(wasOpen ? -1 : idx);
+      if (wasOpen) showGroup(); else showSection(idx);
+    }));
   document.querySelectorAll(".acc-body a").forEach(a =>
-    a.addEventListener("click", e => { e.preventDefault(); openPage(a); }));
-
-  if (openIndex >= 0) toggleSection(document.querySelectorAll(".acc-item")[openIndex], true);
-  renderWelcome();
+    a.addEventListener("click", e => { e.preventDefault(); openPage(+a.dataset.sec, +a.dataset.item); }));
 }
 
 /* 아코디언: 한 번에 한 섹션만 펼침 */
-function toggleSection(item, forceOpen = false){
-  const willOpen = forceOpen || !item.classList.contains("open");
-  document.querySelectorAll(".acc-item").forEach(it => {
-    it.classList.remove("open");
-    it.querySelector(".acc-body").style.maxHeight = null;
+function setOpen(idx){
+  document.querySelectorAll(".acc-item").forEach((it, i) => {
+    const body = it.querySelector(".acc-body");
+    if (i === idx){ it.classList.add("open"); body.style.maxHeight = body.scrollHeight + "px"; }
+    else { it.classList.remove("open"); body.style.maxHeight = null; }
   });
-  if (willOpen){
-    item.classList.add("open");
-    const body = item.querySelector(".acc-body");
-    body.style.maxHeight = body.scrollHeight + "px";
-  }
 }
 
-function openPage(a){
+function showContent(html){
+  $("viewer").classList.remove("show");
+  $("viewer").removeAttribute("src");
+  $("toolbar").classList.remove("show");
+  $("content").classList.remove("hide");
+  $("wrap").innerHTML = html;
+  $("content").scrollTop = 0;
   document.querySelectorAll(".acc-body a").forEach(x => x.classList.remove("current"));
-  a.classList.add("current");
-  const url = toUrl(a.dataset.file);
-  $("viewer").src = url;
-  $("viewer").classList.add("show");
-  $("welcome").classList.add("hide");
-  $("toolbar").classList.add("show");
-  $("crumb").innerHTML = `${MENU[currentGroup].title} › ${a.dataset.sec} › <b>${a.dataset.label}</b>`;
-  $("newTab").href = url;
-  history.replaceState(null, "", "#" + currentGroup + "/" + encodeURIComponent(a.dataset.file));
+}
+
+const keyBox = (title, list) => list && list.length
+  ? `<div class="keybox"><h4>${title}</h4><ul>${list.map(k => `<li>${k}</li>`).join("")}</ul></div>` : "";
+
+/* 그룹 첫 화면: 대분류 개요 */
+function showGroup(){
+  currentSection = -1;
+  const g = MENU[currentGroup];
+  showContent(`
+    <span class="tag">서울사이버대학교 AI부동산학과 · AI부동산통계기초</span>
+    <h2>${g.title}</h2>
+    <p class="lead">${g.desc}</p>
+    ${keyBox("📌 먼저 알아두기", g.keys)}
+    <div class="cards">
+      ${g.sections.map((s, i) => `
+        <div class="card" data-idx="${i}">
+          <h3><span class="num">${i + 1}</span>${s.name}</h3>
+          <p>${s.intro.split(". ")[0]}.</p>
+          <div class="chips">${s.items.map(it => `<span class="chip">${it.t}</span>`).join("")}</div>
+          <div class="more">자세한 설명 보기 →</div>
+        </div>`).join("")}
+    </div>`);
+  document.querySelectorAll(".card").forEach(c =>
+    c.addEventListener("click", () => { setOpen(+c.dataset.idx); showSection(+c.dataset.idx); }));
+  history.replaceState(null, "", "#" + currentGroup);
+}
+
+/* 대분류 클릭: 하위 항목 자세한 설명 */
+function showSection(idx){
+  currentSection = idx;
+  const g = MENU[currentGroup], s = g.sections[idx];
+  showContent(`
+    <span class="tag">${g.title} · ${idx + 1}. ${s.name}</span>
+    <h2>${s.name}</h2>
+    <p class="lead">${s.intro}</p>
+    ${keyBox("📌 핵심 포인트", s.keys)}
+    ${s.items.map((it, j) => `
+      <article class="topic">
+        <div class="topic-head"><span class="num">${j + 1}</span><h3>${it.t}</h3></div>
+        <div class="topic-sum">${it.s}</div>
+        <p class="desc">${it.d}</p>
+        <div class="boxes">
+          <div class="box ex"><b>🏠 부동산 예시</b>${it.e}</div>
+          <div class="box tip"><b>⚠️ 체크포인트</b>${it.c}</div>
+        </div>
+        <button class="go" data-item="${j}">${it.t} 학습하기 → <small>${it.f}</small></button>
+      </article>`).join("")}`);
+  document.querySelectorAll(".go").forEach(b =>
+    b.addEventListener("click", () => openPage(idx, +b.dataset.item)));
+  history.replaceState(null, "", "#" + currentGroup + "/" + idx);
   $("sidebar").classList.remove("open");
 }
 
-function renderWelcome(){
-  const data = MENU[currentGroup];
-  $("welcomeTitle").textContent = data.title;
-  $("welcomeDesc").textContent = data.desc;
-  $("cards").innerHTML = data.sections.map((s, i) => `
-    <div class="card" data-idx="${i}">
-      <h3><span class="acc-num">${i + 1}</span>${s.name}</h3>
-      <p>${s.items.map(it => it[0]).join(" · ")}</p>
-    </div>`).join("");
-  document.querySelectorAll(".card").forEach(c =>
-    c.addEventListener("click", () => {
-      toggleSection(document.querySelectorAll(".acc-item")[c.dataset.idx], true);
-      $("sidebar").classList.add("open");
-    }));
-}
-
-function goHome(){
-  $("viewer").classList.remove("show");
-  $("viewer").removeAttribute("src");
-  $("welcome").classList.remove("hide");
-  $("toolbar").classList.remove("show");
-  document.querySelectorAll(".acc-body a").forEach(x => x.classList.remove("current"));
-  history.replaceState(null, "", location.pathname);
+/* 세부 항목 클릭: 해당 html 열기 */
+function openPage(secIdx, itemIdx){
+  const g = MENU[currentGroup], s = g.sections[secIdx], it = s.items[itemIdx];
+  currentSection = secIdx;
+  setOpen(secIdx);
+  document.querySelectorAll(".acc-body a").forEach(x =>
+    x.classList.toggle("current", +x.dataset.sec === secIdx && +x.dataset.item === itemIdx));
+  const url = toUrl(it.f);
+  $("viewer").src = url;
+  $("viewer").classList.add("show");
+  $("content").classList.add("hide");
+  $("toolbar").classList.add("show");
+  $("crumb").innerHTML = `${g.title} › ${s.name} › <b>${it.t}</b>`;
+  $("newTab").href = url;
+  history.replaceState(null, "", "#" + currentGroup + "/" + secIdx + "/" + itemIdx);
+  $("sidebar").classList.remove("open");
 }
 
 /* 이벤트 */
 document.querySelectorAll(".group-btn").forEach(b =>
-  b.addEventListener("click", () => { renderAccordion(b.dataset.group); goHome(); }));
-$("homeBtn").addEventListener("click", goHome);
+  b.addEventListener("click", () => { renderAccordion(b.dataset.group); showGroup(); }));
+$("homeBtn").addEventListener("click", () => { setOpen(-1); showGroup(); });
+$("backBtn").addEventListener("click", () => currentSection >= 0 ? showSection(currentSection) : showGroup());
 $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
 
-/* 시작: 주소의 #그룹/파일 이 있으면 해당 페이지 복원 */
+/* 시작: 주소(#그룹/대분류/항목)가 있으면 그 화면 복원 */
 (function init(){
-  const [g, f] = location.hash.slice(1).split("/");
-  if (g && MENU[g] && f){
-    const file = decodeURIComponent(f);
-    const idx = MENU[g].sections.findIndex(s => s.items.some(it => it[1] === file));
-    renderAccordion(g, idx);
-    const link = document.querySelector(`.acc-body a[data-file="${CSS.escape(file)}"]`);
-    if (link) openPage(link);
-  } else {
-    renderAccordion("stat");
-  }
+  const [g, s, i] = location.hash.slice(1).split("/");
+  const group = MENU[g] ? g : "stat";
+  renderAccordion(group);
+  const sec = MENU[group].sections[+s];
+  if (s !== undefined && sec){
+    setOpen(+s);
+    if (i !== undefined && sec.items[+i]) openPage(+s, +i); else showSection(+s);
+  } else showGroup();
 })();
 </script>
 </body>
