@@ -1,0 +1,534 @@
+<title>p값 사이버 스캔</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap">
+<style>
+/* Layout: 16:9 cinematic stage (canvas, 1280x720 logical) + control strip below. Single dark "cyber HUD" look. */
+:root{
+  --bg:#03060c; --panel:#0a1322; --line:#18324d;
+  --cyan:#38e8ff; --mag:#ff3fa4; --amber:#ffc24a;
+  --fg:#d7f6ff; --dim:#6f8ea8;
+  --f-display:'Orbitron','JetBrains Mono',ui-monospace,monospace;
+  --f-body:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage{position:relative;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);overflow:hidden}
+.stage:fullscreen{border:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.scan{pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(160,240,255,.045) 0 1px,transparent 1px 3px)}
+.vig{pointer-events:none;position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(0,0,0,.65) 100%)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--f-mono);font-size:13px}
+.grp{display:flex;gap:4px;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);padding:8px 12px;cursor:pointer;border-radius:2px}
+button:hover{border-color:var(--cyan);color:var(--cyan)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--cyan);color:var(--bg);border-color:var(--cyan)}
+#scrub{flex:1 1 200px;min-width:0;accent-color:var(--cyan)}
+#tc{color:var(--dim);font-variant-numeric:tabular-nums;min-width:7ch}
+.hint{color:var(--dim);font-size:12px;line-height:1.6;margin:0}
+.hint b{color:var(--cyan);font-weight:400}
+body.rec .controls,body.rec .hint,body.rec .script,body.rec .scenes{display:none}
+.scenes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+@media (max-width:640px){.scenes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.scenes button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;min-width:0}
+.scenes button .n{font-family:var(--f-display);font-size:11px;color:var(--amber);letter-spacing:.08em}
+.scenes button .l{font-family:var(--f-body);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.scenes button[aria-current="true"]{border-color:var(--cyan);background:rgba(56,232,255,.12);color:var(--cyan)}
+.scenes button[aria-current="true"] .n{color:var(--cyan)}
+.script{border:1px solid var(--line);background:var(--panel);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.script .tag{font-family:var(--f-display);font-size:12px;letter-spacing:.1em;color:var(--amber)}
+.script h2{margin:0;font-size:19px;font-weight:700;text-wrap:balance}
+.script .now{margin:0;font-size:17px;line-height:1.85;max-width:70ch;color:var(--fg)}
+.script .tip{margin:0;font-size:13px;color:var(--dim);line-height:1.6}
+.script details{border-top:1px solid var(--line);padding-top:10px}
+.script summary{cursor:pointer;color:var(--cyan);font-size:14px}
+.script ol{margin:10px 0 0;padding-left:1.4em;display:flex;flex-direction:column;gap:10px}
+.script li{line-height:1.75;font-size:14px;max-width:75ch;cursor:pointer}
+.script li b{color:var(--cyan)}
+.script li.on{color:var(--cyan)}
+.script textarea{position:absolute;left:-9999px}
+</style>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="scan"></div><div class="vig"></div>
+  </div>
+  <nav class="scenes" id="scenes" aria-label="장면 선택"></nav>
+  <div class="controls">
+    <div class="grp">
+      <button id="auto" aria-pressed="true" title="각 장면이 끝나면 자동으로 멈춥니다">장면마다 멈춤</button>
+      <button id="prev" title="이전 장면 (←)">◀◀</button>
+      <button id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+      <button id="next" title="다음 장면 (→)">▶▶</button>
+      <button id="restart">⟲ 처음부터</button>
+    </div>
+    <input type="range" id="scrub" min="0" max="77" step="0.01" value="0" aria-label="타임라인">
+    <span id="tc">00:00</span>
+    <div class="grp" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+    <div class="grp">
+      <button id="sq" aria-pressed="true">잔차 제곱 ■</button>
+      <button id="spd">속도 1×</button>
+      <button id="fs">전체화면</button>
+      <button id="rec">녹화 모드 (H)</button>
+    </div>
+  </div>
+  <section class="script" aria-live="polite">
+    <div class="head">
+      <span class="tag" id="sTag">SCENE 01 · 설명 대본</span>
+      <button id="copy">전체 대본 복사</button>
+    </div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+    <details>
+      <summary>전체 시나리오 보기 (항목을 누르면 그 장면으로 이동)</summary>
+      <ol id="sAll"></ol>
+    </details>
+  </section>
+  <p class="hint">녹화 모드에서는 아래 조작판이 사라집니다. <b>H</b> 키로 다시 표시 · <b>Space</b> 재생/정지 · <b>← →</b> 장면 이동. 데이터는 설명용 가상 예시(역세권·남향·신축 비교, 그룹별 15건)입니다. 체험 슬라이더는 같은 귀무분포 위에서 관측값만 바꿔 봅니다.</p>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d));}
+addEventListener('resize',resize);resize();
+
+/* ---------- 데이터 (가상): 역세권 15채 vs 비역세권 15채 매매가(억원) ---------- */
+let seed=1030;const rnd=()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296};
+const gauss=()=>{let u=rnd()||1e-9,v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const n1=15,n2=15,NN=n1+n2,OBS=0.8;
+const V=[],G=[];
+for(let i=0;i<n1;i++){V.push(6.2+gauss()*1.15);G.push(1)}
+for(let i=0;i<n2;i++){V.push(5.4+gauss()*1.15);G.push(0)}
+const meanOf=(g,lab)=>{let s=0,c=0;for(let i=0;i<NN;i++)if(lab[i]===g){s+=V[i];c++}return s/c};
+{const d=meanOf(1,G)-meanOf(0,G);for(let i=0;i<n1;i++)V[i]+=OBS-d}
+const M1=meanOf(1,G),M0=meanOf(0,G);
+const sd=g=>{const m=meanOf(g,G);let s=0,c=0;for(let i=0;i<NN;i++)if(G[i]===g){s+=(V[i]-m)**2;c++}return Math.sqrt(s/(c-1))};
+const SD1=sd(1),SD0=sd(0),SP=Math.sqrt((SD1*SD1+SD0*SD0)/2),SEd=SP*Math.sqrt(1/n1+1/n2),TOBS=OBS/SEd,DFT=NN-2;
+/* 순열 2000회 */
+const B=2000,PERM=[],DIFF=[];
+for(let b=0;b<B;b++){const idx=[...Array(NN).keys()];for(let i=NN-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
+ const lab=Array(NN).fill(0);for(let i=0;i<n1;i++)lab[idx[i]]=1;if(b<3)PERM.push(lab);DIFF.push(meanOf(1,lab)-meanOf(0,lab))}
+const countExt=o=>DIFF.reduce((s,d)=>s+(Math.abs(d)>=Math.abs(o)-1e-12?1:0),0);
+const countSide=(o,side)=>DIFF.reduce((s,d)=>s+((side>0?d>=Math.abs(o)-1e-12:d<=-Math.abs(o)+1e-12)?1:0),0);
+const NULLSD=Math.sqrt(DIFF.reduce((s,d)=>s+d*d,0)/B);
+/* t분포 p */
+function lgamma(z){const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];if(z<.5)return Math.log(Math.PI/Math.sin(Math.PI*z))-lgamma(1-z);z-=1;let x=c[0];for(let i=1;i<9;i++)x+=c[i]/(z+i);const t=z+7.5;return .5*Math.log(2*Math.PI)+(z+.5)*Math.log(t)-t+Math.log(x)}
+function tP(t,df){const C=Math.exp(lgamma((df+1)/2)-lgamma(df/2))/Math.sqrt(df*Math.PI),f=x=>C*Math.pow(1+x*x/df,-(df+1)/2),a=Math.abs(t),n=400,h=a/n;let s=f(0)+f(a);for(let i=1;i<n;i++)s+=(i%2?4:2)*f(i*h);return Math.max(0,1-2*s*h/3)}
+const PT=tP(TOBS,DFT);
+const pOf=o=>countExt(o)/B;
+const fmtp=p=>p<.001?'< .001':p.toFixed(3);
+const fmtpp=p=>p===0?'0 / 2000':p.toFixed(3);
+const CASES=[0.3,OBS,1.4];
+/* ---------- 가설 3개 (각각 실제 순열검정) ---------- */
+function makeH(m1,m0,target,sdv,vals){let a=[],b=[];if(vals){a=vals.filter((_,i)=>G[i]===1);b=vals.filter((_,i)=>G[i]===0)}else{for(let i=0;i<15;i++){a.push(m1+gauss()*sdv);b.push(m0+gauss()*sdv)}}
+ const mean=x=>x.reduce((s,v)=>s+v,0)/x.length;const sh=target-(mean(a)-mean(b));a=a.map(v=>v+sh);
+ const all=a.concat(b),n=all.length,ds=[];
+ for(let k=0;k<B;k++){const idx=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}let s1=0,s0=0;idx.forEach((v,i)=>{if(i<15)s1+=all[v];else s0+=all[v]});ds.push(s1/15-s0/15)}
+ const va=x=>{const m=mean(x);return x.reduce((s,v)=>s+(v-m)**2,0)/(x.length-1)};const spv=Math.sqrt((va(a)+va(b))/2),se=spv*Math.sqrt(2/15),tt=target/se;
+ const c=ds.filter(d=>Math.abs(d)>=Math.abs(target)-1e-12).length;
+ return{obs:target,ds,c,p:c/B,t:tt,pt:tP(tt,28),cd:target/spv,m1:mean(a),m0:mean(b)}}
+const HYP=[makeH(0,0,OBS,0,V),makeH(6.0,5.85,0.25,1.15),makeH(6.8,5.2,1.6,1.15)];
+Object.assign(HYP[0],{ds:DIFF,c:countExt(OBS),p:pOf(OBS)});
+const HTX={mid:[['가설 A','역세권 아파트가 더 비쌀까?','역세권','비역세권'],['가설 B','남향 아파트가 더 비쌀까?','남향','비남향'],['가설 C','신축(10년 이내)이 더 비쌀까?','신축','구축']],
+ uni:[['H-A','역세권 효과','역세권','비역세권'],['H-B','남향 효과','남향','비남향'],['H-C','신축 효과','신축','구축']]};
+const pTxt=h=>h.c===0?'p < 0.0005':`p = ${h.p.toFixed(3)}`;
+const pRep=h=>h.pt<.001?'p < .001':`p = ${h.pt.toFixed(3).replace(/^0/,'')}`;
+
+/* ---------- 좌표계 ---------- */
+const P={x0:150,x1:890,y0:120,y1:600};
+const VMIN=2.5,VMAX=9.5;const vx=v=>P.x0+(v-VMIN)/(VMAX-VMIN)*(P.x1-P.x0);
+const ROWY=[430,270];/* 0: 비역세권, 1: 역세권 */
+const DMIN=-1.6,DMAX=1.6,BW=.1,NB=Math.round((DMAX-DMIN)/BW);
+const dx=d=>P.x0+(d-DMIN)/(DMAX-DMIN)*(P.x1-P.x0);
+const BIN=DIFF.map(d=>clampI(Math.floor((d-DMIN)/BW),0,NB-1));
+function clampI(v,a,b){return Math.max(a,Math.min(b,v))}
+const FULL=Array(NB).fill(0);BIN.forEach(b=>FULL[b]++);
+const CMAX=Math.max(...FULL)*1.6;
+const hy=c=>P.y1-c/CMAX*(P.y1-P.y0-40);
+
+/* ---------- 타임라인 ---------- */
+const S=[0,5,12,21,30,38,48,58,74],END=77;
+let t=0,playing=true,speed=1,level='mid',OBSV=OBS,userObs=false;
+
+const TXT={
+ mid:{scenes:['p값: 우연일까, 진짜일까?','우리가 얻은 결과','"차이 없다"고 가정하고 섞어 보기','우연 실험 2000번','p값 = 우리보다 더 놀라운 비율','0.05 기준으로 판정하기','p값 읽는 법과 흔한 오해','가설 3개 해석 연습'],
+  g1:'역세권',g0:'비역세권',price:'매매가 (억원)',dax:'두 그룹 평균 차이 (억원)',cnt:'횟수'},
+ uni:{scenes:['p-value  P(|T| ≥ |t_obs| ; H₀)','관측 통계량  d = x̄₁ − x̄₂','귀무가설 H₀와 순열(permutation)','귀무분포 (null distribution)','양측 p값 계산','유의수준 α와 의사결정','해석 원칙과 오해 (ASA, 2016)','세 가설 검정과 결과 보고'],
+  g1:'Group 1 : 역세권',g0:'Group 0 : 비역세권',price:'매매가 (억원)',dax:'d* = x̄₁* − x̄₀*  (억원)',cnt:'frequency'}
+};
+/* ---------- 유틸 ---------- */
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=v=>{v=clamp(v);return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2};
+const sceneIdx=tt=>{for(let k=S.length-2;k>=0;k--)if(tt>=S[k])return k;return 0};
+const prog=(k,tt)=>clamp((tt-S[k])/(S[k+1]-S[k]));
+const F_={d:'Orbitron, "JetBrains Mono", monospace',m:'"JetBrains Mono", Consolas, monospace',b:'"Noto Sans KR", "Malgun Gothic", sans-serif'};
+function txt(s,x,y,{f=F_.m,sz=14,c='#d7f6ff',a=1,al='left',w='400',glow=0}={}){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.font=`${w} ${sz}px ${f}`;ctx.fillStyle=c;ctx.textAlign=al;if(glow){ctx.shadowColor=c;ctx.shadowBlur=glow}ctx.fillText(s,x,y);ctx.restore()}
+function corners(x,y,w,h,len,c,a){ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=2;ctx.shadowColor=c;ctx.shadowBlur=8;ctx.beginPath();
+ [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]].forEach(([cx,cy,dx,dy])=>{ctx.moveTo(cx+dx*len,cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+dy*len)});ctx.stroke();ctx.restore()}
+function orb(x,y,r,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;const g=ctx.createRadialGradient(x-r*.3,y-r*.3,0,x,y,r*2.6);
+ g.addColorStop(0,'#ffffff');g.addColorStop(.25,c);g.addColorStop(.5,c+'55');g.addColorStop(1,c+'00');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*2.6,0,7);ctx.fill();ctx.restore()}
+function seg(x1,y1,x2,y2,c,w,a,dash){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=w;ctx.shadowColor=c;ctx.shadowBlur=8;if(dash)ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore()}
+const clipP=()=>{ctx.beginPath();ctx.rect(P.x0,P.y0,P.x1-P.x0,P.y1-P.y0);ctx.clip()};
+
+const stars=[...Array(140)].map(()=>({x:rnd()*LW,y:rnd()*LH,z:.2+rnd()*.8,p:rnd()*6}));
+function bg(tt){
+ const g=ctx.createLinearGradient(0,0,0,LH);g.addColorStop(0,'#02040a');g.addColorStop(.55,'#061226');g.addColorStop(1,'#02050b');
+ ctx.fillStyle=g;ctx.fillRect(0,0,LW,LH);
+ const hz=ctx.createRadialGradient(640,560,10,640,560,700);hz.addColorStop(0,'rgba(56,232,255,.13)');hz.addColorStop(1,'rgba(56,232,255,0)');ctx.fillStyle=hz;ctx.fillRect(0,0,LW,LH);
+ for(const s of stars){const tw=.35+.65*Math.abs(Math.sin(tt*1.3+s.p));ctx.fillStyle=`rgba(180,240,255,${.5*s.z*tw})`;const x=(s.x+tt*8*s.z)%LW;ctx.fillRect(x,s.y,1.6*s.z,1.6*s.z)}
+ const hy=470;ctx.save();ctx.beginPath();ctx.rect(0,hy,LW,LH-hy);ctx.clip();ctx.strokeStyle='rgba(56,232,255,.16)';ctx.lineWidth=1;
+ for(let i=-24;i<=24;i++){ctx.beginPath();ctx.moveTo(640+i*14,hy);ctx.lineTo(640+i*150,LH);ctx.stroke()}
+ const off=(tt*0.35)%1;for(let k=0;k<14;k++){const z=(k+off)/14;const y=hy+Math.pow(z,2.2)*(LH-hy);ctx.globalAlpha=z;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(LW,y);ctx.stroke()}
+ ctx.restore();
+}
+function frameBox(a){ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(8,18,34,.72)';ctx.fillRect(P.x0-60,P.y0-40,P.x1-P.x0+90,P.y1-P.y0+95);ctx.restore();corners(P.x0-60,P.y0-40,P.x1-P.x0+90,P.y1-P.y0+95,22,'#38e8ff',a)}
+function axesMain(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let x=40;x<=140;x+=10){ctx.beginPath();ctx.moveTo(px(x),P.y0);ctx.lineTo(px(x),P.y1);ctx.stroke()}
+ for(let y=0;y<=11;y++){ctx.beginPath();ctx.moveTo(P.x0,py(y));ctx.lineTo(P.x1,py(y));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ for(let x=40;x<=140;x+=20)txt(String(x),px(x),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let y=0;y<=10;y+=2)txt(String(y),P.x0-12,py(y)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.x,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-48,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.y,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function axesRes(a,L){if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let f=Math.ceil(FMIN);f<=FMAX;f++){ctx.beginPath();ctx.moveTo(rx(f),P.y0);ctx.lineTo(rx(f),P.y1);ctx.stroke()}
+ for(let e=-EM;e<=EM+1e-9;e+=.5){ctx.beginPath();ctx.moveTo(P.x0,ry(e));ctx.lineTo(P.x1,ry(e));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ seg(P.x0,ry(0),P.x1,ry(0),'#ffc24a',2,a,[8,6]);
+ for(let f=Math.ceil(FMIN);f<=FMAX;f++)txt(String(f),rx(f),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a});
+ for(let e=-EM;e<=EM+1e-9;e+=1)txt((e>0?'+':'')+e.toFixed(1),P.x0-12,ry(e)+5,{sz:13,c:'#6f8ea8',al:'right',a});
+ txt(L.rxl,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-48,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.ryl,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function beam(a,tt){if(a<=0)return;ctx.save();clipP();const xa=px(XMIN),ya=py(yhat(XMIN)),xb=px(XMAX),yb=py(yhat(XMAX));ctx.lineCap='round';
+ ctx.strokeStyle='#38e8ff';ctx.globalAlpha=a*.18;ctx.lineWidth=14;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ ctx.globalAlpha=a;ctx.shadowColor='#38e8ff';ctx.shadowBlur=18;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ ctx.shadowBlur=0;ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.stroke();
+ const f=(tt*.45)%1;orb(xa+(xb-xa)*f,ya+(yb-ya)*f,4,'#38e8ff',a);ctx.restore()}
+function band(fn,a,c,grow){if(a<=0)return;ctx.save();clipP();ctx.globalAlpha=a;ctx.beginPath();const st=60;
+ for(let i=0;i<=st;i++){const x=XMIN+(XMAX-XMIN)*i/st;const y=py(yhat(x)+fn(x)*grow);i?ctx.lineTo(px(x),y):ctx.moveTo(px(x),y)}
+ for(let i=st;i>=0;i--){const x=XMIN+(XMAX-XMIN)*i/st;ctx.lineTo(px(x),py(yhat(x)-fn(x)*grow))}
+ ctx.closePath();const g=ctx.createLinearGradient(0,P.y0,0,P.y1);g.addColorStop(0,c+'40');g.addColorStop(1,c+'18');ctx.fillStyle=g;ctx.fill();ctx.strokeStyle=c+'aa';ctx.lineWidth=1;ctx.stroke();ctx.restore()}
+function wrap(s,maxw,font){ctx.save();ctx.font=font;const out=[];let line='';for(const wd of s.split(' ')){const tst=line?line+' '+wd:wd;if(ctx.measureText(tst).width>maxw&&line){out.push(line);line=wd}else line=tst}out.push(line);ctx.restore();return out}
+
+/* ---------- p값 전용 그리기 ---------- */
+const C1='#ff3fa4',C0='#38e8ff',AM='#ffc24a',WH='#e9fbff';
+const JY=V.map((_,i)=>((i*37)%11-5)*4);
+const pctS=p=>(p*100).toFixed(1)+'%';
+function ring(x,y,r,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.strokeStyle=c;ctx.lineWidth=2;ctx.shadowColor=c;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();ctx.restore()}
+function box(x,y,w,h,c,a){if(a<=0)return;ctx.save();ctx.globalAlpha*=a;ctx.fillStyle='rgba(20,14,2,.88)';ctx.strokeStyle=c;ctx.lineWidth=1.2;ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);ctx.restore()}
+function stripAxes(a,L){if(a<=0)return;
+ ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let v=3;v<=9;v++){ctx.beginPath();ctx.moveTo(vx(v),P.y0+20);ctx.lineTo(vx(v),P.y1-40);ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.45)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y1-40);ctx.lineTo(P.x1,P.y1-40);ctx.stroke();ctx.restore();
+ for(let v=3;v<=9;v++)txt(String(v),vx(v),P.y1-18,{sz:13,c:'#6f8ea8',al:'center',a});
+ txt(L.price,(P.x0+P.x1)/2,P.y1+14,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ [1,0].forEach(g=>{seg(P.x0,ROWY[g],P.x1,ROWY[g],g?C1:C0,1,a*.25);txt(g?L.g1:L.g0,P.x0+8,ROWY[g]-46,{f:F_.b,sz:15,w:'700',c:g?C1:C0,a})})}
+function meanBar(m,g,a,label){if(a<=0)return;const X0=vx(m),Y0=ROWY[g];seg(X0,Y0-38,X0,Y0+38,g?C1:C0,3,a);
+ txt(label,X0,g?Y0-50:Y0+58,{sz:14,w:'700',c:g?C1:C0,al:'center',a,glow:8})}
+function diffArrow(m0,m1,a,label){if(a<=0)return;const y=350,x0=vx(m0),x1=vx(m1);seg(x0,y,x1,y,AM,2.5,a);
+ const dir=x1>=x0?1:-1;ctx.save();ctx.globalAlpha=a;ctx.fillStyle=AM;ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x1-dir*12,y-7);ctx.lineTo(x1-dir*12,y+7);ctx.fill();ctx.restore();
+ seg(x0,y-10,x0,y+10,AM,2,a);txt(label,(x0+x1)/2,y-14,{sz:17,w:'700',c:AM,al:'center',a,glow:10})}
+function histAxes(a,L){if(a<=0)return;
+ ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(56,232,255,.07)';ctx.lineWidth=1;
+ for(let d=-1.6;d<=1.601;d+=.4){ctx.beginPath();ctx.moveTo(dx(d),P.y0);ctx.lineTo(dx(d),P.y1);ctx.stroke()}
+ for(let c=50;c<CMAX;c+=50){ctx.beginPath();ctx.moveTo(P.x0,hy(c));ctx.lineTo(P.x1,hy(c));ctx.stroke()}
+ ctx.strokeStyle='rgba(56,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P.x0,P.y0);ctx.lineTo(P.x0,P.y1);ctx.lineTo(P.x1,P.y1);ctx.stroke();ctx.restore();
+ for(let d=-1.6;d<=1.601;d+=.4){const v=Math.abs(d)<1e-9?0:d;txt((v>0?'+':'')+v.toFixed(1),dx(d),P.y1+22,{sz:13,c:'#6f8ea8',al:'center',a})}
+ for(let c=0;c<CMAX;c+=50)txt(String(c),P.x0-12,hy(c)+5,{sz:12,c:'#6f8ea8',al:'right',a});
+ txt(L.dax,(P.x0+P.x1)/2,P.y1+46,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});
+ ctx.save();ctx.translate(P.x0-52,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);txt(L.cnt,0,0,{f:F_.b,sz:15,c:'#9fdcef',al:'center',a});ctx.restore()}
+function hist(n,a,obs,tailA){if(a<=0)return;const cnt=Array(NB).fill(0);for(let i=0;i<n;i++)cnt[BIN[i]]++;
+ const w=(P.x1-P.x0)/NB;
+ for(let b=0;b<NB;b++){if(!cnt[b])continue;const lo=DMIN+b*BW,hi=lo+BW,mid=(lo+hi)/2;
+  const ext=obs!=null&&Math.abs(mid)>=Math.abs(obs)-1e-9;const c=ext?C1:C0,X0=P.x0+b*w,Y0=hy(cnt[b]);
+  ctx.save();ctx.globalAlpha=a*(ext?.25+.6*tailA:.55);const g=ctx.createLinearGradient(0,Y0,0,P.y1);g.addColorStop(0,c);g.addColorStop(1,c+'22');ctx.fillStyle=ext&&tailA<1?C0:c;ctx.fillStyle=g;
+  ctx.fillRect(X0+1.5,Y0,w-3,P.y1-Y0);ctx.globalAlpha=a;ctx.strokeStyle=c;ctx.shadowColor=c;ctx.shadowBlur=ext?14:6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X0+1.5,Y0);ctx.lineTo(X0+w-1.5,Y0);ctx.stroke();ctx.restore()}
+ return cnt}
+function obsLines(o,a,L,mid){if(a<=0)return;
+ [1,-1].forEach(s=>{const X0=dx(s*o);seg(X0,P.y0+10,X0,P.y1,AM,2.5,a,s>0?null:[8,6])});
+ {const rt=dx(o)+180>P.x1;txt(mid?`우리 결과 +${o.toFixed(2)}억`:`d_obs = +${o.toFixed(2)}`,rt?dx(o)-8:dx(o)+8,P.y0+30,{f:mid?F_.b:F_.m,sz:15,w:'700',c:AM,a,glow:8,al:rt?'right':'left'})}
+ txt(mid?`반대쪽 −${o.toFixed(2)}`:`−${o.toFixed(2)}`,dx(-o)-8,P.y0+30,{f:mid?F_.b:F_.m,sz:14,c:'#ffd98a',al:'right',a})}
+
+/* ---------- 오른쪽 패널 ---------- */
+function panel(tt,k,L,cb){
+ const x=930,w=310,ix=x+20,iw=w-40;
+ ctx.save();ctx.fillStyle='rgba(8,18,34,.72)';ctx.fillRect(x,80,w,575);ctx.restore();corners(x,80,w,575,16,'#38e8ff',1);
+ txt(`SCENE ${String(k+1).padStart(2,'0')} / 08`,ix,112,{f:F_.d,sz:12,c:AM,w:'700'});
+ wrap(L.scenes[k],iw,`700 20px ${F_.b}`).slice(0,2).forEach((ln,i)=>txt(ln,ix,144+i*27,{f:F_.b,sz:20,w:'700',c:'#eafcff',glow:6}));
+ const p=prog(k,tt),fa=clamp(p*4),mid=level==='mid';
+ const kv=(lab,val,y,c=C0,a=1,big=18)=>{txt(lab,ix,y,{f:F_.b,sz:13,c:'#6f8ea8',a});txt(val,ix+iw,y,{sz:big,c,al:'right',a,glow:6})};
+ const para=(s,y,a,sz=14,c='#eafcff',lh=22,w_='400')=>{const ls=wrap(s,iw,`${w_} ${sz}px ${F_.b}`);ls.forEach((l,i)=>txt(l,ix,y+i*lh,{f:F_.b,sz,c,a,w:w_}));return y+ls.length*lh};
+ if(k===0){
+  let y=236;(mid?['결과가 "진짜 차이"인지','"우연히 생긴 차이"인지','판단을 돕는 숫자 = p값','','작을수록 → 우연이라 보기 어려움','클수록 → 우연일 수 있음']:['p = P(|T| ≥ |t_obs| ; H₀)','','H₀가 참이라고 가정할 때','관측값만큼 또는 더 극단적인','결과가 나올 확률','','범위: 0 ≤ p ≤ 1']).forEach((s,i)=>{txt(s,ix,y+i*32,{f:(!mid&&i===0)?F_.m:F_.b,sz:15,c:(mid&&i>=4)?(i===4?C1:C0):'#eafcff',a:clamp(p*4-.5-i*.3),w:(mid&&i===3)||(!mid&&i===0)?'700':'400'})});
+ }else if(k===1){
+  const a=clamp(p*3-.4);
+  kv(L.g1+(mid?' 평균':' x̄₁'),M1.toFixed(2)+'억',236,C1,a,20);kv(L.g0+(mid?' 평균':' x̄₀'),M0.toFixed(2)+'억',270,C0,a,20);
+  kv(mid?'차이':'d_obs',OBS.toFixed(2)+'억',312,AM,clamp(p*3-1),26);
+  if(!mid){kv('s₁ / s₀',`${SD1.toFixed(2)} / ${SD0.toFixed(2)}`,352,'#9fdcef',clamp(p*3-1.2),15);kv('n₁ / n₀','15 / 15',380,'#9fdcef',clamp(p*3-1.2),15)}
+  para(mid?'그런데 15채씩만 조사했어요. 다른 집을 뽑았다면 차이가 달랐을 수도 있죠.':'표본 차이에는 표본추출 변동이 섞여 있음 → μ₁ − μ₀ ≠ 0 인지 검정 필요',mid?362:420,clamp(p*3-1.8),14,'#9fdcef');
+  txt(mid?'→ 진짜 차이? 우연?':'→ Is d_obs surprising under H₀?',ix,mid?440:490,{f:F_.b,sz:17,w:'700',c:AM,a:clamp(p*3-2.2),glow:8});
+ }else if(k===2){
+  txt(mid?'가정':'HYPOTHESES',ix,226,{f:mid?F_.b:F_.d,sz:mid?13:11,c:'#6f8ea8',a:fa});
+  if(mid){para('역세권이든 아니든 가격 차이가 전혀 없다면?',250,fa,15,'#eafcff',22,'700');para('→ 이름표를 아무렇게나 바꿔 붙여도 결과가 비슷해야 해요.',300,clamp(p*4-1),14,'#9fdcef')}
+  else{txt('H₀ : μ₁ = μ₀',ix,256,{f:F_.m,sz:17,c:'#eafcff',a:fa,w:'700'});txt('H₁ : μ₁ ≠ μ₀',ix,284,{f:F_.m,sz:17,c:'#9fdcef',a:fa});para('H₀ 하에서 라벨은 교환 가능 → 무작위 재배정한 d*는 H₀가 만드는 값',314,clamp(p*4-1),13,'#9fdcef',20)}
+  txt(mid?'섞은 뒤 차이':'d* (shuffled)',ix,404,{f:F_.b,sz:13,c:'#6f8ea8',a:clamp(p*4-1)});
+  cb.shown.forEach((d,i)=>txt(`#${i+1}   ${d>=0?'+':''}${d.toFixed(2)}억`,ix,436+i*32,{sz:18,c:WH,glow:6}));
+  if(cb.shown.length===3)txt(mid?'→ 대부분 0 근처의 작은 차이':'→ d*는 0 주변에 분포',ix,550,{f:F_.b,sz:15,w:'700',c:AM,glow:8});
+ }else if(k===3){
+  txt(mid?'섞은 횟수':'B (iterations)',ix,226,{f:F_.b,sz:13,c:'#6f8ea8'});
+  txt(String(cb.n),ix,282,{f:F_.d,sz:46,w:'900',c:AM,glow:16});
+  const near=DIFF.slice(0,cb.n).filter(d=>Math.abs(d)<.3).length;
+  kv(mid?'0 근처 (±0.3억 이내)':'|d*| < 0.3',cb.n?pctS(near/cb.n):'—',326,C0,1,17);
+  if(!mid){kv('mean(d*)',cb.n?(DIFF.slice(0,cb.n).reduce((s,d)=>s+d,0)/cb.n).toFixed(3):'—',356,'#9fdcef',1,15);kv('SD(d*)  ≈  SE',`${NULLSD.toFixed(3)} ≈ ${SEd.toFixed(3)}`,384,'#9fdcef',clamp(p*2-1),15)}
+  para(mid?'종 모양 = "차이가 전혀 없을 때" 우연히 생기는 차이들의 모습':'귀무분포: H₀가 참일 때 통계량이 가질 수 있는 값의 분포',mid?380:430,clamp(p*2-.8),14,'#eafcff',22,'700');
+  para(mid?'가운데(0)는 흔하고, 양 끝은 드물어요.':'모수적 검정은 이를 t분포로 근사',mid?440:490,clamp(p*2-1.2),13,'#9fdcef');
+ }else if(k===4){
+  const o=OBSV,R=countSide(o,1),Lc=countSide(o,-1),pv=(R+Lc)/B,a1=clamp(p*4-1),a2=clamp(p*4-2);
+  if(userObs)txt(mid?'체험 슬라이더 값':'user-defined d_obs',ix+iw,226,{f:F_.b,sz:12,c:AM,al:'right'});
+  kv(mid?'오른쪽 꼬리 (≥ +'+o.toFixed(2)+')':`d* ≥ +${o.toFixed(2)}`,`${R}번`,236,C1,a1);
+  kv(mid?'왼쪽 꼬리 (≤ −'+o.toFixed(2)+')':`d* ≤ −${o.toFixed(2)}`,`${Lc}번`,266,C1,a1);
+  kv(mid?'합계':'total',`${R+Lc} / 2000`,296,C1,a1);
+  txt(mid?'p값':'p (two-sided)',ix,340,{f:F_.b,sz:13,c:'#6f8ea8',a:a2});
+  txt(pv.toFixed(3),ix,392,{sz:46,w:'700',c:AM,a:a2,glow:16});
+  txt(mid?`= ${R+Lc} ÷ 2000`:'= #{|d*| ≥ |d_obs|} / B',ix,422,{f:mid?F_.b:F_.m,sz:14,c:'#9fdcef',a:a2});
+  para(mid?(pv<1/B?'2000번 중 한 번도 없음 → 아주 드문 결과':`차이가 없는 세상이라면 100번 중 약 ${(pv*100).toFixed(1)}번 나올 결과`):`t-test : t(${DFT}) = ${(o/SEd).toFixed(2)}, p = ${tP(o/SEd,DFT).toFixed(4)}`,460,clamp(p*4-2.6),14,'#eafcff',22,'700');
+  if(!mid)para('단측검정이면 한쪽 꼬리만 → p 약 절반',512,clamp(p*4-2.8),13,'#9fdcef');
+ }else if(k===5){
+  txt(mid?'기준선 (유의수준)':'α (significance level)',ix,226,{f:F_.b,sz:13,c:'#6f8ea8',a:fa});
+  txt('0.05',ix,270,{f:F_.d,sz:34,w:'900',c:AM,a:fa,glow:14});txt(mid?'= 5% (20번 중 1번)':'= P(Type I error) 상한',ix+110,266,{f:F_.b,sz:13,c:'#9fdcef',a:fa});
+  CASES.forEach((o,i)=>{const pv=pOf(o),y=320+i*70,on=cb.ci===i,a=clamp(p*4-1-i*.4);
+   ctx.save();ctx.globalAlpha=a*(on?1:.45);ctx.strokeStyle=on?AM:'#18324d';ctx.lineWidth=on?1.6:1;ctx.strokeRect(ix-6,y-24,iw+12,58);ctx.restore();
+   txt(mid?`차이 ${o.toFixed(1)}억`:`d = ${o.toFixed(1)}`,ix+4,y-2,{f:F_.b,sz:14,c:'#eafcff',a:a*(on?1:.6),w:'700'});
+   txt(pv<1/B?'p < 0.0005':`p = ${pv.toFixed(3)}`,ix+iw-4,y-2,{sz:15,c:pv<.05?C1:C0,al:'right',a:a*(on?1:.6),glow:6});
+   txt(pv<.05?(mid?'→ 우연으로 보기 어려움':'→ reject H₀'):(mid?'→ 우연일 수 있음':'→ fail to reject H₀'),ix+4,y+22,{f:F_.b,sz:13,c:pv<.05?'#ff8cc6':'#9fdcef',a:a*(on?1:.6)})});
+ }else if(k===6){
+  const items=mid?[['✗ "우연일 확률이 2%"','✓ "차이 없다면" 이런 결과가 나올 확률'],['✗ p가 작으니 차이가 크다','✓ 크기는 평균 차이로 따로 판단'],['✗ p > .05면 차이가 없다','✓ "증거가 부족하다"일 뿐']]
+   :[['✗ p = P(H₀ is true)','✓ p = P(data this extreme | H₀)'],['✗ p 작음 = 효과 큼',`✓ 효과크기 보고: Cohen's d = ${(OBS/SP).toFixed(2)}`],['✗ p > .05 → H₀ 증명','✓ absence of evidence ≠ evidence of absence'],['✗ p < .05만으로 결론','✓ 신뢰구간 · 맥락 · 설계 함께']];
+  let y=230;items.forEach(([a_,b_],i)=>{const al=clamp(p*4-.4-i*.5);y=para(a_,y,al,14,'#ff8cc6',20,'700');y=para(b_,y,al,13,'#9fdcef',20)+14});
+ }else{
+  const j=cb.hj,h=HYP[Math.min(j,2)],T=HTX[level][Math.min(j,2)],sig=h.p<.05;
+  if(j<3){txt(T[0],ix,226,{f:F_.d,sz:12,c:AM,w:'700'});
+   let y=para(mid?T[1]:`${T[2]} vs ${T[3]}`,250,1,16,'#eafcff',22,'700');
+   if(!mid){txt(`d = ${h.obs.toFixed(2)}, t(28) = ${h.t.toFixed(2)}`,ix,y+6,{f:F_.m,sz:13,c:'#9fdcef'});txt(`${pRep(h)},  Cohen's d = ${h.cd.toFixed(2)}`,ix,y+28,{f:F_.m,sz:13,c:'#9fdcef'});y+=50}
+   else{txt(`차이 ${h.obs.toFixed(2)}억  ·  ${pTxt(h)}`,ix,y+8,{sz:14,c:'#9fdcef'});y+=30}
+   txt(mid?'해석':'INTERPRETATION',ix,y+24,{f:mid?F_.b:F_.d,sz:mid?13:11,c:'#6f8ea8'});
+   para(cb.it,y+50,clamp((tt-cb.hs-1.2)/.8),14,sig?'#ffb3d9':'#9ff3ff',22,'700');
+  }else{txt(mid?'해석 공식':'DECISION RULE',ix,226,{f:mid?F_.b:F_.d,sz:mid?13:11,c:'#6f8ea8'});
+   let y=para(mid?'p < 0.05 이면':'p ≤ α (.05)',258,1,15,'#ff8cc6',22,'700');y=para(mid?'→ "차이가 있다고 말할 수 있다"':'→ H₀ 기각, H₁ 채택',y,1,14,'#eafcff');
+   y=para(mid?'p ≥ 0.05 이면':'p > α',y+16,1,15,'#9ff3ff',22,'700');y=para(mid?'→ "차이가 있다고 말할 증거가 부족하다"':'→ H₀ 기각 실패 (≠ H₀ 채택)',y,1,14,'#eafcff');
+   para(mid?'※ 어느 경우든 차이의 크기(억 원)를 함께 말해 주세요.':'※ 효과크기와 95% 신뢰구간을 함께 보고',y+20,1,13,'#9fdcef')}
+ }
+}
+
+/* ---------- 프레임 ---------- */
+function frame(){
+ const tt=t,L=TXT[level],k=sceneIdx(tt),p=prog(k,tt),mid=level==='mid';
+ ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);
+ bg(tt);
+ txt('STATISTICS // P-VALUE',40,46,{f:F_.d,sz:16,w:'900',c:'#38e8ff',glow:10});
+ txt('AI 부동산 통계 · p값 이해하기',300,46,{f:F_.b,sz:14,c:'#6f8ea8'});
+ const m_=Math.floor(tt/60),s_=(tt%60).toFixed(1).padStart(4,'0');
+ txt(`T+${String(m_).padStart(2,'0')}:${s_}`,1240,46,{sz:14,c:'#9fdcef',al:'right'});
+ if(Math.floor(tt*2)%2===0)orb(1120,41,4,'#ff3fa4',1);txt('LIVE',1132,46,{f:F_.d,sz:12,c:'#ff3fa4',w:'700'});
+ const fa=clamp((tt-.6)/1.8);frameBox(fa);
+ const cb={shown:[],n:0,ci:0,hj:0,hs:0,it:''};
+ const eqY=P.y0-14,cx=(P.x0+P.x1)/2-15,EF=mid?F_.b:F_.m,cap=(s,a=1,sz=21)=>txt(s,cx,eqY,{f:EF,sz,w:'700',c:'#eafcff',al:'center',glow:14,a});
+
+ if(k===0){const tl='P-VALUE';const nch=Math.floor(clamp(tt/1.6)*tl.length),cxx=(P.x0+P.x1)/2;
+  txt(tl.slice(0,nch)+(Math.floor(tt*4)%2?'_':''),cxx,200,{f:F_.d,sz:34,c:'#38e8ff',al:'center',glow:16,a:fa});
+  const ga=clamp((tt-1.6)/1),R=170,gy=450;
+  const ang=pv=>Math.PI+Math.PI*Math.sqrt(pv);
+  ctx.save();ctx.globalAlpha=ga;ctx.lineWidth=16;ctx.lineCap='butt';
+  ctx.strokeStyle=C1;ctx.shadowColor=C1;ctx.shadowBlur=14;ctx.beginPath();ctx.arc(cxx,gy,R,ang(0),ang(.05));ctx.stroke();
+  ctx.strokeStyle=C0;ctx.shadowColor=C0;ctx.beginPath();ctx.arc(cxx,gy,R,ang(.05)+.01,ang(1));ctx.stroke();ctx.restore();
+  [[0,'0'],[.05,'0.05'],[.25,'0.25'],[1,'1']].forEach(([v,s])=>{const a_=ang(v);txt(s,cxx+Math.cos(a_)*(R+30),gy+Math.sin(a_)*(R+30)+5,{sz:14,c:v===.05?AM:'#9fdcef',al:'center',a:ga,w:v===.05?'700':'400'})});
+  txt(mid?'우연으로 보기 어려움':'reject H₀',cxx-R-10,gy+34,{f:F_.b,sz:15,w:'700',c:C1,al:'center',a:ga});
+  txt(mid?'우연일 수 있음':'fail to reject',cxx+R+10,gy+34,{f:F_.b,sz:15,w:'700',c:C0,al:'center',a:ga});
+  const pv=.5+.5*Math.sin(tt*1.1-1.2);const na=ang(pv*pv);
+  seg(cxx,gy,cxx+Math.cos(na)*(R-24),gy+Math.sin(na)*(R-24),AM,3,ga);orb(cxx,gy,7,AM,ga);
+  txt(mid?'우연일까?  진짜일까?':'How surprising is the data under H₀?',cxx,gy+90,{f:F_.b,sz:24,w:'700',c:'#eafcff',al:'center',a:clamp((tt-2.6)/1),glow:10});
+  panel(tt,k,L,cb);return}
+
+ if(k===1||k===2){
+  stripAxes(1,L);
+  let lab=G,prev=G,e=1,white=0;
+  if(k===2){const q=tt-S[2];white=clamp(q/1.2);
+   for(let j=0;j<3;j++){const st=1.6+j*2.4;if(q>=st){prev=j?PERM[j-1]:G;lab=PERM[j];e=ease(clamp((q-st)/1.1));if(e>=1)cb.shown.push(meanOf(1,PERM[j])-meanOf(0,PERM[j]))}}
+   if(q<1.6){lab=G;prev=G;e=1}}
+  for(let i=0;i<NN;i++){let a=1,yoff=0;
+   if(k===1){const d=S[1]+i*.08,qq=clamp((tt-d)/.6);a=qq;yoff=-(1-ease(qq))*200}
+   const y=ROWY[prev[i]]+(ROWY[lab[i]]-ROWY[prev[i]])*e+JY[i]+yoff;
+   const col=G[i]?C1:C0;orb(vx(V[i]),y,5,white>.5?(e>=1?(lab[i]?'#ff9fd0':'#9ff3ff'):WH):col,a);
+   if(white>0&&white<1)orb(vx(V[i]),y,5,WH,white*.8)}
+  const m1p=meanOf(1,prev),m0p=meanOf(0,prev),m1=meanOf(1,lab),m0=meanOf(0,lab);
+  const M1n=m1p+(m1-m1p)*e,M0n=m0p+(m0-m0p)*e;
+  const ma=k===1?clamp((tt-S[1]-3.2)/1):1;
+  meanBar(M1n,1,ma,`${mid?'평균 ':'x̄₁ '}${M1n.toFixed(2)}`);meanBar(M0n,0,ma,`${mid?'평균 ':'x̄₀ '}${M0n.toFixed(2)}`);
+  const da=k===1?clamp((tt-S[1]-4.4)/1):1,dd=M1n-M0n;
+  diffArrow(M0n,M1n,da,`${mid?'차이 ':'d = '}${dd>=0?'+':''}${dd.toFixed(2)}${mid?'억':''}`);
+  if(k===2){const q=tt-S[2];txt(mid?'이름표를 떼고 무작위로 다시 붙이기':'random relabeling under H₀',(P.x0+P.x1)/2,P.y0+22,{f:F_.b,sz:15,c:AM,al:'center',a:clamp(q/1)*(1-clamp((q-1.6)/1))})}
+  if(k===1)cap(mid?'역세권이 정말 더 비쌀까?':'d_obs = x̄₁ − x̄₀ = 0.800',clamp(p*4));
+  else cap(mid?'"차이가 없다면" 이름표를 섞어도 될까?':'H₀ : μ₁ = μ₀   →   shuffle labels',clamp(p*4));
+  panel(tt,k,L,cb);return}
+
+ if(k<6)histAxes(1,L);
+ if(k===3){const n=Math.floor(ease(clamp(p*1.15))*B);cb.n=n;hist(n,1,null,0);
+  for(let j=1;j<=10;j++){const i=n-j*3;if(i<0||n>=B)continue;const b=BIN[i],c=(()=>{let s=0;for(let r=0;r<i;r++)if(BIN[r]===b)s++;return s})();
+   const xx=P.x0+(b+.5)*(P.x1-P.x0)/NB,top=hy(c),fy=P.y0+((j/10))*(top-P.y0);orb(xx,top-(1-j/10)*(top-P.y0)*.0+0,0,AM,0);orb(xx,P.y0+(1-j/10)*(top-P.y0),3.5,AM,1-j/12)}
+  cap(mid?`섞어서 차이 계산하기 × ${n}번`:`null distribution of d*   (B = ${n})`,1)}
+ if(k===4){hist(B,1,OBSV,clamp(p*4-.6));obsLines(OBSV,clamp(p*4),L,mid);
+  const a=clamp(p*4-1.4),R=countSide(OBSV,1),Lc=countSide(OBSV,-1);
+  txt(`${R}${mid?'번':''}`,dx(Math.min(1.45,OBSV+.35)),hy(60),{sz:20,w:'700',c:C1,al:'center',a,glow:10});
+  txt(`${Lc}${mid?'번':''}`,dx(-Math.min(1.45,OBSV+.35)),hy(60),{sz:20,w:'700',c:C1,al:'center',a,glow:10});
+  const pv=(R+Lc)/B;cap(mid?`p값 = ${R+Lc} ÷ 2000 = ${pv.toFixed(3)}`:`p = #{|d*| ≥ ${OBSV.toFixed(2)}} / B = ${pv.toFixed(3)}`,clamp(p*4-1.8))}
+ if(k===5){const q=tt-S[5],ci=Math.min(2,Math.floor(Math.max(0,q-.6)/3));cb.ci=ci;const o=CASES[ci],lq=(q-.6)-ci*3;
+  hist(B,1,o,clamp(lq/.8));obsLines(o,clamp(lq/.5),L,mid);
+  const pv=pOf(o),sa=clamp((lq-.9)/.5),sig=pv<.05;
+  const bw=300,bx=(P.x0+P.x1)/2-bw/2,by=P.y0+56;box(bx,by,bw,64,sig?C1:C0,sa);
+  txt(pv<1/B?'p < 0.0005':`p = ${pv.toFixed(3)}`,bx+bw/2,by+28,{sz:20,w:'700',c:sig?'#ff8cc6':'#9ff3ff',al:'center',a:sa,glow:10});
+  txt(sig?(mid?'0.05보다 작음 → 우연으로 보기 어려움':'p < α  →  reject H₀'):(mid?'0.05보다 큼 → 우연일 수 있음':'p ≥ α  →  fail to reject H₀'),bx+bw/2,by+52,{f:F_.b,sz:14,c:'#eafcff',al:'center',a:sa});
+  cap(mid?`우리 차이가 ${o.toFixed(1)}억이었다면?`:`d_obs = ${o.toFixed(1)}   vs   α = .05`,clamp(lq/.5))}
+ if(k===6){/* 해석 사다리 */
+  ctx.save();ctx.fillStyle='rgba(3,8,16,.94)';ctx.fillRect(P.x0-50,P.y0-30,P.x1-P.x0+80,P.y1-P.y0+80);ctx.restore();
+  const rows=[[.32,mid?'우연일 수 있다 · 차이가 있다고 말하기 어려움':'p > α : H₀ 기각 못 함'],[.048,mid?'우연으로 보기 어렵다 · 단, 아슬아슬':'.01 < p ≤ .05 : α = .05에서 기각 (경계)'],[.003,mid?'우연일 가능성이 매우 낮다':'.001 < p ≤ .01 : α = .01에서도 기각'],[.0004,mid?'거의 우연이 아님 → "p < .001"로 표기':'p ≤ .001 : 보고 시 "p < .001"']];
+  const bx0=P.x0+120,bwid=P.x1-bx0-30,ev=v=>Math.min(4,-Math.log10(v))/4*bwid;
+  const xa=bx0+ev(.05);seg(xa,P.y0+20,xa,P.y1-30,AM,1.5,clamp(p*3),[6,5]);
+  txt(mid?'0.05 기준':'α = .05',xa,P.y0+10,{f:F_.b,sz:13,c:AM,al:'center',a:clamp(p*3),w:'700'});
+  rows.forEach(([pv,s],i)=>{const a=clamp(p*4-.6-i*.5),y=P.y0+80+i*104,sig=pv<.05,c=sig?C1:C0;
+   txt(pv<.001?'p < .001':`p = ${pv}`,P.x0-30,y+6,{sz:17,w:'700',c:'#eafcff',a});
+   const wv=ev(pv)*ease(a);ctx.save();ctx.globalAlpha=a;const g=ctx.createLinearGradient(bx0,0,bx0+wv,0);g.addColorStop(0,c+'33');g.addColorStop(1,c);ctx.fillStyle=g;ctx.shadowColor=c;ctx.shadowBlur=12;ctx.fillRect(bx0,y-8,wv,18);ctx.restore();
+   ctx.save();ctx.font=`700 15px ${F_.b}`;const tw=ctx.measureText(s).width;ctx.globalAlpha=a;ctx.fillStyle='rgba(3,8,16,.96)';ctx.fillRect(bx0-4,y+24,tw+8,22);ctx.restore();txt(s,bx0,y+40,{f:F_.b,sz:15,c:sig?'#ffb3d9':'#9ff3ff',a,w:'700'})});
+  txt(mid?'막대가 길수록 "우연이 아니다"라는 증거가 강함':'evidence scale : −log₁₀(p)',(P.x0+P.x1)/2,P.y1+36,{f:F_.b,sz:14,c:'#9fdcef',al:'center',a:clamp(p*3-1)});
+  cap(mid?'p값 해석 사다리':'Interpreting p  (α = .05)',clamp(p*4))}
+
+ if(k===7){/* 가설 3개 */
+  ctx.save();ctx.fillStyle='rgba(3,8,16,.94)';ctx.fillRect(P.x0-50,P.y0-30,P.x1-P.x0+80,P.y1-P.y0+80);ctx.restore();
+  const q=tt-S[7],hj=Math.min(3,Math.floor(q/4.6));cb.hj=hj;cb.hs=S[7]+Math.min(hj,2)*4.6;
+  const DM=2,hxL=400,hxR=680,hxw=hxR-hxL,hbx=d=>hxL+(d+DM)/(2*DM)*hxw,NBm=40,bw=hxw/NBm;
+  HYP.forEach((h,j)=>{const ra=clamp((q-j*4.6)/.6)*(hj===j||hj===3?1:.5)+ (q>j*4.6&&hj!==j&&hj!==3?0:0),y0=P.y0+20+j*152,on=hj===j,T=HTX[level][j];
+   const al=q<j*4.6?0:ra;if(al<=0)return;
+   if(on){ctx.save();ctx.strokeStyle=AM;ctx.lineWidth=1.4;ctx.shadowColor=AM;ctx.shadowBlur=8;ctx.strokeRect(P.x0-40,y0-8,P.x1-P.x0+60,140);ctx.restore()}
+   txt(T[0],P.x0-24,y0+18,{f:F_.d,sz:12,c:AM,a:al,w:'700'});
+   txt(mid?T[1]:`${T[1]} : ${T[2]} vs ${T[3]}`,P.x0-24,y0+44,{f:F_.b,sz:16,c:'#eafcff',a:al,w:'700'});
+   txt(mid?`H₀ 차이 없다`:`H₀ : μ(${T[2]}) = μ(${T[3]})`,P.x0-24,y0+72,{f:mid?F_.b:F_.m,sz:13,c:'#9fdcef',a:al});
+   txt(mid?`H₁ 차이 있다`:`H₁ : μ(${T[2]}) ≠ μ(${T[3]})`,P.x0-24,y0+94,{f:mid?F_.b:F_.m,sz:13,c:'#9fdcef',a:al});
+   txt(mid?`관측 차이 ${h.obs>=0?'+':''}${h.obs.toFixed(2)}억`:`d_obs = ${h.obs.toFixed(2)}`,P.x0-24,y0+120,{f:mid?F_.b:F_.m,sz:13,c:AM,a:al});
+   const cnt=Array(NBm).fill(0);h.ds.forEach(d=>{const b=Math.max(0,Math.min(NBm-1,Math.floor((d+DM)/(2*DM)*NBm)));cnt[b]++});const cm=Math.max(...cnt)*1.1,base=y0+118,hh=100;
+   const ta=clamp((q-j*4.6-.6)/.8);
+   for(let b=0;b<NBm;b++){if(!cnt[b])continue;const mdv=-DM+(b+.5)*2*DM/NBm,ext=Math.abs(mdv)>=h.obs-1e-9,c=ext&&ta>0?C1:C0;
+    ctx.save();ctx.globalAlpha=al*(ext?.35+.6*ta:.55);ctx.fillStyle=c;ctx.fillRect(hxL+b*bw+1,base-cnt[b]/cm*hh,bw-2,cnt[b]/cm*hh);ctx.restore()}
+   seg(hxL,base,hxR,base,'#38e8ff',1,al*.6);
+   [-2,-1,0,1,2].forEach(v=>txt(String(v),hbx(v),base+14,{sz:10,c:'#6f8ea8',al:'center',a:al}));
+   [1,-1].forEach(sg=>seg(hbx(sg*h.obs),y0+8,hbx(sg*h.obs),base,AM,2,al*ta,sg>0?null:[5,4]));
+   const sig=h.p<.05,va=clamp((q-j*4.6-1.2)/.6);
+   txt(pTxt(h),710,y0+56,{sz:20,w:'700',c:sig?'#ff8cc6':'#9ff3ff',a:al*va,glow:10});
+   txt(sig?(mid?'< 0.05':'≤ α'):(mid?'≥ 0.05':'> α'),710,y0+80,{sz:13,c:'#9fdcef',a:al*va});
+   txt(sig?(mid?'차이가 있다':'H₀ 기각'):(mid?'증거 부족':'기각 실패'),710,y0+108,{f:F_.b,sz:16,w:'700',c:sig?C1:C0,a:al*va,glow:8})});
+  cb.it=hj<3?SCRIPT_INT[level][hj]:'';
+  cap(mid?'가설 3개, p값으로 해석해 보기':'Three hypotheses · two-sample permutation tests',clamp(q/.6))}
+
+ panel(tt,k,L,cb);
+ for(let j=1;j<S.length-1;j++){const d=tt-S[j];if(d>=0&&d<.35){const a=1-d/.35;ctx.save();ctx.globalAlpha=a*.5;for(let r=0;r<6;r++){const yy=rnd()*LH;ctx.fillStyle=r%2?'#38e8ff':'#ff3fa4';ctx.fillRect(0,yy,LW,1+rnd()*3)}ctx.restore()}}
+}
+
+/* ---------- 시나리오 ---------- */
+const SHORT=['개념','우리 결과','섞어 보기','2000번 반복','p값 계산','0.05 판정','해석·오해','가설 3개 해석'];
+const pO=pOf(OBS),c0=countExt(OBS),p03=pOf(.3),p14=pOf(1.4);
+const [hA,hB,hC]=HYP;
+const SCRIPT_INT={
+ mid:[`p = ${hA.p.toFixed(3)}로 0.05보다 작아요. 역세권 효과가 전혀 없다면 100번 중 약 ${(hA.p*100).toFixed(0)}번만 나올 결과이므로, 우연으로 보기 어려워요. → "역세권 아파트가 평균 약 ${hA.obs.toFixed(1)}억 더 비싸다고 말할 수 있다."`,
+  `p = ${hB.p.toFixed(3)}로 0.05보다 커요. 남향 효과가 없어도 100번 중 약 ${(hB.p*100).toFixed(0)}번이나 나오는 흔한 결과예요. → "남향이 더 비싸다고 말할 증거가 부족하다." (차이가 없다는 증명은 아니에요!)`,
+  `2000번을 섞어도 이만큼 큰 차이는 한 번도 나오지 않았어요(${pTxt(hC)}). → "신축 아파트가 평균 약 ${hC.obs.toFixed(1)}억 더 비싸다는 매우 강한 증거가 있다."`],
+ uni:[`t(28) = ${hA.t.toFixed(2)}, ${pRep(hA)}. α = .05에서 H₀를 기각하나 α = .01에서는 기각하지 못함. 효과크기 d = ${hA.cd.toFixed(2)}(큰 효과).`,
+  `t(28) = ${hB.t.toFixed(2)}, ${pRep(hB)}. H₀ 기각 실패. 남향 효과의 증거가 불충분하며, 이는 μ₁ = μ₀의 입증이 아님. 검정력 부족 가능성 검토(n = 15).`,
+  `t(28) = ${hC.t.toFixed(2)}, ${pRep(hC)}. 순열 2000회 중 극단값 0회(p < 1/2000). H₀ 강하게 기각, 효과크기 d = ${hC.cd.toFixed(2)}.`]
+};
+const SCRIPT={
+ mid:[
+  {s:'p값은 "이 결과가 우연히 나온 걸까, 아니면 진짜 차이일까?"를 판단하도록 도와주는 숫자예요. 0부터 1 사이의 값이고, 작을수록 "우연이라고 보기 어렵다"는 뜻입니다. 오늘은 어려운 공식 대신, p값이 어디서 나오는지를 눈으로 직접 확인해 보겠습니다.',tip:'계기판 바늘이 왼쪽(분홍)으로 갈수록 "우연이 아니다" 쪽이라고 소개하세요.'},
+  {s:`역세권 아파트 15채와 비역세권 아파트 15채의 가격을 조사했어요. 평균을 내 보니 역세권은 ${M1.toFixed(2)}억, 비역세권은 ${M0.toFixed(2)}억으로 0.8억 차이가 납니다. 그럼 "역세권이 더 비싸다"고 말해도 될까요? 문제는 15채씩만 조사했다는 거예요. 다른 집을 뽑았다면 차이가 더 작거나 반대로 나왔을 수도 있습니다.`,tip:'점들이 많이 겹쳐 있다는 점을 가리키며 "차이가 분명해 보이나요?"라고 물어보세요.'},
+  {s:'이렇게 생각해 봅시다. 만약 역세권이든 아니든 가격 차이가 전혀 없다면, 집에 붙은 "역세권/비역세권" 이름표는 아무 의미가 없겠죠. 그래서 이름표를 모두 떼고 무작위로 다시 붙여 봅니다. 섞을 때마다 두 그룹의 평균 차이를 다시 계산하면, 화면처럼 0 근처의 작은 값이 자주 나와요.',tip:'카드 섞기나 제비뽑기에 비유하면 이해가 쉽습니다.'},
+  {s:'이 "섞어서 차이 계산하기"를 컴퓨터로 2000번 반복했어요. 결과를 쌓아 보면 0을 중심으로 한 종 모양이 됩니다. 이 그림이 바로 "차이가 전혀 없는 세상에서 우연히 생기는 차이"의 모습이에요. 대부분은 0 근처에 몰려 있고, 양 끝으로 갈수록 드물어집니다.',tip:'막대가 쌓이는 동안 "가운데가 제일 많죠?"라고 확인해 주세요.'},
+  {s:`이제 우리가 실제로 얻은 0.8억을 이 그림 위에 놓아 봅시다. 2000번 중에서 0.8억만큼 또는 그보다 더 큰 차이가 나온 횟수를 셉니다. 반대 방향(−0.8억)도 똑같이 놀라운 결과라서 함께 세요. 모두 ${c0}번이니까 ${c0} ÷ 2000 = ${pO.toFixed(3)}, 이것이 p값입니다. 차이가 없는 세상이라면 이런 결과는 100번 중 약 ${(pO*100).toFixed(1)}번 정도만 나온다는 뜻이에요.`,tip:'아래 "체험" 슬라이더로 차이를 바꿔 보며 p값이 어떻게 변하는지 학생들과 함께 확인해 보세요.'},
+  {s:`그럼 p값이 얼마나 작아야 "우연이 아니다"라고 말할까요? 보통 0.05, 즉 5%(20번 중 1번)를 기준으로 씁니다. 차이가 0.3억이었다면 p값이 ${p03.toFixed(2)}로 커서 "우연일 수 있다", 0.8억이면 ${pO.toFixed(3)}로 0.05보다 작아서 "우연으로 보기 어렵다"고 판단해요. 1.4억이면 2000번 중 ${p14<1/B?'한 번도 나오지 않을':Math.round(p14*B)+'번밖에 안 나올'} 만큼 드문 결과입니다. 차이가 클수록 분홍 꼬리가 작아지고 p값도 작아져요.`,tip:'0.05는 관례적인 기준일 뿐 절대적인 선이 아니라는 점도 짚어 주세요.'},
+  {s:'p값을 읽을 때 꼭 기억할 세 가지가 있어요. 첫째, p값은 "우연일 확률"이 아니라 "차이가 없다고 가정했을 때 이런 결과가 나올 확률"입니다. 둘째, p값이 작다고 차이가 큰 것은 아니에요. 차이의 크기는 평균 차이 자체를 따로 봐야 합니다. 셋째, p값이 0.05보다 크다고 "차이가 없다"가 증명된 것은 아니에요. "차이가 있다고 말할 증거가 부족하다"는 뜻입니다. 앞에서 본 회귀분석 결과의 "p < .001"도 같은 방식으로 읽으면 됩니다.',tip:'사다리 그림에서 아래로 갈수록 증거가 강해진다는 흐름으로 정리하세요.'},
+  {s:`이제 가설 3개를 직접 검정해 봅시다. 가설 A "역세권이 더 비쌀까?"는 p = ${hA.p.toFixed(3)}로 0.05보다 작으니 "역세권이 더 비싸다고 말할 수 있다"고 해석해요. 가설 B "남향이 더 비쌀까?"는 차이가 ${hB.obs.toFixed(2)}억으로 작고 p = ${hB.p.toFixed(2)}로 0.05보다 커요. 이때는 "차이가 없다"가 아니라 "차이가 있다고 말할 증거가 부족하다"고 말해야 합니다. 가설 C "신축이 더 비쌀까?"는 2000번 섞어도 한 번도 나오지 않은 결과라 p < 0.001, 아주 강한 증거예요. 세 경우 모두 p값과 함께 "얼마나 차이 나는지"도 꼭 말해 주세요.`,tip:'학생들에게 가설을 하나 더 내 보게 하고(예: 학군, 층수), p값이 크게/작게 나오면 어떻게 말할지 연습시키면 좋습니다.'}
+ ],
+ uni:[
+  {s:'p값은 귀무가설 H₀가 참이라는 가정하에, 관측된 검정통계량만큼 또는 그보다 더 극단적인 값이 나올 확률입니다. p = P(|T| ≥ |t_obs| ; H₀). 즉 자료가 H₀와 얼마나 양립하기 어려운지를 나타내는 지표이며, 가설 자체가 참일 확률은 아닙니다.',tip:'"조건부 확률의 방향"(자료|H₀ vs H₀|자료)을 칠판에 써서 비교해 주세요.'},
+  {s:`역세권(n₁ = 15)과 비역세권(n₀ = 15) 아파트 매매가의 표본평균은 x̄₁ = ${M1.toFixed(3)}, x̄₀ = ${M0.toFixed(3)}억원(s₁ = ${SD1.toFixed(3)}, s₀ = ${SD0.toFixed(3)})이고, 관측 통계량은 d_obs = 0.800억원입니다. 표본 차이에는 표본추출 변동이 포함되므로, 모집단 차이 μ₁ − μ₀ ≠ 0의 근거가 되는지 검정해야 합니다.`,tip:'두 분포가 크게 겹친다는 시각적 사실이 검정의 필요성을 보여 줍니다.'},
+  {s:'H₀: μ₁ = μ₀(엄밀히는 두 집단의 분포가 같음), H₁: μ₁ ≠ μ₀. H₀가 참이면 집단 라벨은 교환 가능(exchangeable)하므로, 라벨을 무작위로 재배정해 계산한 d*는 H₀ 하에서 충분히 나올 수 있는 값입니다. 이것이 순열검정(permutation test)의 원리입니다.',tip:'순열검정은 정규성 가정이 필요 없는 비모수적 방법이라는 점을 덧붙일 수 있습니다.'},
+  {s:`B = 2000회 재배정으로 얻은 d*의 분포가 귀무분포(null distribution)입니다. 평균은 약 0, 표준편차는 ${NULLSD.toFixed(3)}로 이표본 t검정의 표준오차 SE = ${SEd.toFixed(3)}와 비슷합니다. 모수적 검정에서는 이 분포를 자유도 ${DFT}인 t분포로 근사합니다.`,tip:'SD(d*) ≈ SE라는 사실이 "표준오차 = 표본분포의 표준편차"를 직접 보여 줍니다.'},
+  {s:`양측 p값은 p = #{|d*| ≥ |d_obs|} / B = ${c0}/2000 = ${pO.toFixed(4)}입니다. 같은 자료에 이표본 t검정을 적용하면 t(${DFT}) = ${TOBS.toFixed(2)}, p = ${PT.toFixed(4)}로 거의 같은 결과가 나옵니다. 단측검정이라면 한쪽 꼬리만 세므로 p값은 대략 절반이 됩니다.`,tip:'단측/양측 선택은 자료를 보기 전에 연구가설에 따라 정해야 한다고 강조하세요.'},
+  {s:`유의수준 α는 H₀가 참인데 기각하는 제1종 오류 확률의 상한으로, 자료를 보기 전에 정합니다(관례적으로 .05). p ≤ α이면 H₀를 기각합니다. d = 0.3이면 p = ${p03.toFixed(3)}로 기각하지 못하고, d = 0.8이면 p = ${pO.toFixed(3)}로 α = .05에서는 기각하지만 α = .01에서는 기각하지 못합니다. d = 1.4이면 ${p14<1/B?'2000회 중 한 번도 나오지 않아 p < 1/2000':'p = '+p14.toFixed(4)}입니다.`,tip:'제2종 오류(β)와 검정력(1 − β)은 표본 크기와 연결해 다음 시간에 다룰 수 있습니다.'},
+  {s:`미국통계학회(ASA, 2016) 성명의 핵심 원칙입니다. ① p값은 H₀가 참일 확률도, 결과가 우연히 생겼을 확률도 아니다. ② 과학적 결론이나 정책 결정을 p < .05 여부만으로 내려서는 안 된다. ③ p값은 효과의 크기나 중요성을 측정하지 않으며, 표본이 크면 아주 작은 차이도 p가 작아진다. ④ 따라서 효과크기(이 예에서 Cohen's d = ${(OBS/SP).toFixed(2)})와 신뢰구간을 함께 보고해야 한다.`,tip:'JAMOVI 출력에서 p 옆의 Effect Size 옵션을 켜서 Cohen\'s d를 함께 보고하는 습관을 안내하세요.'},
+  {s:`세 가설을 같은 방법(순열 2000회, 이표본 t검정 병기)으로 검정합니다. H-A(역세권): d = ${hA.obs.toFixed(2)}, t(28) = ${hA.t.toFixed(2)}, ${pRep(hA)}로 α = .05에서 H₀를 기각합니다. H-B(남향): d = ${hB.obs.toFixed(2)}, t(28) = ${hB.t.toFixed(2)}, ${pRep(hB)}로 기각하지 못하며, 이는 H₀의 입증이 아니라 증거 불충분입니다. 표본이 작아 검정력이 낮았을 가능성도 고려해야 합니다. H-C(신축): d = ${hC.obs.toFixed(2)}, t(28) = ${hC.t.toFixed(2)}, ${pRep(hC)}로 H₀를 강하게 기각합니다. 보고 시에는 효과크기(Cohen's d = ${hA.cd.toFixed(2)}, ${hB.cd.toFixed(2)}, ${hC.cd.toFixed(2)})를 함께 제시합니다. 또한 여러 가설을 동시에 검정하면 제1종 오류가 누적되므로, 필요하면 Bonferroni 보정(α/3 ≈ .017)을 적용합니다. 이 경우 H-A(${pRep(hA)})는 보정 기준 .017을 넘어 유의하지 않게 되므로, 결론을 더 신중하게 써야 합니다.`,tip:'다중비교 문제를 이 장면에서 자연스럽게 소개할 수 있습니다. 보정 후 결론이 달라지는지 학생들에게 물어보세요.'}
+ ]
+};
+/* ---------- 루프 & 컨트롤 ---------- */
+const scrub=document.getElementById('scrub'),tc=document.getElementById('tc'),playB=document.getElementById('play');
+scrub.max=END;
+let last=performance.now(),autoStop=true,passK=-1,uiK=-1,uiLv='';
+function loop(now){const dt=Math.min(.1,(now-last)/1000);last=now;
+ if(playing){const k0=sceneIdx(t);t+=dt*speed;if(t>=END){t=END;setPlay(false)}
+  const k1=sceneIdx(t);if(autoStop&&k1>k0&&k1!==passK){t=S[k1]-.02;setPlay(false);passK=k1}}
+ frame();updUI();scrub.value=t;tc.textContent=`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+ requestAnimationFrame(loop)}
+function setPlay(v){playing=v;playB.textContent=v?'❚❚ 일시정지':'▶ 재생'}
+playB.onclick=()=>{if(t>=END)t=0;setPlay(!playing)};
+document.getElementById('restart').onclick=()=>{t=0;passK=-1;setPlay(true)};
+const jump=d=>{const k=sceneIdx(t);const nk=clamp(k+d,0,S.length-2);t=S[nk]+.01;passK=-1};
+document.getElementById('prev').onclick=()=>jump(t-S[sceneIdx(t)]>1?0:-1);
+document.getElementById('next').onclick=()=>jump(1);
+scrub.oninput=()=>{t=+scrub.value;passK=-1};
+const mid=document.getElementById('lvMid'),uni=document.getElementById('lvUni');
+function setLv(l){level=l;mid.setAttribute('aria-pressed',l==='mid');uni.setAttribute('aria-pressed',l==='uni')}
+mid.onclick=()=>setLv('mid');uni.onclick=()=>setLv('uni');
+const sqB=document.getElementById('sq');if(sqB)sqB.remove();
+const spB=document.getElementById('spd');const sps=[1,.75,.5,1.5];let si=0;spB.onclick=()=>{si=(si+1)%sps.length;speed=sps[si];spB.textContent=`속도 ${speed}×`};
+document.getElementById('fs').onclick=()=>{const r=stage.requestFullscreen&&stage.requestFullscreen();if(r&&r.catch)r.catch(()=>{});setTimeout(resize,200)};
+document.addEventListener('fullscreenchange',()=>setTimeout(resize,100));
+document.getElementById('rec').onclick=()=>document.body.classList.toggle('rec');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.key!==' ')return;
+ if(e.key===' '){e.preventDefault();playB.click()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H')document.body.classList.toggle('rec')});
+
+const scBox=document.getElementById('scenes');scBox.style.gridTemplateColumns='repeat(auto-fit,minmax(110px,1fr))';
+const scBtns=SHORT.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">SCENE 0${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);scBox.appendChild(b);return b});
+function goScene(i){t=S[i]+.01;passK=-1;setPlay(true)}
+const sTag=document.getElementById('sTag'),sTitle=document.getElementById('sTitle'),sNow=document.getElementById('sNow'),sTip=document.getElementById('sTip'),sAll=document.getElementById('sAll');
+function buildAll(){sAll.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TXT[level].scenes[i]}</b><br>${o.s}`;li.onclick=()=>goScene(i);sAll.appendChild(li)})}
+function updUI(){const k=sceneIdx(t);if(k===uiK&&level===uiLv)return;if(level!==uiLv)buildAll();uiK=k;uiLv=level;
+ scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...sAll.children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];sTag.textContent=`SCENE 0${k+1} · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;sTitle.textContent=TXT[level].scenes[k];sNow.textContent=o.s;sTip.textContent='강의 팁 · '+o.tip}
+const autoB=document.getElementById('auto');autoB.onclick=()=>{autoStop=!autoStop;autoB.setAttribute('aria-pressed',autoStop)};
+document.getElementById('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TXT[level].scenes[i]}\n${o.s}\n(팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;btn.parentNode.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(()=>{btn.textContent='복사됨'},()=>{fb();btn.textContent='복사됨'})}else{fb();btn.textContent='복사됨'}
+ setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+requestAnimationFrame(loop);
+/* ---------- 체험 슬라이더 ---------- */
+(function(){
+ const st=document.createElement('style');st.textContent='.try{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel);padding:10px 14px;font-family:var(--f-body);font-size:14px}.try b{color:var(--amber);font-family:var(--f-display);font-size:12px;letter-spacing:.08em}.try input{flex:1 1 180px;min-width:0;accent-color:var(--amber)}.try output{font-family:var(--f-mono);color:var(--fg);font-variant-numeric:tabular-nums}body.rec .try{display:none}';document.head.appendChild(st);
+ const box=document.createElement('div');box.className='try';
+ box.innerHTML='<b>TRY</b><label for="obsR">체험: 우리 결과(차이)를 바꿔 보기</label><input type="range" id="obsR" min="0.1" max="1.6" step="0.05" value="0.8"><output id="obsO"></output><button id="obsReset">원래 값</button>';
+ document.getElementById('scenes').after(box);
+ const r=document.getElementById('obsR'),o=document.getElementById('obsO');
+ const show=()=>{const v=+r.value,pv=pOf(v);o.textContent=`차이 ${v.toFixed(2)}억 → p = ${pv<1/B?'< 0.0005':pv.toFixed(3)} ${pv<.05?'(우연으로 보기 어려움)':'(우연일 수 있음)'}`};
+ r.oninput=()=>{OBSV=+r.value;userObs=Math.abs(OBSV-OBS)>1e-9;t=S[4]+6;passK=-1;setPlay(false);show()};
+ document.getElementById('obsReset').onclick=()=>{r.value=OBS;r.oninput()};
+ show();
+})();
+})();
+</script>
