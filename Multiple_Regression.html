@@ -1,0 +1,219 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>다중회귀분석 사이버 스캔</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap">
+<style>
+/* Layout: 16:9 cinematic stage (canvas, 1280x720 logical) + control strip below. Single dark "cyber HUD" look. */
+:root{
+  --bg:#03060c; --panel:#0a1322; --line:#18324d;
+  --cyan:#38e8ff; --mag:#ff3fa4; --amber:#ffc24a;
+  --fg:#d7f6ff; --dim:#6f8ea8;
+  --f-display:'Orbitron','JetBrains Mono',ui-monospace,monospace;
+  --f-body:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage{position:relative;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);overflow:hidden}
+.stage:fullscreen{border:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.scan{pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(160,240,255,.045) 0 1px,transparent 1px 3px)}
+.vig{pointer-events:none;position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(0,0,0,.65) 100%)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--f-mono);font-size:13px}
+.grp{display:flex;gap:4px;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);padding:8px 12px;cursor:pointer;border-radius:2px}
+button:hover{border-color:var(--cyan);color:var(--cyan)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--cyan);color:var(--bg);border-color:var(--cyan)}
+#scrub{flex:1 1 200px;min-width:0;accent-color:var(--cyan)}
+#tc{color:var(--dim);font-variant-numeric:tabular-nums;min-width:7ch}
+.hint{color:var(--dim);font-size:12px;line-height:1.6;margin:0}
+.hint b{color:var(--cyan);font-weight:400}
+body.rec .controls,body.rec .hint,body.rec .script,body.rec .scenes{display:none}
+.scenes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+@media (max-width:640px){.scenes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.scenes button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;min-width:0}
+.scenes button .n{font-family:var(--f-display);font-size:11px;color:var(--amber);letter-spacing:.08em}
+.scenes button .l{font-family:var(--f-body);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.scenes button[aria-current="true"]{border-color:var(--cyan);background:rgba(56,232,255,.12);color:var(--cyan)}
+.scenes button[aria-current="true"] .n{color:var(--cyan)}
+.script{border:1px solid var(--line);background:var(--panel);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.script .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.script .tag{font-family:var(--f-display);font-size:12px;letter-spacing:.1em;color:var(--amber)}
+.script h2{margin:0;font-size:19px;font-weight:700;text-wrap:balance}
+.script .now{margin:0;font-size:17px;line-height:1.85;max-width:70ch;color:var(--fg)}
+.script .tip{margin:0;font-size:13px;color:var(--dim);line-height:1.6}
+.script details{border-top:1px solid var(--line);padding-top:10px}
+.script summary{cursor:pointer;color:var(--cyan);font-size:14px}
+.script ol{margin:10px 0 0;padding-left:1.4em;display:flex;flex-direction:column;gap:10px}
+.script li{line-height:1.75;font-size:14px;max-width:75ch;cursor:pointer}
+.script li b{color:var(--cyan)}
+.script li.on{color:var(--cyan)}
+.script textarea{position:absolute;left:-9999px}
+</style></head><body>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="scan"></div><div class="vig"></div>
+  </div>
+  <nav class="scenes" id="scenes" aria-label="장면 선택"></nav>
+  <div class="controls">
+    <div class="grp">
+      <button id="auto" aria-pressed="true" title="각 장면이 끝나면 자동으로 멈춥니다">장면마다 멈춤</button>
+      <button id="prev" title="이전 장면 (←)">◀◀</button>
+      <button id="play" title="재생/일시정지 (Space)">❚❚ 일시정지</button>
+      <button id="next" title="다음 장면 (→)">▶▶</button>
+      <button id="restart">⟲ 처음부터</button>
+    </div>
+    <input type="range" id="scrub" min="0" max="53" step="0.01" value="0" aria-label="타임라인">
+    <span id="tc">00:00</span>
+    <div class="grp" role="group" aria-label="설명 수준">
+      <button id="lvMid" aria-pressed="true">중학생 수준</button>
+      <button id="lvUni" aria-pressed="false">대학 수준</button>
+    </div>
+    <div class="grp">
+      <button id="sq" aria-pressed="true">잔차 제곱 ■</button>
+      <button id="spd">속도 1×</button>
+      <button id="fs">전체화면</button>
+      <button id="rec">녹화 모드 (H)</button>
+    </div>
+  </div>
+  <section class="script" aria-live="polite">
+    <div class="head">
+      <span class="tag" id="sTag">SCENE 01 · 설명 대본</span>
+      <button id="copy">전체 대본 복사</button>
+    </div>
+    <h2 id="sTitle"></h2>
+    <p class="now" id="sNow"></p>
+    <p class="tip" id="sTip"></p>
+    <details>
+      <summary>전체 시나리오 보기 (항목을 누르면 그 장면으로 이동)</summary>
+      <ol id="sAll"></ol>
+    </details>
+  </section>
+  <p class="hint">녹화 모드에서는 아래 조작판이 사라집니다. <b>H</b> 키로 다시 표시 · <b>Space</b> 재생/정지 · <b>← →</b> 장면 이동. 데이터는 설명용 가상 예시(아파트 48건)입니다. 면적·건축연령으로 매매가를 설명합니다.</p>
+</div>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage');
+const LW=1280,LH=720;
+function resize(){const r=cv.getBoundingClientRect();const d=Math.min(2,window.devicePixelRatio||1);cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d));}
+addEventListener('resize',resize);resize();
+
+/* 가상 아파트 자료: 면적과 건축연령으로 가격을 설명한다. */
+let seed=20261112;const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+const N=48,A=[],G=[],Y=[];
+for(let i=0;i<N;i++){const a=40+rnd()*90,g=2+rnd()*28;A.push(a);G.push(g);Y.push(1.5+.065*a-.09*g+(rnd()+rnd()+rnd()-1.5)*.9)}
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length,am=mean(A),gm=mean(G),ym=mean(Y);
+let aa=0,gg=0,ag=0,ay=0,gy=0;for(let i=0;i<N;i++){const a=A[i]-am,g=G[i]-gm,y=Y[i]-ym;aa+=a*a;gg+=g*g;ag+=a*g;ay+=a*y;gy+=g*y}
+const det=aa*gg-ag*ag,b1=(ay*gg-gy*ag)/det,b2=(gy*aa-ay*ag)/det,b0=ym-b1*am-b2*gm;
+const predict=(a,g)=>b0+b1*a+b2*g,YH=A.map((a,i)=>predict(a,G[i])),E=Y.map((y,i)=>y-YH[i]);
+const SST=Y.reduce((s,y)=>s+(y-ym)**2,0),SSE=E.reduce((s,e)=>s+e*e,0),SSR=SST-SSE,DF=N-3,MSE=SSE/DF,R2=1-SSE/SST,ADJ=1-(1-R2)*(N-1)/DF,F=(SSR/2)/MSE;
+const SE=[Math.sqrt(MSE*gg/det),Math.sqrt(MSE*aa/det)],T=[b1/SE[0],b2/SE[1]],VIF=1/(1-ag*ag/(aa*gg));
+// Regularized incomplete beta gives stable two-sided t and upper-tail F probabilities.
+function lgamma(z){const c=[676.5203681218851,-1259.1392167224028,771.3234287776531,-176.6150291621406,12.5073432786869,-.13857109526572,9.984369578019572e-6,1.505632735149312e-7];if(z<.5)return Math.log(Math.PI/Math.sin(Math.PI*z))-lgamma(1-z);z--;let x=.9999999999998099;for(let i=0;i<c.length;i++)x+=c[i]/(z+i+1);const t=z+7.5;return .5*Math.log(2*Math.PI)+(z+.5)*Math.log(t)-t+Math.log(x)}
+function ibeta(x,a,b){if(x<=0)return 0;if(x>=1)return 1;function cf(a,b,x){let c=1,d=1-(a+b)*x/(a+1);d=1/d;let h=d;for(let m=1;m<=200;m++){let q=m*(b-m)*x/((a+2*m-1)*(a+2*m));d=1+q*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+q/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c;q=-(a+m)*(a+b+m)*x/((a+2*m)*(a+2*m+1));d=1+q*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+q/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;const v=d*c;h*=v;if(Math.abs(v-1)<3e-14)break}return h}const f=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log1p(-x));return x<(a+1)/(a+b+2)?f*cf(a,b,x)/a:1-f*cf(b,a,1-x)/b}
+const pval=t=>ibeta(DF/(DF+t*t),DF/2,.5),PF=ibeta(DF/(DF+2*F),DF/2,1),fmtp=p=>p<.001?'< .001':p.toFixed(3);
+let low=0,high=20;for(let i=0;i<70;i++){const m=(low+high)/2;if(pval(m)>.05)low=m;else high=m}const TCR=(low+high)/2;
+const PRED=predict(84,10),da=84-am,dg=10-gm,h0=1/N+(gg*da*da-2*ag*da*dg+aa*dg*dg)/det,margin=TCR*Math.sqrt(MSE*(1+h0)),PI=[PRED-margin,PRED+margin];
+const S=[0,6,15,24,33,43,53,64],END=64;
+let t=0,playing=true,speed=1,level='mid',showSq=false;
+const SHORT=['다중회귀 개념','회귀평면','계수 해석','설명력·수정 R²','t검정·F검정','진단·VIF','결과·예측'];
+const TXT={mid:{scenes:['여러 조건으로 가격 설명하기','직선에서 평면으로','다른 조건이 같다면?','변수를 늘리면 더 좋을까?','각 변수와 모형 전체의 검정','오차와 변수의 겹침 점검','두 조건을 넣어 가격 예측']},uni:{scenes:['다중선형회귀모형','OLS와 회귀평면','편회귀계수 해석','R²와 수정 R²','계수 t검정과 전체 F검정','잔차 진단과 다중공선성','결과 보고와 95% 예측구간']}};
+const equation=`ŷ = ${b0.toFixed(2)} + ${b1.toFixed(3)} × 면적 − ${Math.abs(b2).toFixed(3)} × 연령`;
+const SCRIPT={mid:[
+{s:'집값은 면적 하나로만 정해지지 않아요. 면적과 건축연령처럼 여러 설명변수를 함께 넣어 가격과의 관계를 살펴보는 방법이 다중회귀분석입니다. 여기서는 가상 아파트 48채를 사용합니다.',tip:'설명변수가 2개 이상이어도 예측하는 결과변수는 가격 하나입니다.'},
+{s:'면적과 건축연령을 바닥의 두 축, 가격을 높이로 나타내면 점들이 공간에 놓입니다. 점과 평면 사이의 세로 오차를 제곱해 모두 더한 값이 가장 작은 평면을 찾습니다. 분홍 세로선은 실제 가격과 예측 가격의 차이입니다.',tip:'평면 위의 높이가 두 조건을 함께 고려한 예측 가격입니다.'},
+{s:`건축연령이 같은 아파트끼리 비교하면 면적이 1㎡ 클 때 예측 가격은 약 ${Math.round(b1*10000)}만 원 높습니다. 반대로 면적이 같을 때 건축연령이 1년 늘면 예측 가격은 약 ${Math.round(Math.abs(b2)*10000)}만 원 낮습니다. 다른 조건을 같게 두는 것이 해석의 핵심입니다.`,tip:'관찰 자료의 관계만으로 원인과 결과가 입증되는 것은 아닙니다.'},
+{s:`평균 가격만 쓰는 것보다 오차를 얼마나 줄였는지 나타내는 R²는 ${(R2*100).toFixed(1)}%입니다. 변수를 추가하면 같은 자료의 R²는 작아지지 않습니다. 그래서 변수 수에 벌점을 주는 수정 R²도 함께 보며, 이번 값은 ${ADJ.toFixed(3)}입니다.`,tip:'실제 새 집에 대한 예측 성능은 별도 검증 자료로 확인합니다.'},
+{s:`t검정은 다른 변수를 고려한 뒤 각 계수가 0인지 확인합니다. 면적의 t값은 ${T[0].toFixed(2)}, 건축연령은 ${T[1].toFixed(2)}입니다. F검정은 두 기울기가 모두 0이라는 가설을 확인하며 F값은 ${F.toFixed(2)}입니다. p값은 귀무가설과 모형 가정 아래 이 정도로 극단적인 통계량이 나올 확률입니다.`,tip:'작은 p값이 효과의 크기나 인과관계를 뜻하지는 않습니다.'},
+{s:`잔차도에서 곡선이나 깔때기 모양이 있는지 살펴봅니다. 변수끼리 지나치게 비슷한 정보를 담으면 개별 계수의 추정이 불안정해질 수 있어요. 이를 다중공선성이라 하며, 이번 두 변수의 VIF는 ${VIF.toFixed(2)}로 1에 가깝습니다.`,tip:'잔차도 하나만으로 모든 가정이 확인되지는 않습니다.'},
+{s:`면적 84㎡, 건축연령 10년을 식에 넣으면 예상 가격은 ${PRED.toFixed(2)}억 원입니다. 같은 조건에서도 집마다 차이가 있어서 개별 아파트의 95% 예측구간은 ${PI[0].toFixed(2)}~${PI[1].toFixed(2)}억 원입니다. 이 범위는 모형 가정이 적절하다는 전제 아래 계산합니다.`,tip:'가상 자료로 만든 교육용 모형이며 실제 시세 추정이 아닙니다.'}
+],uni:[
+{s:'Y = β₀ + β₁X₁ + β₂X₂ + ε에서 X₁은 전용면적, X₂는 건축연령입니다. 조건부 평균의 선형성, 오차의 조건부 평균 0, 독립성, 등분산성, 완전한 다중공선성이 없음을 전제합니다. 여기서 사용하는 소표본 t·F 추론에는 오차의 정규성도 가정합니다.',tip:'설명변수와 오차항의 관련성은 잔차도만으로 확인할 수 없습니다.'},
+{s:`OLS는 SSE = Σ(yᵢ − ŷᵢ)²를 최소화합니다. 설계행렬의 열이 선형독립이면 b = (X′X)⁻¹X′y입니다. 추정식은 ${equation}입니다. n = ${N}, 추정 모수 수는 절편을 포함해 3이며 잔차 자유도는 ${DF}입니다.`,tip:'두 설명변수에서는 회귀평면, 더 많은 변수에서는 초평면이 됩니다.'},
+{s:`편회귀계수 b₁ = ${b1.toFixed(4)}억/㎡는 건축연령을 통제한 면적과 가격의 관계이고, b₂ = ${b2.toFixed(4)}억/년은 면적을 통제한 건축연령과 가격의 관계입니다. 절편 ${b0.toFixed(3)}은 면적과 연령이 모두 0인 경우로 자료 범위 밖이어서 실질적 해석에 주의합니다.`,tip:'통제는 포함된 변수에 한정되며 누락변수 편향이 사라지는 것은 아닙니다.'},
+{s:`절편을 포함한 OLS에서 SST = SSR + SSE입니다. SST = ${SST.toFixed(3)}, SSR = ${SSR.toFixed(3)}, SSE = ${SSE.toFixed(3)}이며 R² = ${R2.toFixed(4)}입니다. 수정 R² = 1 − [SSE/(n−k−1)]/[SST/(n−1)] = ${ADJ.toFixed(4)}이고 k = 2입니다.`,tip:'R²는 표본 내 적합도이며 일반화 성능을 보장하지 않습니다.'},
+{s:`각 H₀: βⱼ = 0에 대해 t = bⱼ/SE(bⱼ), df = ${DF}입니다. 면적: SE = ${SE[0].toFixed(4)}, t = ${T[0].toFixed(2)}, p ${fmtp(pval(T[0]))}; 연령: SE = ${SE[1].toFixed(4)}, t = ${T[1].toFixed(2)}, p ${fmtp(pval(T[1]))}. 전체 H₀: β₁ = β₂ = 0에 대해 F(2, ${DF}) = ${F.toFixed(2)}, p ${fmtp(PF)}입니다.`,tip:'설명변수가 둘이므로 전체 F값을 특정 계수의 t²와 같다고 해석하지 않습니다.'},
+{s:`잔차 대 적합값으로 비선형성과 이분산의 징후를 점검합니다. VIFⱼ = 1/(1−Rⱼ²)이며 보조회귀의 Rⱼ²는 해당 설명변수를 나머지 설명변수로 회귀해 구합니다. 이번 두 변수의 VIF는 모두 ${VIF.toFixed(3)}입니다. 정규성은 Q-Q plot, 독립성은 자료 수집 구조와 잔차의 시간·공간 패턴으로 추가 점검합니다.`,tip:'VIF 기준은 맥락에 따라 해석하며 영향점과 누락변수도 별도로 검토합니다.'},
+{s:`X₀ = (1, 84, 10)에서 ŷ₀ = ${PRED.toFixed(3)}억원입니다. s² = SSE/(n−3) = ${MSE.toFixed(4)}, h₀ = X₀′(X′X)⁻¹X₀ = ${h0.toFixed(4)}입니다. 개별 관측치의 95% PI는 ŷ₀ ± t(.975, ${DF})s√(1+h₀) = [${PI[0].toFixed(3)}, ${PI[1].toFixed(3)}]입니다. 평균 반응의 신뢰구간은 √h₀를 사용합니다.`,tip:'관측 범위를 벗어난 외삽과 모형에 없는 조건의 변화에 주의합니다.'}
+]};
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const sceneIdx=tt=>{for(let k=S.length-2;k>=0;k--)if(tt>=S[k])return k;return 0};
+const F_={d:'Orbitron, monospace',m:'"JetBrains Mono", Consolas, monospace',b:'"Noto Sans KR", "Malgun Gothic", sans-serif'};
+function txt(s,x,y,{sz=16,c='#d7f6ff',al='left',f=F_.b,w='400'}={}){ctx.font=`${w} ${sz}px ${f}`;ctx.fillStyle=c;ctx.textAlign=al;ctx.fillText(s,x,y)}
+function seg(x,y,u,v,c='#18324d',w=1){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(u,v);ctx.stroke()}
+function dot(x,y,c='#38e8ff',r=4){ctx.shadowColor=c;ctx.shadowBlur=10;ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}
+function box(x,y,w,h){ctx.fillStyle='rgba(8,18,34,.9)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#18324d';ctx.strokeRect(x,y,w,h);const l=17;for(const [u,v,dx,dy] of [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]]){seg(u+dx*l,v,u,v,'#38e8ff',2);seg(u,v,u,v+dy*l,'#38e8ff',2)}}
+function lines(s,x,y,width=255,sz=17,c='#d7f6ff'){ctx.font=`400 ${sz}px ${F_.b}`;let line='',row=0;for(const ch of s){if(ctx.measureText(line+ch).width>width){txt(line,x,y+row*29,{sz,c});line='';row++}line+=ch}txt(line,x,y+row*29,{sz,c});return y+(row+1)*29}
+function axes(x0,y0,x1,y1,xlabel,ylabel){for(let i=0;i<=5;i++){const x=x0+(x1-x0)*i/5,y=y0+(y1-y0)*i/5;seg(x,y0,x,y1);seg(x0,y,x1,y)}seg(x0,y0,x0,y1,'#6f8ea8');seg(x0,y1,x1,y1,'#6f8ea8');txt(xlabel,(x0+x1)/2,y1+40,{al:'center',sz:15,c:'#9fdcef'});txt(ylabel,x0,y0-16,{sz:15,c:'#9fdcef'})}
+function plane(tt,k){const project=(a,g,y)=>[180+(a-40)*5.5+(g-2)*5.2,535-(a-40)*.65-(g-2)*3.2-y*31];const p=(a,g)=>project(a,g,predict(a,g));
+ const corners=[p(40,2),p(130,2),p(130,30),p(40,30)];ctx.beginPath();corners.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fillStyle='rgba(56,232,255,.12)';ctx.fill();
+ for(let a=40;a<=130;a+=15){const u=p(a,2),v=p(a,30);seg(...u,...v,'#238197')}for(let g=2;g<=30;g+=4){const u=p(40,g),v=p(130,g);seg(...u,...v,'#238197')}
+ const origin=project(40,2,0);for(const [end,label] of [[project(135,2,0),'면적 (㎡)'],[project(40,34,0),'건축연령 (년)'],[project(40,2,11),'가격 (억원)']]){seg(...origin,...end,'#9fdcef',2);txt(label,end[0],end[1]+23,{sz:14,c:'#9fdcef'})}
+ for(let i=0;i<N;i++){if(k===1&&(tt-S[k])<i*.065)continue;const u=project(A[i],G[i],Y[i]),v=p(A[i],G[i]);seg(...u,...v,'#ff3fa477',1);dot(...u)}
+ txt('세로 오차의 제곱합 SSE를 최소화',470,630,{al:'center',c:'#ffc24a',sz:18});txt(equation,470,143,{sz:22,al:'center',w:'700'});
+}
+function frame(){ctx.setTransform(cv.width/LW,0,0,cv.height/LH,0,0);const tt=t,k=sceneIdx(t),uni=level==='uni';ctx.fillStyle='#03060c';ctx.fillRect(0,0,LW,LH);const glow=ctx.createRadialGradient(500,400,0,500,400,780);glow.addColorStop(0,'#0b2945');glow.addColorStop(1,'#03060c');ctx.fillStyle=glow;ctx.fillRect(0,0,LW,LH);for(let i=0;i<35;i++){const y=(i*29+tt*9)%720;ctx.fillStyle='rgba(56,232,255,.09)';ctx.fillRect((i*137)%1280,y,2,2)}
+ txt('MULTIPLE // REGRESSION',38,43,{f:F_.d,sz:19,c:'#38e8ff',w:'700'});txt('AI 부동산 통계 · 다중회귀분석',480,43,{sz:15,c:'#6f8ea8'});txt(`T+${tt.toFixed(1).padStart(4,'0')} / ${END}s`,1230,43,{al:'right',f:F_.m,sz:14,c:'#9fdcef'});box(60,80,820,585);box(905,80,335,585);
+ txt(`SCENE 0${k+1} / 07`,927,114,{f:F_.d,sz:13,c:'#ffc24a'});let yy=lines(TXT[level].scenes[k],927,153,287,23,'#eafcff')+25;
+ const kv=(lab,val,c='#38e8ff')=>{txt(lab,927,yy,{sz:14,c:'#6f8ea8'});yy+=29;lines(val,927,yy,285,21,c);yy+=58};
+ if(k===0){txt('여러 설명변수 → 하나의 결과',470,177,{sz:29,al:'center',w:'700'});for(const [label,y,c] of [['전용면적 X₁',275,'#38e8ff'],['건축연령 X₂',425,'#ff3fa4']]){box(140,y-45,250,90);txt(label,265,y+8,{al:'center',sz:24,c});seg(390,y,575,350,c,2)}box(575,300,225,100);txt('가격 Y',687,359,{sz:30,al:'center',c:'#ffc24a'});txt('Y = β₀ + β₁X₁ + β₂X₂ + ε',470,555,{al:'center',sz:27,f:F_.m});kv('설명변수','면적 + 건축연령');kv('종속변수','아파트 매매가');kv('교육용 가상 자료',`${N}채 · 설명변수 2개`);}
+ if(k===1){plane(tt,k);kv('추정 방법','최소제곱법 OLS');kv('잔차 제곱합 SSE',SSE.toFixed(3));kv('잔차 자유도',`${N} − 2 − 1 = ${DF}`)}
+ if(k===2){axes(155,210,800,555,'전용면적 (㎡)','예측 가격 (억원)');const px=a=>155+(a-40)/90*645,py=y=>555-y/11*345;for(const [g,c] of [[5,'#38e8ff'],[15,'#ffc24a'],[25,'#ff3fa4']]){seg(px(40),py(predict(40,g)),px(130),py(predict(130,g)),c,3);txt(`연령 ${g}년`,px(127),py(predict(127,g))-12,{al:'right',c,sz:15})}for(const a of [40,70,100,130])txt(a,px(a),581,{al:'center',sz:14,c:'#6f8ea8'});txt('각 선은 건축연령을 고정한 단면',470,154,{al:'center',sz:22});kv('연령이 같을 때 · 면적 +1㎡',`+${Math.round(b1*10000)}만 원`);kv('면적이 같을 때 · 연령 +1년',`${Math.round(b2*10000)}만 원`,'#ff3fa4');lines('조건부 관계를 해석하며 인과효과로 단정하지 않습니다.',927,yy,280,16,'#ffc24a')}
+ if(k===3){txt('SST = SSR + SSE',470,174,{al:'center',sz:31,f:F_.m});const w=650;ctx.fillStyle='#ff3fa4';ctx.fillRect(145,250,w,65);ctx.fillStyle='#38e8ff';ctx.fillRect(145,250,w*R2,65);txt(`설명한 변동 ${(R2*100).toFixed(1)}%`,160,290,{sz:24,c:'#03060c',w:'700'});txt(`SSR ${SSR.toFixed(2)}  +  SSE ${SSE.toFixed(2)}`,470,354,{sz:22,al:'center'});lines('변수를 추가하면 표본 내 R²는 감소하지 않습니다. 수정 R²는 변수 수를 반영합니다.',150,440,640,23);kv('R²',R2.toFixed(4));kv('수정 R²',ADJ.toFixed(4),'#ffc24a');kv('변수 수 k / 표본 수 n',`2 / ${N}`)}
+ if(k===4){txt('계수 검정과 모형 전체 검정',470,148,{sz:25,al:'center'});const xs=[125,310,455,605,750];['변수','b','SE','t','p'].forEach((v,j)=>txt(v,xs[j],211,{sz:17,c:'#6f8ea8'}));[['면적',b1,SE[0],T[0],pval(T[0])],['건축연령',b2,SE[1],T[1],pval(T[1])]].forEach((row,i)=>row.forEach((v,j)=>txt(j===0?v:j===4?fmtp(v):v.toFixed(j===3?2:4),xs[j],274+i*66,{sz:18,c:j===4?'#ff3fa4':'#d7f6ff'})));seg(125,370,815,370,'#38e8ff');txt(`F(2, ${DF}) = ${F.toFixed(2)}   p ${fmtp(PF)}`,470,431,{sz:25,al:'center',c:'#ffc24a'});txt('F = (SSR / 2) / (SSE / (n − 3))',470,489,{sz:21,al:'center',f:F_.m});lines('H₀: β₁ = β₂ = 0（전체 검정）',170,560,650,22);kv('개별 t검정','다른 변수를 통제한 계수');kv('전체 F검정','기울기들이 모두 0인가?');lines('p값은 귀무가설이 참일 확률이 아닙니다.',927,yy,280,17,'#ffc24a')}
+ if(k===5){const x0=155,x1=800,y0=200,y1=555,lo=Math.floor(Math.min(...YH)),hi=Math.ceil(Math.max(...YH)),em=Math.max(1,...E.map(Math.abs))*1.2;axes(x0,y0,x1,y1,'적합값 ŷ (억원)','잔차 e (억원)');const px=y=>x0+(y-lo)/(hi-lo)*(x1-x0),py=e=>(y0+y1)/2-e/em*(y1-y0)/2;seg(x0,py(0),x1,py(0),'#ffc24a',2);for(let i=0;i<N;i++)dot(px(YH[i]),py(E[i]),E[i]>=0?'#38e8ff':'#ff3fa4');for(let y=lo;y<=hi;y++)txt(y,px(y),579,{sz:14,al:'center',c:'#6f8ea8'});for(const e of [-1,0,1])txt(e.toFixed(1),140,py(e)+5,{al:'right',sz:14,c:'#6f8ea8'});txt('패턴·퍼짐·영향점을 확인',470,148,{al:'center',sz:24});kv('면적 / 건축연령 VIF',`${VIF.toFixed(3)} / ${VIF.toFixed(3)}`);kv('잔차 표준오차 s',`${Math.sqrt(MSE).toFixed(3)}억원`);lines('정규성·독립성은 추가 진단이 필요합니다.',927,yy,280,17,'#ffc24a')}
+ if(k===6){txt('84㎡ · 건축연령 10년',470,163,{sz:30,al:'center'});txt(equation,470,222,{sz:22,al:'center'});txt(`${PRED.toFixed(2)}억 원`,470,335,{sz:63,al:'center',c:'#38e8ff',w:'700'});const px=y=>170+(y-(PI[0]-.5))/(PI[1]-PI[0]+1)*600;seg(px(PI[0]),440,px(PI[1]),440,'#ffc24a',5);for(const v of PI){seg(px(v),422,px(v),458,'#ffc24a',3);txt(v.toFixed(2),px(v),493,{al:'center',sz:20,c:'#ffc24a'})}dot(px(PRED),440,'#38e8ff',8);txt('개별 아파트의 95% 예측구간 (억원)',470,559,{sz:21,al:'center',c:'#9fdcef'});kv('R² / 수정 R²',`${R2.toFixed(3)} / ${ADJ.toFixed(3)}`);kv('95% 예측구간',`${PI[0].toFixed(2)} ~ ${PI[1].toFixed(2)}억`,'#ffc24a');lines('모형 가정과 관측 범위 안에서 해석합니다.',927,yy,280,17,'#9fdcef')}
+ txt(uni?'MULTIPLE LINEAR REGRESSION · OLS':'가상 아파트 48채 · 면적과 건축연령을 함께 고려',70,697,{sz:13,c:'#6f8ea8',f:uni?F_.m:F_.b});seg(60,677,60+1180*tt/END,677,'#38e8ff',3);
+}
+
+/* ---------- 루프 & 컨트롤 ---------- */
+const scrub=document.getElementById('scrub'),tc=document.getElementById('tc'),playB=document.getElementById('play');
+scrub.max=END;
+let last=performance.now(),autoStop=true,passK=-1,uiK=-1,uiLv='';
+function loop(now){const dt=Math.min(.1,(now-last)/1000);last=now;
+ if(playing){const k0=sceneIdx(t);t+=dt*speed;if(t>=END){t=END;setPlay(false)}
+  const k1=sceneIdx(t);if(autoStop&&k1>k0&&k1!==passK){t=S[k1]-.02;setPlay(false);passK=k1}}
+ frame();updUI();scrub.value=t;tc.textContent=`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+ requestAnimationFrame(loop)}
+function setPlay(v){playing=v;playB.textContent=v?'❚❚ 일시정지':'▶ 재생'}
+playB.onclick=()=>{if(t>=END)t=0;setPlay(!playing)};
+document.getElementById('restart').onclick=()=>{t=0;passK=-1;setPlay(true)};
+const jump=d=>{const k=sceneIdx(t);const nk=clamp(k+d,0,S.length-2);t=S[nk]+.01;passK=-1};
+document.getElementById('prev').onclick=()=>jump(t-S[sceneIdx(t)]>1?0:-1);
+document.getElementById('next').onclick=()=>jump(1);
+scrub.oninput=()=>{t=+scrub.value;passK=-1};
+const mid=document.getElementById('lvMid'),uni=document.getElementById('lvUni');
+function setLv(l){level=l;mid.setAttribute('aria-pressed',l==='mid');uni.setAttribute('aria-pressed',l==='uni')}
+mid.onclick=()=>setLv('mid');uni.onclick=()=>setLv('uni');
+const sqB=document.getElementById('sq');if(sqB)sqB.remove();
+const spB=document.getElementById('spd');const sps=[1,.75,.5,1.5];let si=0;spB.onclick=()=>{si=(si+1)%sps.length;speed=sps[si];spB.textContent=`속도 ${speed}×`};
+document.getElementById('fs').onclick=()=>{const r=stage.requestFullscreen&&stage.requestFullscreen();if(r&&r.catch)r.catch(()=>{});setTimeout(resize,200)};
+document.addEventListener('fullscreenchange',()=>setTimeout(resize,100));
+document.getElementById('rec').onclick=()=>document.body.classList.toggle('rec');
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.key!==' ')return;
+ if(e.key===' '){e.preventDefault();playB.click()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1);else if(e.key==='h'||e.key==='H')document.body.classList.toggle('rec')});
+
+const scBox=document.getElementById('scenes');scBox.style.gridTemplateColumns='repeat(auto-fit,minmax(110px,1fr))';
+const scBtns=SHORT.map((lab,i)=>{const b=document.createElement('button');b.innerHTML=`<span class="n">SCENE 0${i+1}</span><span class="l">${lab}</span>`;b.onclick=()=>goScene(i);scBox.appendChild(b);return b});
+function goScene(i){t=S[i]+.01;passK=-1;setPlay(true)}
+const sTag=document.getElementById('sTag'),sTitle=document.getElementById('sTitle'),sNow=document.getElementById('sNow'),sTip=document.getElementById('sTip'),sAll=document.getElementById('sAll');
+function buildAll(){sAll.innerHTML='';SCRIPT[level].forEach((o,i)=>{const li=document.createElement('li');li.innerHTML=`<b>${TXT[level].scenes[i]}</b><br>${o.s}`;li.onclick=()=>goScene(i);sAll.appendChild(li)})}
+function updUI(){const k=sceneIdx(t);if(k===uiK&&level===uiLv)return;if(level!==uiLv)buildAll();uiK=k;uiLv=level;
+ scBtns.forEach((b,i)=>b.setAttribute('aria-current',i===k));[...sAll.children].forEach((li,i)=>li.classList.toggle('on',i===k));
+ const o=SCRIPT[level][k];sTag.textContent=`SCENE 0${k+1} · ${level==='mid'?'중학생 수준':'대학 수준'} 대본`;sTitle.textContent=TXT[level].scenes[k];sNow.textContent=o.s;sTip.textContent='강의 팁 · '+o.tip}
+const autoB=document.getElementById('auto');autoB.onclick=()=>{autoStop=!autoStop;autoB.setAttribute('aria-pressed',autoStop)};
+document.getElementById('copy').onclick=function(){const all=SCRIPT[level].map((o,i)=>`[장면 ${i+1}] ${TXT[level].scenes[i]}\n${o.s}\n(팁) ${o.tip}`).join('\n\n');const btn=this;
+ const fb=()=>{const ta=document.createElement('textarea');ta.value=all;btn.parentNode.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(()=>{btn.textContent='복사됨'},()=>{fb();btn.textContent='복사됨'})}else{fb();btn.textContent='복사됨'}
+ setTimeout(()=>btn.textContent='전체 대본 복사',1800)};
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body></html>
